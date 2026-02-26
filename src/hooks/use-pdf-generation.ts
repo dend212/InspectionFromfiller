@@ -3,12 +3,14 @@
 import { useState, useCallback } from "react";
 import { generateReport } from "@/lib/pdf/generate-report";
 import type { InspectionFormData } from "@/types/inspection";
+import type { MediaRecord } from "@/components/inspection/media-gallery";
 
 interface UsePdfGenerationReturn {
-  /** Trigger PDF generation with current form data and optional signature */
+  /** Trigger PDF generation with current form data, optional signature, and optional media */
   generatePdf: (
     formData: InspectionFormData,
     signatureDataUrl: string | null,
+    media?: MediaRecord[],
   ) => Promise<void>;
   /** The generated PDF bytes, or null if not yet generated */
   pdfData: Uint8Array | null;
@@ -24,7 +26,7 @@ interface UsePdfGenerationReturn {
  * React hook for managing client-side PDF generation state.
  *
  * Wraps the generateReport() orchestrator with loading, error, and
- * result state management.
+ * result state management. Supports media records for photo appendix pages.
  */
 export function usePdfGeneration(): UsePdfGenerationReturn {
   const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
@@ -35,12 +37,13 @@ export function usePdfGeneration(): UsePdfGenerationReturn {
     async (
       formData: InspectionFormData,
       signatureDataUrl: string | null,
+      media?: MediaRecord[],
     ): Promise<void> => {
       setIsGenerating(true);
       setError(null);
 
       try {
-        const result = await generateReport(formData, signatureDataUrl);
+        const result = await generateReport(formData, signatureDataUrl, media);
         setPdfData(result);
       } catch (err) {
         const message =

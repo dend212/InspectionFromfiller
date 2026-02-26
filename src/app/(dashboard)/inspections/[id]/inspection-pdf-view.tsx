@@ -22,6 +22,7 @@ import {
   Camera,
 } from "lucide-react";
 import type { InspectionFormData } from "@/types/inspection";
+import type { MediaRecord } from "@/components/inspection/media-gallery";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -49,6 +50,7 @@ interface InspectionPdfViewProps {
   facilityCounty: string | null;
   createdAt: string;
   mediaCount: number;
+  media: MediaRecord[];
 }
 
 export function InspectionPdfView({
@@ -61,6 +63,7 @@ export function InspectionPdfView({
   facilityCounty,
   createdAt,
   mediaCount,
+  media,
 }: InspectionPdfViewProps) {
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const { generatePdf, pdfData, isGenerating, error, clearPdf } =
@@ -70,8 +73,8 @@ export function InspectionPdfView({
     if (!formData) return;
     // Clear any previous PDF before generating a new one
     clearPdf();
-    await generatePdf(formData, signatureDataUrl);
-  }, [formData, signatureDataUrl, generatePdf, clearPdf]);
+    await generatePdf(formData, signatureDataUrl, media);
+  }, [formData, signatureDataUrl, media, generatePdf, clearPdf]);
 
   const handleSignatureCapture = useCallback(
     (dataUrl: string) => {

@@ -83,6 +83,14 @@ export default async function InspectionDetailPage({
         facilityCounty={inspection.facilityCounty}
         createdAt={inspection.createdAt.toISOString()}
         mediaCount={media.length}
+        media={media.map((m) => ({
+          id: m.id,
+          type: m.type as "photo" | "video",
+          storagePath: m.storagePath,
+          label: m.label,
+          sortOrder: m.sortOrder,
+          createdAt: m.createdAt.toISOString(),
+        }))}
       />
     </div>
   );

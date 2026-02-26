@@ -2,37 +2,58 @@
  * PDF Generation Orchestrator
  *
  * Loads the ADEQ form template, maps inspection data to pdfme inputs,
- * embeds the inspector signature, and generates the final PDF.
+ * embeds the inspector signature, detects comment overflow, builds
+ * photo appendix pages, and merges everything into the final PDF.
  *
- * This initial version generates ONLY the form pages (6-page ADEQ form
- * with data overlay). Photo pages and comments overflow pages are handled
- * by Plan 03, which will extend or compose with this function.
+ * Full pipeline:
+ * 1. Map form data to pdfme inputs
+ * 2. Detect comment overflow and substitute "See Comments" in form fields
+ * 3. Generate 6-page ADEQ form PDF with data overlay
+ * 4. Generate comments overflow page (if needed)
+ * 5. Generate photo appendix pages (if media provided)
+ * 6. Merge all PDFs into single output: form -> comments -> photos
  */
 
 import { generate } from "@pdfme/generator";
 import { text, image } from "@pdfme/schemas";
 import { loadTemplate } from "@/lib/pdf/template";
-import { mapFormDataToInputs } from "@/lib/pdf/field-mapping";
+import {
+  mapFormDataToInputs,
+  detectCommentOverflow,
+} from "@/lib/pdf/field-mapping";
+import { buildCommentsPage } from "@/lib/pdf/comments-page";
+import { buildPhotoPages } from "@/lib/pdf/photo-pages";
+import { mergeGeneratedPdfs } from "@/lib/pdf/merge-pdf";
 import type { InspectionFormData } from "@/types/inspection";
+import type { MediaRecord } from "@/components/inspection/media-gallery";
 
 /**
- * Generates a filled ADEQ inspection report PDF.
+ * Generates a complete ADEQ inspection report PDF.
+ *
+ * Produces the 6-page form with data overlay, plus optional comments
+ * overflow page and photo appendix pages merged into a single document.
  *
  * @param formData - The inspection form data (all sections)
  * @param signatureDataUrl - PNG data URL from signature pad, or null if unsigned
- * @returns The generated PDF as a Uint8Array
+ * @param media - Optional array of media records to include as photo pages
+ * @returns The final merged PDF as a Uint8Array
  */
 export async function generateReport(
   formData: InspectionFormData,
   signatureDataUrl: string | null,
+  media?: MediaRecord[],
 ): Promise<Uint8Array> {
-  // Load template (basePdf + font data, cached after first call)
+  // Step 1: Load template (basePdf + font data, cached after first call)
   const { template, font } = await loadTemplate();
 
-  // Map structured form data to flat pdfme inputs
+  // Step 2: Map structured form data to flat pdfme inputs
+  // (mapFormDataToInputs already handles "See Comments" substitution internally)
   const inputs = mapFormDataToInputs(formData);
 
-  // Embed signature image if provided
+  // Step 3: Detect comment overflow for building the comments overflow page
+  const overflow = detectCommentOverflow(formData);
+
+  // Step 4: Embed signature image if provided
   if (signatureDataUrl) {
     inputs.signatureImage = signatureDataUrl;
   }
@@ -44,13 +65,27 @@ export async function generateReport(
   const year = today.getFullYear();
   inputs.signatureDate = `${month}/${day}/${year}`;
 
-  // Generate the PDF using pdfme
-  const pdf = await generate({
+  // Step 5: Generate the 6-page form PDF using pdfme
+  const formPdf = await generate({
     template,
     inputs: [inputs],
     plugins: { text, image },
     options: { font },
   });
 
-  return pdf;
+  // Step 6: Generate comments overflow page (if any comments exceeded threshold)
+  const commentsPdf = overflow.hasOverflow
+    ? await buildCommentsPage(overflow.overflowSections)
+    : null;
+
+  // Step 7: Generate photo appendix pages (if media provided with photos)
+  const photosPdf =
+    media && media.some((m) => m.type === "photo")
+      ? await buildPhotoPages(media)
+      : null;
+
+  // Step 8: Merge all PDFs: form -> comments -> photos
+  const finalPdf = await mergeGeneratedPdfs(formPdf, commentsPdf, photosPdf);
+
+  return finalPdf;
 }
