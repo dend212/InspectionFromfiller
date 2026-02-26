@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-02-26T19:11:25.091Z"
+status: in-progress
+last_updated: "2026-02-26T22:25:00.000Z"
 progress:
-  total_phases: 2
+  total_phases: 5
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 15
+  completed_plans: 7
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-25)
 
 **Core value:** Field techs capture inspection data digitally on-site, and the office produces a professional, pixel-perfect ADEQ inspection report without manually re-entering data into a PDF.
-**Current focus:** Phase 2 complete. Ready for Phase 3: PDF Generation.
+**Current focus:** Phase 3 in progress: PDF Generation. Plan 03-01 complete (template + field mapping).
 
 ## Current Position
 
-Phase: 2 of 5 (Inspection Form Input) -- COMPLETE
-Plan: 3 of 3 in current phase (all complete)
-Status: Phase 2 complete, ready for Phase 3
-Last activity: 2026-02-26 -- Completed Plan 02-03 (photo capture, video upload, per-section media galleries)
+Phase: 3 of 5 (PDF Generation) -- IN PROGRESS
+Plan: 1 of 3 in current phase (03-01 complete)
+Status: Phase 3 started, Plan 03-01 complete
+Last activity: 2026-02-26 -- Completed Plan 03-01 (pdfme template schema + field mapping)
 
-Progress: [████░░░░░░] 40% (6/15 plans)
+Progress: [█████░░░░░] 47% (7/15 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: ~34min
-- Total execution time: ~205 min
+- Total plans completed: 7
+- Average duration: ~30min
+- Total execution time: ~211 min
 
 **By Phase:**
 
@@ -42,10 +42,11 @@ Progress: [████░░░░░░] 40% (6/15 plans)
 |-------|-------|-------|----------|
 | 1. Foundation and Authentication | 3/3 | ~180min | ~60min |
 | 2. Inspection Form Input | 3/3 | ~25min | ~8min |
+| 3. PDF Generation | 1/3 | ~6min | ~6min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (~90min), 01-03 (~45min), 02-01 (~4min), 02-02 (~6min), 02-03 (~15min)
-- Trend: Form/UI plans with clear schemas execute fast when data layer is solid
+- Last 5 plans: 01-03 (~45min), 02-01 (~4min), 02-02 (~6min), 02-03 (~15min), 03-01 (~6min)
+- Trend: Template/mapping plans with clear schemas execute fast when data layer is solid
 
 *Updated after each plan completion*
 
@@ -83,6 +84,11 @@ Recent decisions affecting current work:
 - Plan 02-03: Client-side video duration validation using temporary <video> element loadedmetadata event.
 - Plan 02-03: Per-section photo attachment -- each wizard step filters media by section label.
 - Plan 02-03: Video upload only on Step 5 (Disposal Works) as general inspection attachment.
+- Plan 03-01: Liberation Sans as Helvetica-alike font (SIL Open Font License, metrically compatible with Arial).
+- Plan 03-01: Checkbox rendering via text schema with centered "X" character at 4x4mm boxes.
+- Plan 03-01: Per-page header repeaters (taxParcelNumber, dateOfInspection, initials) as separate schema names per page.
+- Plan 03-01: Comment overflow threshold at 200 characters with "See Comments" substitution.
+- Plan 03-01: Schema factory helpers (textField, checkbox, multilineField) for consistent field creation.
 
 ### Pending Todos
 
@@ -90,11 +96,11 @@ None yet.
 
 ### Blockers/Concerns
 
-- Phase 3 (PDF Generation): Highest-risk technical work. Mapping 100+ fields across 7 ADEQ pages to pdfme x/y coordinates is significant effort. pdfme WYSIWYG Designer should help.
 - Phase 3: Photo embedding file size in multi-page PDFs needs validation during execution.
+- Phase 3: Field positions are approximate initial estimates -- pdfme Designer can fine-tune coordinates visually.
 
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Completed 02-03-PLAN.md -- Phase 2 complete. Photo capture, video upload, per-section media galleries. Ready for Phase 3 (PDF Generation).
+Stopped at: Completed 03-01-PLAN.md -- pdfme template schema with 150+ field coordinates across 6 ADEQ pages, field-mapping layer for InspectionFormData, Liberation Sans fonts. Ready for Plan 03-02 (signature capture, generate-report orchestration).
 Resume file: None
