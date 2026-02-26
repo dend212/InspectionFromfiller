@@ -12,7 +12,7 @@ This roadmap takes the Inspection Form Filler from zero to a working application
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation and Authentication** - Next.js app with Supabase auth, role-based access, and database schema
+- [x] **Phase 1: Foundation and Authentication** - Next.js app with Supabase auth, role-based access, and database schema
 - [ ] **Phase 2: Inspection Form Input** - Mobile-first multi-step form for all ADEQ GWS 432 sections with photo/video capture
 - [ ] **Phase 3: PDF Generation** - Pixel-perfect ADEQ form output via pdfme template overlay with signature and photo pages
 - [ ] **Phase 4: Review Workflow** - Office staff review, edit, and finalize inspections before delivery
@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01-PLAN.md — Scaffold Next.js 16 project, Supabase clients, Drizzle ORM, shadcn/ui, and deploy to Vercel
 - [x] 01-02-PLAN.md — Login page, password reset, admin user creation API, database schema + RLS deployment, Custom Access Token Hook
-- [ ] 01-03-PLAN.md — Role-based dashboard shell with navigation, admin user management UI, and end-to-end verification
+- [x] 01-03-PLAN.md — Role-based dashboard shell with navigation, admin user management UI, and end-to-end verification
 
 ### Phase 2: Inspection Form Input
 **Goal**: Field techs can fill out the complete ADEQ GWS 432 inspection form on a phone and attach photos/videos
@@ -109,7 +109,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation and Authentication | 2/3 | In Progress | - |
+| 1. Foundation and Authentication | 3/3 | Complete | 2026-02-26 |
 | 2. Inspection Form Input | 0/3 | Not started | - |
 | 3. PDF Generation | 0/3 | Not started | - |
 | 4. Review Workflow | 0/3 | Not started | - |
