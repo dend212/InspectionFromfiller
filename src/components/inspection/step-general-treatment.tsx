@@ -15,13 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { GP402_SYSTEM_TYPES, CONDITION_OPTIONS } from "@/lib/constants/inspection";
 import { PhotoCapture } from "@/components/inspection/photo-capture";
 import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
@@ -33,10 +27,23 @@ interface StepGeneralTreatmentProps {
   inspectionId: string;
 }
 
+// First 6 are common GP 4.02 types; GP 4.03+ are rarely used
+const COMMON_SYSTEM_TYPES = GP402_SYSTEM_TYPES.slice(0, 6);
+const RARE_SYSTEM_TYPES = GP402_SYSTEM_TYPES.slice(6);
+
 export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps) {
   const form = useFormContext<InspectionFormData>();
   const showAlternative = form.watch("generalTreatment.alternativeSystem");
+  const [showAllTypes, setShowAllTypes] = useState(false);
   const [media, setMedia] = useState<MediaRecord[]>([]);
+
+  // Auto-expand if any rare type is already selected
+  const selectedTypes = form.watch("generalTreatment.systemTypes") ?? [];
+  useEffect(() => {
+    if (RARE_SYSTEM_TYPES.some((t) => selectedTypes.includes(t.value))) {
+      setShowAllTypes(true);
+    }
+  }, [selectedTypes]);
 
   useEffect(() => {
     async function loadMedia() {
@@ -72,7 +79,44 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
         </FormDescription>
 
         <div className="space-y-2">
-          {GP402_SYSTEM_TYPES.map((systemType) => (
+          {COMMON_SYSTEM_TYPES.map((systemType) => (
+            <FormField
+              key={systemType.value}
+              control={form.control}
+              name="generalTreatment.systemTypes"
+              render={({ field }) => (
+                <FormItem>
+                  <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border p-3">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value?.includes(systemType.value)}
+                        onCheckedChange={(checked) => {
+                          const current = field.value ?? [];
+                          field.onChange(
+                            checked
+                              ? [...current, systemType.value]
+                              : current.filter((v: string) => v !== systemType.value)
+                          );
+                        }}
+                      />
+                    </FormControl>
+                    <span className="text-base leading-snug">{systemType.label}</span>
+                  </label>
+                </FormItem>
+              )}
+            />
+          ))}
+
+          <div className="flex items-center justify-between rounded-lg border border-dashed p-3">
+            <span className="text-sm text-muted-foreground">GP 4.03 - 4.23 Alternative Types</span>
+            <Switch
+              checked={showAllTypes}
+              onCheckedChange={setShowAllTypes}
+              aria-label="Show alternative system types"
+            />
+          </div>
+
+          {showAllTypes && RARE_SYSTEM_TYPES.map((systemType) => (
             <FormField
               key={systemType.value}
               control={form.control}
@@ -113,17 +157,13 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
           render={({ field }) => (
             <FormItem>
               <FormLabel className="text-base">Performance Assurance Plan Required?</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger className="min-h-[48px] w-full">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="yes">Yes</SelectItem>
-                  <SelectItem value="no">No</SelectItem>
-                </SelectContent>
-              </Select>
+              <FormControl>
+                <ButtonGroup
+                  options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -223,20 +263,13 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-base">System Condition</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Select condition" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {CONDITION_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <ButtonGroup
+                        options={CONDITION_OPTIONS}
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

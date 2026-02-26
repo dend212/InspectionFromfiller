@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ButtonGroup } from "@/components/ui/button-group";
 import {
   AZ_COUNTIES,
   FACILITY_TYPES,
@@ -202,7 +203,28 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
 
       {/* Seller / Transferor */}
       <section className="space-y-4">
-        <h3 className="text-lg font-medium">Seller / Transferor Information</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-medium">Seller / Transferor Information</h3>
+        </div>
+        <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border bg-muted/50 p-3">
+          <Checkbox
+            checked={form.watch("facilityInfo.sellerAddress") === form.watch("facilityInfo.facilityAddress") && form.watch("facilityInfo.sellerCity") === form.watch("facilityInfo.facilityCity") && !!form.watch("facilityInfo.facilityAddress")}
+            onCheckedChange={(checked) => {
+              if (checked) {
+                form.setValue("facilityInfo.sellerAddress", form.getValues("facilityInfo.facilityAddress"), { shouldDirty: true });
+                form.setValue("facilityInfo.sellerCity", form.getValues("facilityInfo.facilityCity"), { shouldDirty: true });
+                form.setValue("facilityInfo.sellerState", form.getValues("facilityInfo.facilityState") || "AZ", { shouldDirty: true });
+                form.setValue("facilityInfo.sellerZip", form.getValues("facilityInfo.facilityZip"), { shouldDirty: true });
+              } else {
+                form.setValue("facilityInfo.sellerAddress", "", { shouldDirty: true });
+                form.setValue("facilityInfo.sellerCity", "", { shouldDirty: true });
+                form.setValue("facilityInfo.sellerState", "", { shouldDirty: true });
+                form.setValue("facilityInfo.sellerZip", "", { shouldDirty: true });
+              }
+            }}
+          />
+          <span className="text-base">Same as facility address</span>
+        </label>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField
             control={form.control}
@@ -327,20 +349,13 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">Wastewater Source</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {WASTEWATER_SOURCES.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ButtonGroup
+                    options={WASTEWATER_SOURCES}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -352,20 +367,13 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">Occupancy / Use</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {OCCUPANCY_TYPES.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ButtonGroup
+                    options={OCCUPANCY_TYPES}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -377,38 +385,35 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">Facility Type</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {FACILITY_TYPES.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>
-                        {t.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="facilityInfo.facilityTypeOther"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">Facility Type (Other)</FormLabel>
                 <FormControl>
-                  <Input {...field} className="min-h-[48px]" placeholder="If Other, specify" />
+                  <ButtonGroup
+                    options={FACILITY_TYPES}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
+
+          {form.watch("facilityInfo.facilityType") === "other" && (
+            <div className="border-l-2 border-primary/20 pl-4">
+              <FormField
+                control={form.control}
+                name="facilityInfo.facilityTypeOther"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">Facility Type (Other)</FormLabel>
+                    <FormControl>
+                      <Input {...field} className="min-h-[48px]" placeholder="If Other, specify" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
 
           <FormField
             control={form.control}
@@ -416,17 +421,13 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">Cesspool?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ButtonGroup
+                    options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -533,20 +534,13 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-base">{item.label}</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="min-h-[48px] w-full">
-                        <SelectValue placeholder="Select condition" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {CONDITION_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <ButtonGroup
+                      options={CONDITION_OPTIONS}
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -566,11 +560,27 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             control={form.control}
             name="facilityInfo.inspectorName"
             render={({ field }) => (
-              <FormItem className="sm:col-span-2">
-                <FormLabel className="text-base">Inspector Name *</FormLabel>
+              <FormItem>
+                <FormLabel className="text-base">Inspector / Certifier</FormLabel>
                 <FormControl>
-                  <Input {...field} className="min-h-[48px]" />
+                  <Input {...field} className="min-h-[48px] bg-muted" readOnly tabIndex={-1} />
                 </FormControl>
+                <FormDescription>Company certifier — not editable</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="facilityInfo.employeeName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-base">Field Technician</FormLabel>
+                <FormControl>
+                  <Input {...field} className="min-h-[48px]" placeholder="Tech performing inspection" />
+                </FormControl>
+                <FormDescription>Will be auto-filled from Workiz</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -582,20 +592,6 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">Company</FormLabel>
-                <FormControl>
-                  <Input {...field} className="min-h-[48px]" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="facilityInfo.employeeName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">Employee Name</FormLabel>
                 <FormControl>
                   <Input {...field} className="min-h-[48px]" />
                 </FormControl>
@@ -959,17 +955,13 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             render={({ field }) => (
               <FormItem className="sm:col-span-2">
                 <FormLabel className="text-base">Records Available?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ButtonGroup
+                    options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
