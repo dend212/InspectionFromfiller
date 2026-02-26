@@ -86,13 +86,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated during roadmap creation) | | |
+| AUTH-01 | Phase 1: Foundation and Authentication | Pending |
+| AUTH-02 | Phase 1: Foundation and Authentication | Pending |
+| WKFL-03 | Phase 1: Foundation and Authentication | Pending |
+| FORM-01 | Phase 2: Inspection Form Input | Pending |
+| FORM-02 | Phase 2: Inspection Form Input | Pending |
+| FORM-03 | Phase 2: Inspection Form Input | Pending |
+| FORM-04 | Phase 2: Inspection Form Input | Pending |
+| MDIA-01 | Phase 2: Inspection Form Input | Pending |
+| MDIA-02 | Phase 2: Inspection Form Input | Pending |
+| PDF-01 | Phase 3: PDF Generation | Pending |
+| PDF-02 | Phase 3: PDF Generation | Pending |
+| PDF-03 | Phase 3: PDF Generation | Pending |
+| MDIA-03 | Phase 3: PDF Generation | Pending |
+| WKFL-01 | Phase 4: Review Workflow | Pending |
+| WKFL-02 | Phase 4: Review Workflow | Pending |
+| DLVR-01 | Phase 5: Delivery and Dashboard | Pending |
+| DLVR-02 | Phase 5: Delivery and Dashboard | Pending |
+| DLVR-03 | Phase 5: Delivery and Dashboard | Pending |
+| DLVR-04 | Phase 5: Delivery and Dashboard | Pending |
 
 **Coverage:**
-- v1 requirements: 16 total
-- Mapped to phases: 0
-- Unmapped: 16 ⚠️
+- v1 requirements: 19 total
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-25*
-*Last updated: 2026-02-25 after initial definition*
+*Last updated: 2026-02-25 after roadmap creation*
