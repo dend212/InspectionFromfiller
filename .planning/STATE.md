@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-25)
 ## Current Position
 
 Phase: 1 of 5 (Foundation and Authentication)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: Executing
-Last activity: 2026-02-25 -- Completed Plan 01-01 (project scaffold, Supabase clients, Drizzle schema, Vercel deploy)
+Last activity: 2026-02-26 -- Completed Plan 01-02 (login, password reset, admin API, RLS, Custom Access Token Hook)
 
-Progress: [██░░░░░░░░] 7% (1/15 plans)
+Progress: [██░░░░░░░░] 13% (2/15 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: ~45min
-- Total execution time: ~0.75 hours
+- Total plans completed: 2
+- Average duration: ~68min
+- Total execution time: ~2.25 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Foundation and Authentication | 1/3 | ~45min | ~45min |
+| 1. Foundation and Authentication | 2/3 | ~135min | ~68min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~45min)
-- Trend: First plan, no trend yet
+- Last 5 plans: 01-01 (~45min), 01-02 (~90min)
+- Trend: Auth plan took longer due to SQL migrations and human-action checkpoint
 
 *Updated after each plan completion*
 
@@ -48,6 +48,9 @@ Recent decisions affecting current work:
 - Plan 01-01: Used middleware.ts instead of proxy.ts -- Next.js 16.1.6 still requires the middleware filename for request interception.
 - Plan 01-01: Replaced deprecated shadcn toast component with sonner -- toast was removed in latest shadcn/ui.
 - Plan 01-01: Updated Biome config to v2 schema for compatibility with latest @biomejs/biome.
+- Plan 01-02: Used Transaction pooler (port 6543) for DATABASE_URL -- direct IPv6 connection unreachable from build environment.
+- Plan 01-02: Combined custom auth hook and RLS policies into single migration file for SQL Editor application.
+- Plan 01-02: Zod v4 API changes: .errors -> .issues, z.enum() parameter format updated.
 
 ### Pending Todos
 
@@ -60,6 +63,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-25
-Stopped at: Completed 01-01-PLAN.md -- ready to execute 01-02-PLAN.md
+Last session: 2026-02-26
+Stopped at: Completed 01-02-PLAN.md -- ready to execute 01-03-PLAN.md
 Resume file: None

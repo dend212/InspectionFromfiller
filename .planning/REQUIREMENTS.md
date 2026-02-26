@@ -30,7 +30,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **WKFL-01**: Field tech submits completed inspection for office review
 - [ ] **WKFL-02**: Office staff (Dan) can review, edit summaries/recommendations, and finalize reports before sending
-- [ ] **WKFL-03**: Three user roles with appropriate access: admin (Dan), field tech, office staff
+- [x] **WKFL-03**: Three user roles with appropriate access: admin (Dan), field tech, office staff
 
 ### Delivery & Storage
 
@@ -41,8 +41,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Authentication
 
-- [ ] **AUTH-01**: Users can log in with email and password
-- [ ] **AUTH-02**: Role-based access control enforced at database level (admin, field tech, office staff)
+- [x] **AUTH-01**: Users can log in with email and password
+- [x] **AUTH-02**: Role-based access control enforced at database level (admin, field tech, office staff)
 
 ## v2 Requirements
 
@@ -86,9 +86,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | Phase 1: Foundation and Authentication | Pending |
-| AUTH-02 | Phase 1: Foundation and Authentication | Pending |
-| WKFL-03 | Phase 1: Foundation and Authentication | Pending |
+| AUTH-01 | Phase 1: Foundation and Authentication | Complete |
+| AUTH-02 | Phase 1: Foundation and Authentication | Complete |
+| WKFL-03 | Phase 1: Foundation and Authentication | Complete |
 | FORM-01 | Phase 2: Inspection Form Input | Pending |
 | FORM-02 | Phase 2: Inspection Form Input | Pending |
 | FORM-03 | Phase 2: Inspection Form Input | Pending |
