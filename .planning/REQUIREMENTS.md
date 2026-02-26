@@ -23,7 +23,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### PDF Generation
 
 - [x] **PDF-01**: System generates a pixel-perfect PDF using the ADEQ GWS 432 form as the base template via pdfme coordinate overlay
-- [ ] **PDF-02**: Inspector can digitally sign the completed report (signature captured and placed on form)
+- [x] **PDF-02**: Inspector can digitally sign the completed report (signature captured and placed on form)
 - [ ] **PDF-03**: Photo pages are appended after the main form pages in the final PDF
 
 ### Workflow
@@ -96,7 +96,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MDIA-01 | Phase 2: Inspection Form Input | Complete |
 | MDIA-02 | Phase 2: Inspection Form Input | Complete |
 | PDF-01 | Phase 3: PDF Generation | Complete |
-| PDF-02 | Phase 3: PDF Generation | Pending |
+| PDF-02 | Phase 3: PDF Generation | Complete |
 | PDF-03 | Phase 3: PDF Generation | Pending |
 | MDIA-03 | Phase 3: PDF Generation | Pending |
 | WKFL-01 | Phase 4: Review Workflow | Pending |

@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-last_updated: "2026-02-26T22:25:00.000Z"
+last_updated: "2026-02-26T22:31:00.000Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 15
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-25)
 
 **Core value:** Field techs capture inspection data digitally on-site, and the office produces a professional, pixel-perfect ADEQ inspection report without manually re-entering data into a PDF.
-**Current focus:** Phase 3 in progress: PDF Generation. Plan 03-01 complete (template + field mapping).
+**Current focus:** Phase 3 in progress: PDF Generation. Plans 03-01, 03-02 complete (template + field mapping + generation pipeline).
 
 ## Current Position
 
 Phase: 3 of 5 (PDF Generation) -- IN PROGRESS
-Plan: 1 of 3 in current phase (03-01 complete)
-Status: Phase 3 started, Plan 03-01 complete
-Last activity: 2026-02-26 -- Completed Plan 03-01 (pdfme template schema + field mapping)
+Plan: 2 of 3 in current phase (03-01, 03-02 complete)
+Status: Phase 3 progressing, Plan 03-02 complete
+Last activity: 2026-02-26 -- Completed Plan 03-02 (PDF generation pipeline, signature pad, preview UI)
 
-Progress: [█████░░░░░] 47% (7/15 plans)
+Progress: [█████░░░░░] 53% (8/15 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: ~30min
-- Total execution time: ~211 min
+- Total plans completed: 8
+- Average duration: ~27min
+- Total execution time: ~214 min
 
 **By Phase:**
 
@@ -42,11 +42,11 @@ Progress: [█████░░░░░] 47% (7/15 plans)
 |-------|-------|-------|----------|
 | 1. Foundation and Authentication | 3/3 | ~180min | ~60min |
 | 2. Inspection Form Input | 3/3 | ~25min | ~8min |
-| 3. PDF Generation | 1/3 | ~6min | ~6min |
+| 3. PDF Generation | 2/3 | ~9min | ~4.5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (~45min), 02-01 (~4min), 02-02 (~6min), 02-03 (~15min), 03-01 (~6min)
-- Trend: Template/mapping plans with clear schemas execute fast when data layer is solid
+- Last 5 plans: 02-01 (~4min), 02-02 (~6min), 02-03 (~15min), 03-01 (~6min), 03-02 (~3min)
+- Trend: PDF generation plans executing very fast with solid template/mapping foundation from 03-01
 
 *Updated after each plan completion*
 
@@ -89,6 +89,11 @@ Recent decisions affecting current work:
 - Plan 03-01: Per-page header repeaters (taxParcelNumber, dateOfInspection, initials) as separate schema names per page.
 - Plan 03-01: Comment overflow threshold at 200 characters with "See Comments" substitution.
 - Plan 03-01: Schema factory helpers (textField, checkbox, multilineField) for consistent field creation.
+- Plan 03-02: Signature exported as trimmed PNG via getTrimmedCanvas() for clean PDF embedding.
+- Plan 03-02: PDF preview uses native browser iframe with Blob URL -- no additional PDF viewer library.
+- Plan 03-02: Signature date auto-fills to today's date formatted MM/DD/YYYY.
+- Plan 03-02: InspectionPdfView as separate client component file for clean server/client boundary.
+- Plan 03-02: Uint8Array to Blob via new Uint8Array(pdfData) for strict TypeScript BlobPart typing.
 
 ### Pending Todos
 
@@ -102,5 +107,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Completed 03-01-PLAN.md -- pdfme template schema with 150+ field coordinates across 6 ADEQ pages, field-mapping layer for InspectionFormData, Liberation Sans fonts. Ready for Plan 03-02 (signature capture, generate-report orchestration).
+Stopped at: Completed 03-02-PLAN.md -- PDF generation pipeline with signature pad, generate button, iframe preview, and download. generateReport() orchestrator, usePdfGeneration hook, inspection detail page at /inspections/[id]. Ready for Plan 03-03 (photo pages + comments overflow).
 Resume file: None
