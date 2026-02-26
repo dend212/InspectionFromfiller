@@ -18,13 +18,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **MDIA-01**: User can capture or upload photos from device camera
 - [x] **MDIA-02**: User can upload videos as part of field data collection (stored with inspection, not embedded in PDF)
-- [ ] **MDIA-03**: Photos are embedded in the final PDF report as appended photo pages
+- [x] **MDIA-03**: Photos are embedded in the final PDF report as appended photo pages
 
 ### PDF Generation
 
 - [x] **PDF-01**: System generates a pixel-perfect PDF using the ADEQ GWS 432 form as the base template via pdfme coordinate overlay
 - [x] **PDF-02**: Inspector can digitally sign the completed report (signature captured and placed on form)
-- [ ] **PDF-03**: Photo pages are appended after the main form pages in the final PDF
+- [x] **PDF-03**: Photo pages are appended after the main form pages in the final PDF
 
 ### Workflow
 
@@ -97,8 +97,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MDIA-02 | Phase 2: Inspection Form Input | Complete |
 | PDF-01 | Phase 3: PDF Generation | Complete |
 | PDF-02 | Phase 3: PDF Generation | Complete |
-| PDF-03 | Phase 3: PDF Generation | Pending |
-| MDIA-03 | Phase 3: PDF Generation | Pending |
+| PDF-03 | Phase 3: PDF Generation | Complete |
+| MDIA-03 | Phase 3: PDF Generation | Complete |
 | WKFL-01 | Phase 4: Review Workflow | Pending |
 | WKFL-02 | Phase 4: Review Workflow | Pending |
 | DLVR-01 | Phase 5: Delivery and Dashboard | Pending |
