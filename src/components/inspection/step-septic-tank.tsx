@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect, useCallback } from "react";
 import { useFormContext } from "react-hook-form";
 import {
   FormField,
@@ -26,6 +27,8 @@ import {
   BAFFLE_CONDITIONS,
   CAPACITY_BASIS_OPTIONS,
 } from "@/lib/constants/inspection";
+import { PhotoCapture } from "@/components/inspection/photo-capture";
+import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
 import type { InspectionFormData } from "@/types/inspection";
 
 /** Deficiency labels matching the schema boolean fields */
@@ -40,8 +43,39 @@ const TANK_DEFICIENCY_ITEMS = [
   { field: "deficiencyOther" as const, label: "Other Deficiency" },
 ];
 
-export function StepSepticTank() {
+const SECTION_NAME = "septic-tank";
+
+interface StepSepticTankProps {
+  inspectionId: string;
+}
+
+export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
   const form = useFormContext<InspectionFormData>();
+  const [media, setMedia] = useState<MediaRecord[]>([]);
+
+  useEffect(() => {
+    async function loadMedia() {
+      try {
+        const res = await fetch(`/api/inspections/${inspectionId}/media`);
+        if (res.ok) {
+          const data = (await res.json()) as MediaRecord[];
+          setMedia(data);
+        }
+      } catch {
+        // Silently fail
+      }
+    }
+    loadMedia();
+  }, [inspectionId]);
+
+  const handleDeleteMedia = useCallback(async (mediaId: string) => {
+    await fetch(`/api/inspections/${inspectionId}/media`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mediaId }),
+    });
+    setMedia((prev) => prev.filter((m) => m.id !== mediaId));
+  }, [inspectionId]);
   const numberOfTanksValue = form.watch("septicTank.numberOfTanks");
   const numberOfTanks = Math.min(Math.max(Number.parseInt(numberOfTanksValue || "1", 10) || 1, 1), 3);
 
@@ -783,6 +817,24 @@ export function StepSepticTank() {
           )}
         />
       </section>
+
+      <Separator className="my-6" />
+
+      {/* Per-section photo attachment */}
+      <div className="space-y-4">
+        <h3 className="text-base font-medium">Photos</h3>
+        <MediaGallery
+          inspectionId={inspectionId}
+          section={SECTION_NAME}
+          media={media.filter((m) => m.label === SECTION_NAME && m.type === "photo")}
+          onDelete={handleDeleteMedia}
+        />
+        <PhotoCapture
+          inspectionId={inspectionId}
+          section={SECTION_NAME}
+          onUploadComplete={(newMedia) => setMedia((prev) => [...prev, newMedia])}
+        />
+      </div>
     </div>
   );
 }

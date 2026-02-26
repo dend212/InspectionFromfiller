@@ -30,14 +30,6 @@ interface InspectionWizardProps {
   };
 }
 
-const STEP_COMPONENTS = [
-  StepFacilityInfo,
-  StepGeneralTreatment,
-  StepDesignFlow,
-  StepSepticTank,
-  StepDisposalWorks,
-] as const;
-
 export function InspectionWizard({ inspection }: InspectionWizardProps) {
   const [currentStep, setCurrentStep] = useState(0);
 
@@ -92,8 +84,6 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
     }
   );
 
-  const CurrentStepComponent = STEP_COMPONENTS[currentStep];
-
   return (
     <Form {...form}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
@@ -107,7 +97,11 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
         </h2>
 
         <div className="min-h-[50vh]">
-          <CurrentStepComponent />
+          {currentStep === 0 && <StepFacilityInfo inspectionId={inspection.id} />}
+          {currentStep === 1 && <StepGeneralTreatment inspectionId={inspection.id} />}
+          {currentStep === 2 && <StepDesignFlow inspectionId={inspection.id} />}
+          {currentStep === 3 && <StepSepticTank inspectionId={inspection.id} />}
+          {currentStep === 4 && <StepDisposalWorks inspectionId={inspection.id} />}
         </div>
 
         <WizardNavigation

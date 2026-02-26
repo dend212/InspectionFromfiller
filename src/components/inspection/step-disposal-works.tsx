@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect, useCallback } from "react";
 import { useFormContext } from "react-hook-form";
 import {
   FormField,
@@ -25,6 +26,9 @@ import {
   DISTRIBUTION_METHODS,
   SUPPLY_LINE_MATERIALS,
 } from "@/lib/constants/inspection";
+import { PhotoCapture } from "@/components/inspection/photo-capture";
+import { VideoUpload } from "@/components/inspection/video-upload";
+import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
 import type { InspectionFormData } from "@/types/inspection";
 
 /** Disposal works deficiency items matching the schema boolean fields */
@@ -42,8 +46,39 @@ const DISPOSAL_DEFICIENCY_ITEMS = [
   { field: "defCouldNotDetermine" as const, label: "Could Not Determine" },
 ];
 
-export function StepDisposalWorks() {
+const SECTION_NAME = "disposal-works";
+
+interface StepDisposalWorksProps {
+  inspectionId: string;
+}
+
+export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
   const form = useFormContext<InspectionFormData>();
+  const [media, setMedia] = useState<MediaRecord[]>([]);
+
+  useEffect(() => {
+    async function loadMedia() {
+      try {
+        const res = await fetch(`/api/inspections/${inspectionId}/media`);
+        if (res.ok) {
+          const data = (await res.json()) as MediaRecord[];
+          setMedia(data);
+        }
+      } catch {
+        // Silently fail
+      }
+    }
+    loadMedia();
+  }, [inspectionId]);
+
+  const handleDeleteMedia = useCallback(async (mediaId: string) => {
+    await fetch(`/api/inspections/${inspectionId}/media`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mediaId }),
+    });
+    setMedia((prev) => prev.filter((m) => m.id !== mediaId));
+  }, [inspectionId]);
 
   return (
     <div className="space-y-8">
@@ -431,6 +466,40 @@ export function StepDisposalWorks() {
           />
         </div>
       </section>
+
+      <Separator className="my-6" />
+
+      {/* Per-section photo attachment */}
+      <div className="space-y-4">
+        <h3 className="text-base font-medium">Photos</h3>
+        <MediaGallery
+          inspectionId={inspectionId}
+          section={SECTION_NAME}
+          media={media.filter((m) => m.label === SECTION_NAME && m.type === "photo")}
+          onDelete={handleDeleteMedia}
+        />
+        <PhotoCapture
+          inspectionId={inspectionId}
+          section={SECTION_NAME}
+          onUploadComplete={(newMedia) => setMedia((prev) => [...prev, newMedia])}
+        />
+      </div>
+
+      <Separator className="my-6" />
+
+      {/* Video upload (general inspection attachment) */}
+      <div className="space-y-4">
+        <h3 className="text-base font-medium">Video</h3>
+        <VideoUpload
+          inspectionId={inspectionId}
+          onUploadComplete={(newMedia) => setMedia((prev) => [...prev, newMedia])}
+        />
+        <MediaGallery
+          inspectionId={inspectionId}
+          media={media.filter((m) => m.type === "video")}
+          onDelete={handleDeleteMedia}
+        />
+      </div>
     </div>
   );
 }
