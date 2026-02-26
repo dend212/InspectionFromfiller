@@ -10,8 +10,8 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Form Input
 
 - [x] **FORM-01**: Field tech can fill out the ADEQ GWS 432 form as a multi-step mobile wizard (all 5 sections: Facility Info, General Treatment, Design Flow, Septic Tank Inspection, Disposal Works)
-- [ ] **FORM-02**: Rarely-used options in Section 2 (alternative system types beyond GP 4.02) are collapsed/hidden by default with expand-on-demand
-- [ ] **FORM-03**: Form auto-saves on every field change to prevent data loss (localStorage/IndexedDB)
+- [x] **FORM-02**: Rarely-used options in Section 2 (alternative system types beyond GP 4.02) are collapsed/hidden by default with expand-on-demand
+- [x] **FORM-03**: Form auto-saves on every field change to prevent data loss (localStorage/IndexedDB)
 - [x] **FORM-04**: Inspector info (Daniel Endres, SewerTime Septic, NAWT #15805, CR-37, ADEQ Truck #2833) is pre-populated on every new inspection
 
 ### Media
@@ -90,8 +90,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-02 | Phase 1: Foundation and Authentication | Complete |
 | WKFL-03 | Phase 1: Foundation and Authentication | Complete |
 | FORM-01 | Phase 2: Inspection Form Input | Complete |
-| FORM-02 | Phase 2: Inspection Form Input | Pending |
-| FORM-03 | Phase 2: Inspection Form Input | Pending |
+| FORM-02 | Phase 2: Inspection Form Input | Complete |
+| FORM-03 | Phase 2: Inspection Form Input | Complete |
 | FORM-04 | Phase 2: Inspection Form Input | Complete |
 | MDIA-01 | Phase 2: Inspection Form Input | Pending |
 | MDIA-02 | Phase 2: Inspection Form Input | Pending |
