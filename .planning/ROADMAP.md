@@ -13,8 +13,8 @@ This roadmap takes the Inspection Form Filler from zero to a working application
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation and Authentication** - Next.js app with Supabase auth, role-based access, and database schema
-- [ ] **Phase 2: Inspection Form Input** - Mobile-first multi-step form for all ADEQ GWS 432 sections with photo/video capture
-- [ ] **Phase 3: PDF Generation** - Pixel-perfect ADEQ form output via pdfme template overlay with signature and photo pages
+- [x] **Phase 2: Inspection Form Input** - Mobile-first multi-step form for all ADEQ GWS 432 sections with photo/video capture
+- [x] **Phase 3: PDF Generation** - Pixel-perfect ADEQ form output via pdfme template overlay with signature and photo pages
 - [ ] **Phase 4: Review Workflow** - Office staff review, edit, and finalize inspections before delivery
 - [ ] **Phase 5: Delivery and Dashboard** - Cloud storage, email delivery, inspection listing, and search
 
@@ -66,9 +66,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — pdfme template schema for all 6 ADEQ form pages + field-mapping layer + font setup
-- [ ] 03-02-PLAN.md — PDF generation pipeline, signature pad, generate button, in-browser preview, inspection detail page
-- [ ] 03-03-PLAN.md — Photo page appendix (2 per page, grouped by section), comments overflow page, PDF merge
+- [x] 03-01-PLAN.md — pdfme template schema for all 6 ADEQ form pages + field-mapping layer + font setup
+- [x] 03-02-PLAN.md — PDF generation pipeline, signature pad, generate button, in-browser preview, inspection detail page
+- [x] 03-03-PLAN.md — Photo page appendix (2 per page, grouped by section), comments overflow page, PDF merge
 
 ### Phase 4: Review Workflow
 **Goal**: Office staff can review field-submitted inspections, edit summaries and recommendations, and mark reports as finalized
