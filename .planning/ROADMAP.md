@@ -30,12 +30,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A field tech sees only field-tech-appropriate UI; admin sees admin UI
   4. Database schema for inspections, users, and media is deployed and accessible
   5. App is deployed and accessible on Vercel at a working URL
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: Project scaffolding and deployment pipeline
-- [ ] 01-02: Supabase auth, roles, and database schema
-- [ ] 01-03: Role-based UI shell and navigation
+- [ ] 01-01-PLAN.md — Scaffold Next.js 16 project, Supabase clients, Drizzle ORM, shadcn/ui, and deploy to Vercel
+- [ ] 01-02-PLAN.md — Login page, password reset, admin user creation API, database schema + RLS deployment, Custom Access Token Hook
+- [ ] 01-03-PLAN.md — Role-based dashboard shell with navigation, admin user management UI, and end-to-end verification
 
 ### Phase 2: Inspection Form Input
 **Goal**: Field techs can fill out the complete ADEQ GWS 432 inspection form on a phone and attach photos/videos
