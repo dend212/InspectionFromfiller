@@ -47,12 +47,12 @@ Plans:
   3. Form data auto-saves on every field change -- closing the browser and reopening restores all entered data
   4. Inspector info (Daniel Endres, SewerTime Septic, NAWT #15805, CR-37, ADEQ Truck #2833) is pre-filled on every new inspection
   5. Field tech can capture photos from device camera and upload videos, both attached to the inspection record
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: Multi-step form wizard with all ADEQ sections
-- [ ] 02-02: Auto-save, pre-populated fields, and conditional UI
-- [ ] 02-03: Photo capture and video upload
+- [ ] 02-01-PLAN.md — Zod schemas for all 5 ADEQ sections, TypeScript types, constants, inspection CRUD API routes, inspections list page, new-inspection redirect
+- [ ] 02-02-PLAN.md — 5-step wizard shell with progress dots, all step components with mobile-first fields, auto-save hook, conditional toggle sections, edit page
+- [ ] 02-03-PLAN.md — Photo capture from device camera, video upload with 120s limit, per-section media galleries, Supabase Storage bucket setup, media API route
 
 ### Phase 3: PDF Generation
 **Goal**: System generates a pixel-perfect PDF replica of the ADEQ GWS 432 form from inspection data, with digital signature and appended photo pages
