@@ -50,7 +50,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Zod schemas for all 5 ADEQ sections, TypeScript types, constants, inspection CRUD API routes, inspections list page, new-inspection redirect
+- [x] 02-01-PLAN.md — Zod schemas for all 5 ADEQ sections, TypeScript types, constants, inspection CRUD API routes, inspections list page, new-inspection redirect
 - [ ] 02-02-PLAN.md — 5-step wizard shell with progress dots, all step components with mobile-first fields, auto-save hook, conditional toggle sections, edit page
 - [ ] 02-03-PLAN.md — Photo capture from device camera, video upload with 120s limit, per-section media galleries, Supabase Storage bucket setup, media API route
 

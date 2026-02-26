@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-26T07:30:18.527Z"
+last_updated: "2026-02-26T17:46:04Z"
 progress:
-  total_phases: 1
+  total_phases: 2
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 4
+  completed_plans: 4
 ---
 
 # Project State
@@ -18,33 +18,34 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-25)
 
 **Core value:** Field techs capture inspection data digitally on-site, and the office produces a professional, pixel-perfect ADEQ inspection report without manually re-entering data into a PDF.
-**Current focus:** Phase 1 COMPLETE -- ready for Phase 2: Inspection Form Input
+**Current focus:** Phase 2: Inspection Form Input -- Plan 01 complete, continuing to Plan 02 (wizard UI)
 
 ## Current Position
 
-Phase: 1 of 5 (Foundation and Authentication) -- COMPLETE
-Plan: 3 of 3 in current phase (all done)
-Status: Phase Complete
-Last activity: 2026-02-26 -- Completed Plan 01-03 (role-based dashboard shell, navigation, admin user management, e2e verification)
+Phase: 2 of 5 (Inspection Form Input) -- IN PROGRESS
+Plan: 1 of 3 in current phase
+Status: Executing Phase 2
+Last activity: 2026-02-26 -- Completed Plan 02-01 (Zod schemas, ADEQ constants, CRUD API, inspections list page)
 
-Progress: [██░░░░░░░░] 20% (3/15 plans)
+Progress: [███░░░░░░░] 27% (4/15 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: ~60min
-- Total execution time: ~3 hours
+- Total plans completed: 4
+- Average duration: ~47min
+- Total execution time: ~184 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Foundation and Authentication | 3/3 | ~180min | ~60min |
+| 2. Inspection Form Input | 1/3 | ~4min | ~4min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~45min), 01-02 (~90min), 01-03 (~45min)
-- Trend: Stabilized. UI plans execute faster than DB/auth infrastructure plans
+- Last 5 plans: 01-01 (~45min), 01-02 (~90min), 01-03 (~45min), 02-01 (~4min)
+- Trend: Data-layer plans with clear field mappings execute very fast
 
 *Updated after each plan completion*
 
@@ -68,6 +69,11 @@ Recent decisions affecting current work:
 - Plan 01-03: useUserRole hook decodes JWT client-side via jwt-decode -- avoids extra server calls for nav filtering.
 - Plan 01-03: Admin route protection is server-side (redirect before render), not just hidden in navigation.
 - Plan 01-03: Vercel DATABASE_URL updated to Transaction pooler for runtime DB queries.
+- Plan 02-01: ADEQ form fields extracted from Adeq Report1.pdf via pdftotext -- all 5 sections with subfields including qualifications, records, cesspool check.
+- Plan 02-01: Section 2 systemTypes stored as string array for multi-select GP 4.02-4.23 checkboxes.
+- Plan 02-01: Septic tank uses per-tank array within schema for multi-tank property support.
+- Plan 02-01: Used z.string() instead of z.coerce.number() for numeric fields -- avoids NaN on empty wizard fields.
+- Plan 02-01: Added ownership verification to PATCH endpoint (missing from plan) -- security fix.
 
 ### Pending Todos
 
@@ -81,5 +87,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Completed 01-03-PLAN.md -- Phase 1 complete. Ready to plan/execute Phase 2 (Inspection Form Input).
+Stopped at: Completed 02-01-PLAN.md -- Zod schemas, ADEQ constants, CRUD API, inspections list page. Ready for Plan 02-02 (wizard UI).
 Resume file: None
