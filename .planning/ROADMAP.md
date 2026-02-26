@@ -62,13 +62,13 @@ Plans:
   1. Generated PDF is visually indistinguishable from the official ADEQ GWS 432 form when printed
   2. All inspection data from the form appears in the correct positions on the correct pages of the PDF
   3. Inspector can draw/capture a signature that appears in the signature area of the generated PDF
-  4. Photos from the inspection are appended as additional pages after the main 7-page form
-**Plans**: TBD
+  4. Photos from the inspection are appended as additional pages after the main 6-page form
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: pdfme template mapping for ADEQ GWS 432 (all 7 pages)
-- [ ] 03-02: PDF generation pipeline (data to PDF)
-- [ ] 03-03: Digital signature capture and photo page appending
+- [ ] 03-01-PLAN.md — pdfme template schema for all 6 ADEQ form pages + field-mapping layer + font setup
+- [ ] 03-02-PLAN.md — PDF generation pipeline, signature pad, generate button, in-browser preview, inspection detail page
+- [ ] 03-03-PLAN.md — Photo page appendix (2 per page, grouped by section), comments overflow page, PDF merge
 
 ### Phase 4: Review Workflow
 **Goal**: Office staff can review field-submitted inspections, edit summaries and recommendations, and mark reports as finalized
