@@ -79,12 +79,11 @@ Plans:
   2. Dan (office staff/admin) can open a submitted inspection, see all field data, and edit summaries and recommendations
   3. Dan can preview the generated PDF, make edits, and re-generate until satisfied
   4. Dan can mark a report as finalized, locking it from further field tech edits
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: Submission flow and status transitions
-- [ ] 04-02: Review interface with edit and PDF preview
-- [ ] 04-03: Finalization and access control enforcement
+- [ ] 04-01-PLAN.md — Database migration, status transition API endpoints (submit/return/finalize/reopen), "Submit for Review" button on wizard, PATCH status guard
+- [ ] 04-02-PLAN.md — Review queue page, side-by-side review editor with collapsible sections and PDF preview, action buttons (finalize/return/reopen), email notification
 
 ### Phase 5: Delivery and Dashboard
 **Goal**: Completed reports are stored in the cloud, deliverable to customers via email, and searchable from a dashboard
@@ -112,5 +111,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Foundation and Authentication | 3/3 | Complete | 2026-02-26 |
 | 2. Inspection Form Input | 0/3 | Not started | - |
 | 3. PDF Generation | 0/3 | Not started | - |
-| 4. Review Workflow | 0/3 | Not started | - |
+| 4. Review Workflow | 0/2 | Not started | - |
 | 5. Delivery and Dashboard | 0/3 | Not started | - |
