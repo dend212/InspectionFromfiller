@@ -72,6 +72,7 @@ export default async function EditInspectionPage({
           id: inspection.id,
           formData: inspection.formData as InspectionFormData | null,
           status: inspection.status,
+          reviewNotes: inspection.reviewNotes,
         }}
       />
     </div>

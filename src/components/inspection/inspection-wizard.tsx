@@ -20,6 +20,8 @@ import {
   STEP_FIELDS,
 } from "@/lib/validators/inspection";
 import { STEP_LABELS } from "@/lib/constants/inspection";
+import { SubmitForReviewButton } from "@/components/inspection/submit-for-review-button";
+import { ReviewNoteBanner } from "@/components/inspection/review-note-banner";
 import type { InspectionFormData } from "@/types/inspection";
 
 interface InspectionWizardProps {
@@ -27,6 +29,7 @@ interface InspectionWizardProps {
     id: string;
     formData: InspectionFormData | null;
     status: string;
+    reviewNotes?: string | null;
   };
 }
 
@@ -86,22 +89,33 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-6 pb-4">
+        {inspection.reviewNotes && (
+          <ReviewNoteBanner note={inspection.reviewNotes} />
+        )}
+
         <WizardProgress
           currentStep={currentStep}
           onStepClick={handleStepClick}
         />
 
-        <h2 className="text-xl font-semibold">
-          Step {currentStep + 1}: {STEP_LABELS[currentStep]}
-        </h2>
+        <div className="rounded-lg border bg-card p-4 sm:p-6">
+          <div className="mb-5 pb-4 border-b">
+            <p className="text-xs font-medium text-primary uppercase tracking-wider">
+              Step {currentStep + 1} of 5
+            </p>
+            <h2 className="text-xl font-semibold mt-1">
+              {STEP_LABELS[currentStep]}
+            </h2>
+          </div>
 
-        <div className="min-h-[50vh]">
-          {currentStep === 0 && <StepFacilityInfo inspectionId={inspection.id} />}
-          {currentStep === 1 && <StepGeneralTreatment inspectionId={inspection.id} />}
-          {currentStep === 2 && <StepDesignFlow inspectionId={inspection.id} />}
-          {currentStep === 3 && <StepSepticTank inspectionId={inspection.id} />}
-          {currentStep === 4 && <StepDisposalWorks inspectionId={inspection.id} />}
+          <div className="min-h-[40vh]">
+            {currentStep === 0 && <StepFacilityInfo inspectionId={inspection.id} />}
+            {currentStep === 1 && <StepGeneralTreatment inspectionId={inspection.id} />}
+            {currentStep === 2 && <StepDesignFlow inspectionId={inspection.id} />}
+            {currentStep === 3 && <StepSepticTank inspectionId={inspection.id} />}
+            {currentStep === 4 && <StepDisposalWorks inspectionId={inspection.id} />}
+          </div>
         </div>
 
         <WizardNavigation
@@ -112,6 +126,14 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
           isSubmitting={form.formState.isSubmitting}
           saving={saving}
           lastSaved={lastSaved}
+          submitButton={
+            inspection.status === "draft" ? (
+              <SubmitForReviewButton
+                inspectionId={inspection.id}
+                formData={form.getValues()}
+              />
+            ) : undefined
+          }
         />
       </form>
     </Form>
