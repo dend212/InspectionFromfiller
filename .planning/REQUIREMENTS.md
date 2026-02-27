@@ -29,7 +29,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Workflow
 
 - [x] **WKFL-01**: Field tech submits completed inspection for office review
-- [ ] **WKFL-02**: Office staff (Dan) can review, edit summaries/recommendations, and finalize reports before sending
+- [x] **WKFL-02**: Office staff (Dan) can review, edit summaries/recommendations, and finalize reports before sending
 - [x] **WKFL-03**: Three user roles with appropriate access: admin (Dan), field tech, office staff
 
 ### Delivery & Storage
@@ -100,7 +100,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PDF-03 | Phase 3: PDF Generation | Complete |
 | MDIA-03 | Phase 3: PDF Generation | Complete |
 | WKFL-01 | Phase 4: Review Workflow | Complete |
-| WKFL-02 | Phase 4: Review Workflow | Pending |
+| WKFL-02 | Phase 4: Review Workflow | Complete |
 | DLVR-01 | Phase 5: Delivery and Dashboard | Pending |
 | DLVR-02 | Phase 5: Delivery and Dashboard | Pending |
 | DLVR-03 | Phase 5: Delivery and Dashboard | Pending |

@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-last_updated: "2026-02-27T00:26:00Z"
+last_updated: "2026-02-27T00:35:16Z"
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 15
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-25)
 
 **Core value:** Field techs capture inspection data digitally on-site, and the office produces a professional, pixel-perfect ADEQ inspection report without manually re-entering data into a PDF.
-**Current focus:** Phase 4 in progress: Review Workflow. Plan 04-01 complete (status API, submit button). Plan 04-02 next (admin review dashboard).
+**Current focus:** Phase 4 complete: Review Workflow. Both plans done (status API, submit button, review editor, email notification). Phase 5 next (Delivery).
 
 ## Current Position
 
-Phase: 4 of 5 (Review Workflow)
-Plan: 1 of 2 in current phase
-Status: Plan 04-01 complete, ready for Plan 04-02
-Last activity: 2026-02-27 -- Completed Plan 04-01 (status transitions, submit button, return-note banner)
+Phase: 4 of 5 (Review Workflow) -- COMPLETE
+Plan: 2 of 2 in current phase (all done)
+Status: Phase 4 complete, ready for Phase 5
+Last activity: 2026-02-27 -- Completed Plan 04-02 (review editor, email notification, action buttons)
 
-Progress: [██████░░░░] 67% (10/15 plans)
+Progress: [███████░░░] 73% (11/15 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
-- Average duration: ~23min
-- Total execution time: ~225 min
+- Total plans completed: 11
+- Average duration: ~21min
+- Total execution time: ~231 min
 
 **By Phase:**
 
@@ -43,11 +43,11 @@ Progress: [██████░░░░] 67% (10/15 plans)
 | 1. Foundation and Authentication | 3/3 | ~180min | ~60min |
 | 2. Inspection Form Input | 3/3 | ~25min | ~8min |
 | 3. PDF Generation | 3/3 | ~16min | ~5min |
-| 4. Review Workflow | 1/2 | ~4min | ~4min |
+| 4. Review Workflow | 2/2 | ~10min | ~5min |
 
 **Recent Trend:**
-- Last 5 plans: 02-03 (~15min), 03-01 (~6min), 03-02 (~3min), 03-03 (~7min), 04-01 (~4min)
-- Trend: Continued fast execution -- review workflow API and UI in 4min
+- Last 5 plans: 03-01 (~6min), 03-02 (~3min), 03-03 (~7min), 04-01 (~4min), 04-02 (~6min)
+- Trend: Sustained fast execution -- review editor with 12 files in 6min
 
 *Updated after each plan completion*
 
@@ -104,6 +104,11 @@ Recent decisions affecting current work:
 - Plan 04-01: Atomic WHERE clause for all status transitions -- prevents race conditions without database-level locks.
 - Plan 04-01: submitButton ReactNode prop on WizardNavigation for clean last-step override without breaking existing API.
 - Plan 04-01: AlertDialogDescription uses asChild with div wrapper for rich content (warning lists) without nesting p in p.
+- Plan 04-02: Show All Fields toggles within each review section -- keeps primary editing area clean while allowing access to all 100+ form fields.
+- Plan 04-02: Disposal Works comments/summary highlighted with border-primary styling as primary editing area for Dan.
+- Plan 04-02: Fire-and-forget email notification via async IIFE in submit route -- does not block the HTTP response.
+- Plan 04-02: Admin notification preference checked via profiles.notificationSettings join before sending.
+- Plan 04-02: Used onboarding@resend.dev as sender address until custom domain verified in Resend.
 
 ### Pending Todos
 
@@ -117,5 +122,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 04-01-PLAN.md -- Status transition endpoints, PATCH guard, submit button, review-note banner. Ready for Plan 04-02 (admin review dashboard).
+Stopped at: Completed 04-02-PLAN.md -- Review editor, action buttons, email notification. Phase 4 complete. Ready for Phase 5 (Delivery).
 Resume file: None
