@@ -77,7 +77,7 @@ export async function PATCH(
 
   // Verify the inspection exists and user has access
   const [existing] = await db
-    .select({ inspectorId: inspections.inspectorId })
+    .select({ inspectorId: inspections.inspectorId, status: inspections.status })
     .from(inspections)
     .where(eq(inspections.id, id))
     .limit(1);
@@ -85,6 +85,8 @@ export async function PATCH(
   if (!existing) {
     return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
   }
+
+  let isPrivileged = false;
 
   if (existing.inspectorId !== user.id) {
     let userRole: string | null = null;
@@ -100,10 +102,18 @@ export async function PATCH(
       // Role decode failed
     }
 
-    const isPrivileged = userRole === "admin" || userRole === "office_staff";
+    isPrivileged = userRole === "admin" || userRole === "office_staff";
     if (!isPrivileged) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+  }
+
+  // Field techs can only edit drafts (defense in depth -- RLS also enforces this)
+  if (!isPrivileged && existing.status !== "draft") {
+    return NextResponse.json(
+      { error: "Cannot edit: inspection is no longer a draft" },
+      { status: 403 }
+    );
   }
 
   const formData = await request.json();
