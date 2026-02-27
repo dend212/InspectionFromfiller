@@ -47,13 +47,6 @@ export function Nav() {
 
   return (
     <nav className="hidden lg:flex w-60 flex-col gap-1 bg-sidebar p-4">
-      <div className="mb-4 px-3">
-        <img
-          src="/sewertime-logo.png"
-          alt="SewerTime"
-          className="h-8 w-auto brightness-0 invert"
-        />
-      </div>
       {visibleItems.map((item) => {
         const Icon = item.icon ? ICON_MAP[item.icon] : null;
         const isActive =
