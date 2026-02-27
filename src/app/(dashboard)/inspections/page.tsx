@@ -126,14 +126,21 @@ export default async function InspectionsPage() {
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {results.map((inspection) => (
+          {results.map((inspection) => {
+            // Determine link destination based on role and status
+            let href: string;
+            if (inspection.status === "draft") {
+              href = `/inspections/${inspection.id}/edit`;
+            } else if (isPrivileged) {
+              href = `/review/${inspection.id}`;
+            } else {
+              href = `/inspections/${inspection.id}`;
+            }
+
+            return (
             <Link
               key={inspection.id}
-              href={
-                inspection.status === "draft"
-                  ? `/inspections/${inspection.id}/edit`
-                  : `/inspections/${inspection.id}/edit`
-              }
+              href={href}
             >
               <Card className="transition-colors hover:bg-accent/50">
                 <CardHeader className="pb-2">
@@ -163,7 +170,8 @@ export default async function InspectionsPage() {
                 </CardContent>
               </Card>
             </Link>
-          ))}
+          );
+          })}
         </div>
       )}
     </div>

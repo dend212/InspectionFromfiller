@@ -135,15 +135,29 @@ export function InspectionPdfView({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={STATUS_VARIANTS[status] ?? "secondary"}>
+              <Badge
+                variant={STATUS_VARIANTS[status] ?? "secondary"}
+                className={
+                  status === "completed"
+                    ? "bg-emerald-100 text-emerald-800"
+                    : undefined
+                }
+              >
                 {STATUS_LABELS[status] ?? status}
               </Badge>
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/inspections/${inspectionId}/edit`}>
-                  <Edit className="size-4" />
-                  Edit
-                </Link>
-              </Button>
+              {status === "draft" && (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/inspections/${inspectionId}/edit`}>
+                    <Edit className="size-4" />
+                    Edit
+                  </Link>
+                </Button>
+              )}
+              {status === "in_review" && (
+                <span className="text-xs text-muted-foreground">
+                  This inspection is under review
+                </span>
+              )}
             </div>
           </div>
         </CardHeader>
