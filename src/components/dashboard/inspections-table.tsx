@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { ArrowUpDown, Check, Download, Eye } from "lucide-react";
+import { ArrowUpDown, Check, Download, Eye, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import {
   Table,
   TableHeader,
@@ -92,6 +94,39 @@ export function InspectionsTable({
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete(e: React.MouseEvent, inspectionId: string) {
+    e.stopPropagation();
+
+    if (confirmDeleteId !== inspectionId) {
+      // First click: enter confirm state
+      setConfirmDeleteId(inspectionId);
+      return;
+    }
+
+    // Second click: actually delete
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/inspections/${inspectionId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Delete failed");
+      }
+      toast.success("Inspection deleted");
+      router.refresh();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete inspection"
+      );
+    } finally {
+      setDeleting(false);
+      setConfirmDeleteId(null);
+    }
+  }
 
   function handleSort(column: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -189,7 +224,7 @@ export function InspectionsTable({
             ))}
             <TableHead>Inspector</TableHead>
             <TableHead>Sent</TableHead>
-            <TableHead className="w-[80px]">
+            <TableHead className="w-[110px]">
               <span className="sr-only">Actions</span>
             </TableHead>
           </TableRow>
@@ -252,6 +287,30 @@ export function InspectionsTable({
                   >
                     <Eye className="size-3.5" />
                     <span className="sr-only">View</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className={
+                      confirmDeleteId === inspection.id
+                        ? "text-destructive bg-destructive/10 hover:bg-destructive/20 opacity-100"
+                        : "text-muted-foreground hover:text-destructive"
+                    }
+                    onClick={(e) => handleDelete(e, inspection.id)}
+                    onBlur={() => setConfirmDeleteId(null)}
+                    disabled={deleting && confirmDeleteId === inspection.id}
+                    title={
+                      confirmDeleteId === inspection.id
+                        ? "Click again to confirm delete"
+                        : "Delete inspection"
+                    }
+                  >
+                    <Trash2 className="size-3.5" />
+                    <span className="sr-only">
+                      {confirmDeleteId === inspection.id
+                        ? "Confirm delete"
+                        : "Delete"}
+                    </span>
                   </Button>
                 </div>
               </TableCell>

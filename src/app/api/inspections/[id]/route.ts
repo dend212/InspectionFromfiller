@@ -139,3 +139,72 @@ export async function PATCH(
 
   return NextResponse.json({ saved: true });
 }
+
+/**
+ * DELETE /api/inspections/[id]
+ * Permanently delete an inspection and all associated data.
+ * Related media records are cascade-deleted by the database.
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Verify the inspection exists
+  const [existing] = await db
+    .select({ inspectorId: inspections.inspectorId })
+    .from(inspections)
+    .where(eq(inspections.id, id))
+    .limit(1);
+
+  if (!existing) {
+    return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
+  }
+
+  // Check ownership or privileged role
+  if (existing.inspectorId !== user.id) {
+    let userRole: string | null = null;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const payload = JSON.parse(
+          Buffer.from(session.access_token.split(".")[1], "base64").toString()
+        );
+        userRole = payload.user_role ?? null;
+      }
+    } catch {
+      // Role decode failed
+    }
+
+    const isPrivileged = userRole === "admin" || userRole === "office_staff";
+    if (!isPrivileged) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
+  // Clean up storage files for this inspection (best-effort)
+  try {
+    const { data: files } = await supabase.storage
+      .from("inspection-media")
+      .list(id);
+    if (files && files.length > 0) {
+      const paths = files.map((f) => `${id}/${f.name}`);
+      await supabase.storage.from("inspection-media").remove(paths);
+    }
+  } catch {
+    // Storage cleanup is best-effort -- DB cascade handles metadata
+  }
+
+  await db.delete(inspections).where(eq(inspections.id, id));
+
+  return NextResponse.json({ deleted: true });
+}
