@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db";
-import { inspections } from "@/lib/db/schema";
+import { inspections, profiles, userRoles } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { sendSubmissionNotification } from "@/lib/email/send-notification";
 
 /**
  * POST /api/inspections/[id]/submit
@@ -69,7 +70,7 @@ export async function POST(
       updatedAt: new Date(),
     })
     .where(and(eq(inspections.id, id), eq(inspections.status, "draft")))
-    .returning({ id: inspections.id });
+    .returning({ id: inspections.id, facilityName: inspections.facilityName });
 
   if (result.length === 0) {
     return NextResponse.json(
@@ -77,6 +78,37 @@ export async function POST(
       { status: 409 }
     );
   }
+
+  const updated = result[0];
+
+  // Fire-and-forget email notification if admin has opted in
+  (async () => {
+    try {
+      const admins = await db
+        .select({
+          notificationSettings: profiles.notificationSettings,
+        })
+        .from(profiles)
+        .innerJoin(userRoles, eq(userRoles.userId, profiles.id))
+        .where(eq(userRoles.role, "admin"));
+
+      const adminWantsEmail = admins.some(
+        (a) =>
+          (a.notificationSettings as Record<string, unknown> | null)
+            ?.emailOnSubmission === true
+      );
+
+      if (adminWantsEmail) {
+        await sendSubmissionNotification(
+          updated.id,
+          updated.facilityName ?? null,
+          null
+        );
+      }
+    } catch (err) {
+      console.error("Notification check failed:", err);
+    }
+  })();
 
   return NextResponse.json({ status: "in_review" });
 }
