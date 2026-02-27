@@ -81,6 +81,7 @@ export default async function InspectionDetailPage({
         facilityAddress={inspection.facilityAddress}
         facilityCity={inspection.facilityCity}
         facilityCounty={inspection.facilityCounty}
+        customerEmail={inspection.customerEmail ?? null}
         createdAt={inspection.createdAt.toISOString()}
         mediaCount={media.length}
         media={media.map((m) => ({

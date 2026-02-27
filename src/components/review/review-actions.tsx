@@ -16,7 +16,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ReturnDialog } from "./return-dialog";
-import { CheckCircle, Loader2, RotateCcw, Undo2 } from "lucide-react";
+import { SendEmailDialog } from "@/components/dashboard/send-email-dialog";
+import { CheckCircle, Loader2, Mail, RotateCcw, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -36,18 +37,23 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
 interface ReviewActionsProps {
   inspectionId: string;
   status: string;
+  facilityAddress?: string | null;
+  customerEmail?: string | null;
   onStatusChange: (newStatus: string) => void;
 }
 
 export function ReviewActions({
   inspectionId,
   status,
+  facilityAddress,
+  customerEmail,
   onStatusChange,
 }: ReviewActionsProps) {
   const router = useRouter();
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isReopening, setIsReopening] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [sendEmailDialogOpen, setSendEmailDialogOpen] = useState(false);
 
   const handleFinalize = async () => {
     setIsFinalizing(true);
@@ -168,35 +174,53 @@ export function ReviewActions({
         </>
       )}
 
-      {/* Completed: Reopen button */}
-      {status === "completed" && (
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button size="sm" variant="outline" disabled={isReopening}>
-              {isReopening ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <RotateCcw className="size-4" />
-              )}
-              Reopen for Editing
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Reopen Inspection?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will move the inspection back to &quot;In Review&quot;
-                status, allowing further edits before re-finalizing.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleReopen} variant="default">
-                Reopen
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+      {/* Completed/Sent: Send to Customer and Reopen buttons */}
+      {(status === "completed" || status === "sent") && (
+        <>
+          <Button
+            size="sm"
+            onClick={() => setSendEmailDialogOpen(true)}
+          >
+            <Mail className="size-4" />
+            Send to Customer
+          </Button>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button size="sm" variant="outline" disabled={isReopening}>
+                {isReopening ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="size-4" />
+                )}
+                Reopen for Editing
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reopen Inspection?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will move the inspection back to &quot;In Review&quot;
+                  status, allowing further edits before re-finalizing.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleReopen} variant="default">
+                  Reopen
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <SendEmailDialog
+            inspectionId={inspectionId}
+            facilityAddress={facilityAddress ?? null}
+            customerEmail={customerEmail ?? null}
+            open={sendEmailDialogOpen}
+            onOpenChange={setSendEmailDialogOpen}
+          />
+        </>
       )}
     </div>
   );

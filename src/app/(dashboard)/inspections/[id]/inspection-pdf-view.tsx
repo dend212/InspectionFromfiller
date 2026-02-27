@@ -14,13 +14,18 @@ import { SignaturePad } from "@/components/inspection/signature-pad";
 import { PdfPreview } from "@/components/inspection/pdf-preview";
 import { GeneratePdfButton } from "@/components/inspection/generate-pdf-button";
 import { usePdfGeneration } from "@/hooks/use-pdf-generation";
+import { SendEmailDialog } from "@/components/dashboard/send-email-dialog";
 import {
   ArrowLeft,
+  Download,
   Edit,
+  Loader2,
+  Mail,
   MapPin,
   Calendar,
   Camera,
 } from "lucide-react";
+import { toast } from "sonner";
 import type { InspectionFormData } from "@/types/inspection";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
 
@@ -48,6 +53,7 @@ interface InspectionPdfViewProps {
   facilityAddress: string | null;
   facilityCity: string | null;
   facilityCounty: string | null;
+  customerEmail: string | null;
   createdAt: string;
   mediaCount: number;
   media: MediaRecord[];
@@ -61,11 +67,14 @@ export function InspectionPdfView({
   facilityAddress,
   facilityCity,
   facilityCounty,
+  customerEmail,
   createdAt,
   mediaCount,
   media,
 }: InspectionPdfViewProps) {
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
+  const [sendEmailDialogOpen, setSendEmailDialogOpen] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const { generatePdf, pdfData, isGenerating, error, clearPdf } =
     usePdfGeneration();
 
@@ -86,6 +95,25 @@ export function InspectionPdfView({
     },
     [pdfData, clearPdf],
   );
+
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      const res = await fetch(`/api/inspections/${inspectionId}/download`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to get download URL");
+      }
+      const { downloadUrl } = await res.json();
+      window.open(downloadUrl, "_blank");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to download report",
+      );
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const formattedDate = new Date(createdAt).toLocaleDateString("en-US", {
     month: "short",
@@ -158,6 +186,30 @@ export function InspectionPdfView({
                   This inspection is under review
                 </span>
               )}
+              {(status === "completed" || status === "sent") && (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => setSendEmailDialogOpen(true)}
+                  >
+                    <Mail className="size-4" />
+                    Send to Customer
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleDownload}
+                    disabled={isDownloading}
+                  >
+                    {isDownloading ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Download className="size-4" />
+                    )}
+                    Download PDF
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -205,6 +257,15 @@ export function InspectionPdfView({
           </CardContent>
         </Card>
       )}
+
+      {/* Send Email Dialog */}
+      <SendEmailDialog
+        inspectionId={inspectionId}
+        facilityAddress={facilityAddress}
+        customerEmail={customerEmail}
+        open={sendEmailDialogOpen}
+        onOpenChange={setSendEmailDialogOpen}
+      />
     </div>
   );
 }

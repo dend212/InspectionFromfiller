@@ -47,6 +47,7 @@ interface ReviewEditorProps {
     facilityCounty: string | null;
     createdAt: string;
     reviewNotes: string | null;
+    customerEmail: string | null;
   };
   media: MediaRecord[];
 }
@@ -206,6 +207,8 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
             <ReviewActions
               inspectionId={inspection.id}
               status={status}
+              facilityAddress={inspection.facilityAddress}
+              customerEmail={inspection.customerEmail}
               onStatusChange={handleStatusChange}
             />
 

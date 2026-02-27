@@ -82,6 +82,7 @@ export default async function ReviewDetailPage({
           facilityCounty: inspection.facilityCounty,
           createdAt: inspection.createdAt.toISOString(),
           reviewNotes: inspection.reviewNotes,
+          customerEmail: inspection.customerEmail ?? null,
         }}
         media={media.map((m) => ({
           id: m.id,
