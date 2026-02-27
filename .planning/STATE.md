@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-27T01:36:00Z"
+last_updated: "2026-02-27T01:37:33Z"
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 14
-  completed_plans: 14
+  completed_phases: 5
+  total_plans: 15
+  completed_plans: 15
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-25)
 
 **Core value:** Field techs capture inspection data digitally on-site, and the office produces a professional, pixel-perfect ADEQ inspection report without manually re-entering data into a PDF.
-**Current focus:** Phase 5 nearing completion: Delivery and Dashboard. Plans 01 and 03 complete. Plan 02 (email delivery) remaining.
+**Current focus:** All 5 phases complete. v1.0 milestone achieved -- all 15 plans executed.
 
 ## Current Position
 
 Phase: 5 of 5 (Delivery and Dashboard)
-Plan: 3 of 3 in current phase (05-01, 05-03 complete)
-Status: Phase 5 in progress
-Last activity: 2026-02-27 -- Completed Plan 05-03 (Dashboard table with search, filter, sort)
+Plan: 3 of 3 in current phase (all complete)
+Status: v1.0 milestone complete
+Last activity: 2026-02-27 -- Completed Plan 05-02 (email delivery with PDF attachment and send history)
 
-Progress: [█████████▒] 93% (14/15 plans)
+Progress: [██████████] 100% (15/15 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14
-- Average duration: ~17min
-- Total execution time: ~236 min
+- Total plans completed: 15
+- Average duration: ~16min
+- Total execution time: ~239 min
 
 **By Phase:**
 
@@ -44,14 +44,15 @@ Progress: [█████████▒] 93% (14/15 plans)
 | 2. Inspection Form Input | 3/3 | ~25min | ~8min |
 | 3. PDF Generation | 3/3 | ~16min | ~5min |
 | 4. Review Workflow | 2/2 | ~10min | ~5min |
-| 5. Delivery and Dashboard | 2/3 | ~5min | ~2.5min |
+| 5. Delivery and Dashboard | 3/3 | ~8min | ~2.7min |
 
 **Recent Trend:**
-- Last 5 plans: 03-03 (~7min), 04-01 (~4min), 04-02 (~6min), 05-01 (~3min), 05-03 (~2min)
-- Trend: Sustained fast execution -- dashboard table with full search/filter/sort in 2min
+- Last 5 plans: 04-01 (~4min), 04-02 (~6min), 05-01 (~3min), 05-03 (~2min), 05-02 (~3min)
+- Trend: All 15 plans complete -- v1.0 milestone achieved
 
 *Updated after each plan completion*
 | Phase 05 P01 | 3min | 2 tasks | 6 files |
+| Phase 05 P02 | 3min | 2 tasks | 8 files |
 | Phase 05 P03 | 2min | 2 tasks | 4 files |
 
 ## Accumulated Context
@@ -115,6 +116,9 @@ Recent decisions affecting current work:
 - Plan 05-01: Deterministic storage path reports/{id}/report.pdf with upsert for clean re-finalize replacement.
 - Plan 05-01: Signature extracted from formData.disposalWorks.signatureDataUrl rather than passed separately to generateReport.
 - Plan 05-01: Admin client used for all storage operations -- bypasses RLS for server-side uploads.
+- Plan 05-02: EMAIL_FROM_ADDRESS env var for configurable sender address (falls back to onboarding@resend.dev).
+- Plan 05-02: Controlled AlertDialog instead of AlertDialogAction to prevent auto-close during async send.
+- Plan 05-02: customerEmail persisted on inspection after each send for future pre-fill.
 - Plan 05-03: URL searchParams for all filter/sort/page state -- enables shareable URLs and server-side rendering.
 - Plan 05-03: Status tab counts exclude text search filter -- shows total inspections per status regardless of search term.
 - Plan 05-03: Sent status counts toward Completed tab for simplified 4-tab UI (All/Draft/In Review/Complete).
@@ -131,5 +135,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 05-03-PLAN.md -- Dashboard table with search, filter, sort, pagination. Phase 5 plans 1 and 3 done. Next: Plan 05-02 (email delivery).
+Stopped at: Completed 05-02-PLAN.md -- Email delivery with PDF attachment via Resend and send history tracking. All 15 plans complete. v1.0 milestone achieved.
 Resume file: None
