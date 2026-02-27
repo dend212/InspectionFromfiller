@@ -54,13 +54,6 @@ export function ResetPasswordForm() {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader className="text-center">
-        <div className="mb-3 flex items-center justify-center">
-          <img
-            src="/sewertime-logo.png"
-            alt="SewerTime Septic"
-            className="h-12 w-auto"
-          />
-        </div>
         <CardTitle className="text-xl font-bold">Reset Password</CardTitle>
         <CardDescription>
           Enter your email address and we will send you a link to reset your

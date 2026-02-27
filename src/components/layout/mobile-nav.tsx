@@ -47,12 +47,13 @@ export function MobileNav({ open, onOpenChange }: MobileNavProps) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" className="w-64 p-0">
         <SheetHeader className="border-b px-4 py-3">
-          <SheetTitle className="flex items-center">
-            <img
-              src="/sewertime-logo.png"
-              alt="SewerTime"
-              className="h-7 w-auto"
-            />
+          <SheetTitle className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
+              <span className="text-xs font-bold text-primary-foreground">
+                ST
+              </span>
+            </div>
+            SewerTime
           </SheetTitle>
         </SheetHeader>
         <nav className="flex flex-col gap-1 p-3">

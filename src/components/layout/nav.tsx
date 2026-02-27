@@ -28,11 +28,11 @@ export function Nav() {
 
   if (loading) {
     return (
-      <nav className="hidden lg:flex w-60 flex-col gap-1 bg-sidebar p-4">
+      <nav className="hidden lg:flex w-60 flex-col gap-1 border-r bg-muted/40 p-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={`skeleton-${i}`}
-            className="h-9 rounded-md bg-sidebar-accent animate-pulse"
+            className="h-9 rounded-md bg-muted animate-pulse"
           />
         ))}
       </nav>
@@ -46,14 +46,7 @@ export function Nav() {
   const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(role));
 
   return (
-    <nav className="hidden lg:flex w-60 flex-col gap-1 bg-sidebar p-4">
-      <div className="mb-4 px-3">
-        <img
-          src="/sewertime-logo.png"
-          alt="SewerTime"
-          className="h-8 w-auto brightness-0 invert"
-        />
-      </div>
+    <nav className="hidden lg:flex w-60 flex-col gap-1 border-r bg-muted/40 p-4">
       {visibleItems.map((item) => {
         const Icon = item.icon ? ICON_MAP[item.icon] : null;
         const isActive =
@@ -68,8 +61,8 @@ export function Nav() {
             className={cn(
               "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
               isActive
-                ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             )}
           >
             {Icon && <Icon className="size-4 shrink-0" />}
