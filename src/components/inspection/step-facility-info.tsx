@@ -968,6 +968,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
           />
         </div>
 
+        {form.watch("facilityInfo.recordsAvailable") === "yes" && (
         <div className="space-y-3">
           <FormField
             control={form.control}
@@ -1113,6 +1114,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             </div>
           )}
         </div>
+        )}
       </section>
 
       <Separator className="my-6" />

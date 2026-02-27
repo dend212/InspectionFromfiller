@@ -62,6 +62,7 @@ export function PhotoCapture({
       onUploadComplete(mediaRecord);
       toast.success("Photo uploaded");
     } catch (err) {
+      console.error("[PhotoCapture] Upload failed:", err);
       const message =
         err instanceof Error ? err.message : "Upload failed";
       toast.error(message);
@@ -95,7 +96,6 @@ export function PhotoCapture({
           ref={inputRef}
           type="file"
           accept="image/*"
-          capture="environment"
           className="hidden"
           onChange={handleFileSelect}
           disabled={uploading}

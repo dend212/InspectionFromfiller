@@ -117,9 +117,13 @@ export function MediaGallery({
           continue;
         }
 
-        const { data } = await supabase.storage
+        const { data, error } = await supabase.storage
           .from("inspection-media")
           .createSignedUrl(photo.storagePath, 3600);
+
+        if (error) {
+          console.error("[MediaGallery] Signed URL error for", photo.storagePath, error);
+        }
 
         if (data?.signedUrl) {
           urls[photo.id] = data.signedUrl;

@@ -110,6 +110,7 @@ export const CONDITION_OPTIONS = [
   { value: "operational", label: "Operational" },
   { value: "operational_with_concerns", label: "Operational with Concerns" },
   { value: "not_operational", label: "Not Operational" },
+  { value: "not_applicable", label: "N/A" },
 ] as const;
 
 /** Baffle/sanitary T material from Section 4L */
