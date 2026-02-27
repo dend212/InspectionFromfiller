@@ -56,6 +56,9 @@ export async function generateReport(
   // Step 4: Embed signature image if provided
   if (signatureDataUrl) {
     inputs.signatureImage = signatureDataUrl;
+  } else {
+    // Remove empty image field -- pdfme image plugin crashes on empty string
+    delete inputs.signatureImage;
   }
 
   // Auto-fill signature date to today's date (MM/DD/YYYY)
@@ -66,12 +69,14 @@ export async function generateReport(
   inputs.signatureDate = `${month}/${day}/${year}`;
 
   // Step 5: Generate the 6-page form PDF using pdfme
+  console.log("[generateReport] Generating form PDF with", Object.keys(inputs).length, "input fields");
   const formPdf = await generate({
     template,
     inputs: [inputs],
     plugins: { text, image },
     options: { font },
   });
+  console.log("[generateReport] Form PDF generated:", formPdf.length, "bytes");
 
   // Step 6: Generate comments overflow page (if any comments exceeded threshold)
   const commentsPdf = overflow.hasOverflow

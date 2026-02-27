@@ -700,7 +700,7 @@ export function mapFormDataToInputs(
     ),
 
     // Signature area
-    // signatureImage is set externally (data URL from signature pad)
+    // signatureImage is set/deleted externally in generate-report.ts
     signatureImage: "",
     signatureDate: str(dw?.signatureDate),
     printedName: str(dw?.printedName),

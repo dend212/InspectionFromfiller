@@ -24,21 +24,29 @@ export function PhotoCapture({
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      console.warn("[PhotoCapture] No file selected");
+      return;
+    }
 
+    console.log("[PhotoCapture] File selected:", file.name, file.type, file.size);
     setUploading(true);
 
     try {
       const supabase = createClient();
       const filePath = `${inspectionId}/${section}/${crypto.randomUUID()}-${file.name}`;
+      console.log("[PhotoCapture] Uploading to storage:", filePath);
 
       const { data, error: uploadError } = await supabase.storage
         .from("inspection-media")
         .upload(filePath, file);
 
       if (uploadError) {
-        throw new Error(uploadError.message);
+        console.error("[PhotoCapture] Storage upload error:", uploadError);
+        throw new Error(`Storage upload failed: ${uploadError.message}`);
       }
+
+      console.log("[PhotoCapture] Storage upload success:", data.path);
 
       // Save metadata to API
       const response = await fetch(
@@ -55,17 +63,20 @@ export function PhotoCapture({
       );
 
       if (!response.ok) {
-        throw new Error("Failed to save photo metadata");
+        const errorText = await response.text();
+        console.error("[PhotoCapture] API error:", response.status, errorText);
+        throw new Error(`Failed to save photo metadata: ${response.status}`);
       }
 
       const mediaRecord = (await response.json()) as MediaRecord;
+      console.log("[PhotoCapture] Media record saved:", mediaRecord.id);
       onUploadComplete(mediaRecord);
       toast.success("Photo uploaded");
     } catch (err) {
       console.error("[PhotoCapture] Upload failed:", err);
       const message =
         err instanceof Error ? err.message : "Upload failed";
-      toast.error(message);
+      toast.error(message, { duration: 8000 });
     } finally {
       setUploading(false);
       // Reset file input so the same file can be re-selected
