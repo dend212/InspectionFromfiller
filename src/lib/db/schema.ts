@@ -61,6 +61,9 @@ export const inspections = pgTable("inspections", {
   facilityCounty: text("facility_county"),
   facilityState: varchar("facility_state", { length: 2 }).default("AZ"),
   facilityZip: varchar("facility_zip", { length: 10 }),
+  // Customer contact info (denormalized for dashboard/email)
+  customerEmail: text("customer_email"),
+  customerName: text("customer_name"),
   // Form data stored as JSONB for flexibility during early development
   formData: jsonb("form_data"),
   // Timestamps
@@ -87,6 +90,18 @@ export const inspectionMedia = pgTable("inspection_media", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Inspection email send history
+export const inspectionEmails = pgTable("inspection_emails", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  inspectionId: uuid("inspection_id")
+    .references(() => inspections.id, { onDelete: "cascade" })
+    .notNull(),
+  recipientEmail: text("recipient_email").notNull(),
+  subject: text("subject").notNull(),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  sentBy: uuid("sent_by").references(() => profiles.id),
+});
+
 // Relations
 export const profilesRelations = relations(profiles, ({ many }) => ({
   inspections: many(inspections),
@@ -106,11 +121,23 @@ export const inspectionsRelations = relations(inspections, ({ one, many }) => ({
     references: [profiles.id],
   }),
   media: many(inspectionMedia),
+  emails: many(inspectionEmails),
 }));
 
 export const inspectionMediaRelations = relations(inspectionMedia, ({ one }) => ({
   inspection: one(inspections, {
     fields: [inspectionMedia.inspectionId],
     references: [inspections.id],
+  }),
+}));
+
+export const inspectionEmailsRelations = relations(inspectionEmails, ({ one }) => ({
+  inspection: one(inspections, {
+    fields: [inspectionEmails.inspectionId],
+    references: [inspections.id],
+  }),
+  sender: one(profiles, {
+    fields: [inspectionEmails.sentBy],
+    references: [profiles.id],
   }),
 }));

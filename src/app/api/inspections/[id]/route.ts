@@ -132,6 +132,8 @@ export async function PATCH(
       facilityCity: facilityInfo?.facilityCity ?? null,
       facilityCounty: facilityInfo?.facilityCounty ?? null,
       facilityZip: facilityInfo?.facilityZip ?? null,
+      // Sync customer name for dashboard search/email
+      customerName: facilityInfo?.sellerName ?? null,
     })
     .where(eq(inspections.id, id));
 
