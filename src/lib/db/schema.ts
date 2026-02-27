@@ -31,6 +31,7 @@ export const profiles = pgTable("profiles", {
   phone: varchar("phone", { length: 20 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  notificationSettings: jsonb("notification_settings").default({ emailOnSubmission: false }),
 });
 
 // User roles table (used by Custom Access Token Hook)
@@ -67,6 +68,10 @@ export const inspections = pgTable("inspections", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   submittedAt: timestamp("submitted_at"),
   completedAt: timestamp("completed_at"),
+  // Review workflow columns
+  reviewNotes: text("review_notes"),
+  finalizedPdfPath: text("finalized_pdf_path"),
+  reviewedBy: uuid("reviewed_by").references(() => profiles.id),
 });
 
 // Inspection media (photos and videos)
