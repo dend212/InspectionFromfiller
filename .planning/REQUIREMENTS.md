@@ -34,7 +34,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Delivery & Storage
 
-- [ ] **DLVR-01**: Completed reports are saved to cloud storage (Supabase Storage)
+- [x] **DLVR-01**: Completed reports are saved to cloud storage (Supabase Storage)
 - [ ] **DLVR-02**: Manual email delivery of finished PDF to customer (button trigger, never automatic)
 - [ ] **DLVR-03**: Dashboard listing all inspections with status (draft, in review, complete)
 - [ ] **DLVR-04**: Search past inspections by address, date, or customer name
@@ -101,7 +101,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MDIA-03 | Phase 3: PDF Generation | Complete |
 | WKFL-01 | Phase 4: Review Workflow | Complete |
 | WKFL-02 | Phase 4: Review Workflow | Complete |
-| DLVR-01 | Phase 5: Delivery and Dashboard | Pending |
+| DLVR-01 | Phase 5: Delivery and Dashboard | Complete |
 | DLVR-02 | Phase 5: Delivery and Dashboard | Pending |
 | DLVR-03 | Phase 5: Delivery and Dashboard | Pending |
 | DLVR-04 | Phase 5: Delivery and Dashboard | Pending |

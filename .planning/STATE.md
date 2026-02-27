@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-27T00:40:50.187Z"
+last_updated: "2026-02-27T01:32:34.653Z"
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 4
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 14
+  completed_plans: 12
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-25)
 
 **Core value:** Field techs capture inspection data digitally on-site, and the office produces a professional, pixel-perfect ADEQ inspection report without manually re-entering data into a PDF.
-**Current focus:** Phase 4 complete: Review Workflow. Both plans done (status API, submit button, review editor, email notification). Phase 5 next (Delivery).
+**Current focus:** Phase 5 in progress: Delivery and Dashboard. Plan 01 complete (PDF storage, delivery schema). Plans 02-03 remaining (email delivery, dashboard).
 
 ## Current Position
 
-Phase: 4 of 5 (Review Workflow) -- COMPLETE
-Plan: 2 of 2 in current phase (all done)
-Status: Phase 4 complete, ready for Phase 5
-Last activity: 2026-02-27 -- Completed Plan 04-02 (review editor, email notification, action buttons)
+Phase: 5 of 5 (Delivery and Dashboard)
+Plan: 1 of 3 in current phase (05-01 complete)
+Status: Phase 5 in progress
+Last activity: 2026-02-27 -- Completed Plan 05-01 (PDF storage, delivery schema, download endpoint)
 
-Progress: [███████░░░] 73% (11/15 plans)
+Progress: [████████░░] 80% (12/15 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
-- Average duration: ~21min
-- Total execution time: ~231 min
+- Total plans completed: 12
+- Average duration: ~20min
+- Total execution time: ~234 min
 
 **By Phase:**
 
@@ -44,12 +44,14 @@ Progress: [███████░░░] 73% (11/15 plans)
 | 2. Inspection Form Input | 3/3 | ~25min | ~8min |
 | 3. PDF Generation | 3/3 | ~16min | ~5min |
 | 4. Review Workflow | 2/2 | ~10min | ~5min |
+| 5. Delivery and Dashboard | 1/3 | ~3min | ~3min |
 
 **Recent Trend:**
-- Last 5 plans: 03-01 (~6min), 03-02 (~3min), 03-03 (~7min), 04-01 (~4min), 04-02 (~6min)
-- Trend: Sustained fast execution -- review editor with 12 files in 6min
+- Last 5 plans: 03-02 (~3min), 03-03 (~7min), 04-01 (~4min), 04-02 (~6min), 05-01 (~3min)
+- Trend: Sustained fast execution -- delivery schema + PDF storage in 3min
 
 *Updated after each plan completion*
+| Phase 05 P01 | 3min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -109,6 +111,9 @@ Recent decisions affecting current work:
 - Plan 04-02: Fire-and-forget email notification via async IIFE in submit route -- does not block the HTTP response.
 - Plan 04-02: Admin notification preference checked via profiles.notificationSettings join before sending.
 - Plan 04-02: Used onboarding@resend.dev as sender address until custom domain verified in Resend.
+- Plan 05-01: Deterministic storage path reports/{id}/report.pdf with upsert for clean re-finalize replacement.
+- Plan 05-01: Signature extracted from formData.disposalWorks.signatureDataUrl rather than passed separately to generateReport.
+- Plan 05-01: Admin client used for all storage operations -- bypasses RLS for server-side uploads.
 
 ### Pending Todos
 
@@ -122,5 +127,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 04-02-PLAN.md -- Review editor, action buttons, email notification. Phase 4 complete. Ready for Phase 5 (Delivery).
+Stopped at: Completed 05-01-PLAN.md -- PDF storage helpers, delivery schema, download endpoint. Phase 5 plan 1 of 3 done. Next: Plan 05-02 (email delivery).
 Resume file: None
