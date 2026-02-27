@@ -94,12 +94,12 @@ Plans:
   2. Dan can send a finished PDF to a customer's email address with one button click (never automatic)
   3. Dashboard shows all inspections with their current status (draft, in review, complete) at a glance
   4. Dan can search past inspections by address, date, or customer name and find results quickly
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 05-01: Cloud storage and PDF persistence
-- [ ] 05-02: Email delivery
-- [ ] 05-03: Dashboard listing and search
+- [ ] 05-01-PLAN.md -- Database schema (customer_email, customer_name, inspection_emails), PDF storage helpers, server-side PDF generation on finalize, download endpoint
+- [ ] 05-02-PLAN.md -- Email send API with Resend attachment, send history tracking, SendEmailDialog component, Send to Customer button on review/detail pages
+- [ ] 05-03-PLAN.md -- Table-based dashboard replacing card grid, search bar with debounce, status tab filters, sortable columns, pagination
 
 ## Progress
 
