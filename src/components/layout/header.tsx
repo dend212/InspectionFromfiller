@@ -39,7 +39,7 @@ export function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-50 flex h-14 items-center border-b bg-background px-4 lg:px-6">
+    <header className="sticky top-0 z-50 flex h-14 items-center border-b bg-card shadow-sm px-4 lg:px-6">
       {/* Mobile hamburger */}
       <Button
         variant="ghost"
@@ -52,13 +52,12 @@ export function Header() {
       </Button>
 
       {/* Branding */}
-      <div className="flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-          <span className="text-sm font-bold text-primary-foreground">ST</span>
-        </div>
-        <span className="text-lg font-semibold tracking-tight hidden sm:inline">
-          SewerTime
-        </span>
+      <div className="flex items-center">
+        <img
+          src="/sewertime-logo.png"
+          alt="SewerTime"
+          className="h-8 w-auto"
+        />
       </div>
 
       {/* Spacer */}

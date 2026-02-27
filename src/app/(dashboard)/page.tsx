@@ -46,11 +46,13 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        {role && (
-          <Badge variant="secondary">{ROLE_LABELS[role]}</Badge>
-        )}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          {role && (
+            <Badge variant="secondary">{ROLE_LABELS[role]}</Badge>
+          )}
+        </div>
       </div>
 
       {role === "admin" && (
@@ -140,7 +142,7 @@ function QuickLinkCard({
 }) {
   return (
     <Link href={href}>
-      <Card className="transition-colors hover:bg-accent/50">
+      <Card className="transition-all hover:shadow-md hover:border-primary/30 hover:bg-accent/50">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">{title}</CardTitle>
         </CardHeader>
