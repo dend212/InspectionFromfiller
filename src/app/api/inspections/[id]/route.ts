@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db";
 import { inspections } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 /**
  * GET /api/inspections/[id]
@@ -138,4 +138,71 @@ export async function PATCH(
     .where(eq(inspections.id, id));
 
   return NextResponse.json({ saved: true });
+}
+
+/**
+ * DELETE /api/inspections/[id]
+ * Delete a draft inspection. Only the owner or an admin can delete.
+ * Only draft inspections can be deleted.
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const [existing] = await db
+    .select({
+      inspectorId: inspections.inspectorId,
+      status: inspections.status,
+    })
+    .from(inspections)
+    .where(eq(inspections.id, id))
+    .limit(1);
+
+  if (!existing) {
+    return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
+  }
+
+  // Only drafts can be deleted
+  if (existing.status !== "draft") {
+    return NextResponse.json(
+      { error: "Only draft inspections can be deleted" },
+      { status: 403 }
+    );
+  }
+
+  // Check ownership or admin role
+  let isAdmin = false;
+  if (existing.inspectorId !== user.id) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const payload = JSON.parse(
+          Buffer.from(session.access_token.split(".")[1], "base64").toString()
+        );
+        isAdmin = payload.user_role === "admin";
+      }
+    } catch {
+      // Role decode failed
+    }
+
+    if (!isAdmin) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
+  await db
+    .delete(inspections)
+    .where(and(eq(inspections.id, id), eq(inspections.status, "draft")));
+
+  return NextResponse.json({ deleted: true });
 }

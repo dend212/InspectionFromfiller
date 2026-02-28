@@ -46,11 +46,14 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
   const { saving, lastSaved } = useAutoSave(form, inspection.id);
 
   const handleNext = async () => {
-    // Trigger validation for current step fields (warn-but-allow pattern)
-    await form.trigger(
+    // Trigger validation for current step fields
+    const isValid = await form.trigger(
       STEP_FIELDS[currentStep] as FieldPath<InspectionFormData>[]
     );
-    // Always advance regardless of validation result
+    if (!isValid) {
+      toast.error("Please fill in all required fields before continuing");
+      return;
+    }
     setCurrentStep((prev) => Math.min(prev + 1, 4));
   };
 

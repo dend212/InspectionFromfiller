@@ -49,10 +49,20 @@ export function Nav() {
     <nav className="hidden lg:flex w-60 flex-col gap-1 bg-sidebar p-4">
       {visibleItems.map((item) => {
         const Icon = item.icon ? ICON_MAP[item.icon] : null;
+        // Sort-safe active detection: exact match or prefix match,
+        // but only if no other nav item is a more specific match.
         const isActive =
           item.href === "/"
             ? pathname === "/"
-            : pathname.startsWith(item.href);
+            : pathname === item.href ||
+              (pathname.startsWith(item.href + "/") &&
+                !visibleItems.some(
+                  (other) =>
+                    other !== item &&
+                    other.href !== "/" &&
+                    other.href.length > item.href.length &&
+                    pathname.startsWith(other.href)
+                ));
 
         return (
           <Link

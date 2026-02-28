@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { ArrowUpDown, Check, Download, Eye } from "lucide-react";
+import { ArrowUpDown, Check, Download, Eye, Trash2 } from "lucide-react";
 import {
   Table,
   TableHeader,
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export interface InspectionRow {
   id: string;
@@ -130,6 +131,27 @@ export function InspectionsTable({
       }
     } catch {
       // Silently fail -- download is best-effort
+    }
+  }
+
+  async function handleDelete(e: React.MouseEvent, inspectionId: string) {
+    e.stopPropagation();
+    if (!window.confirm("Delete this draft inspection? This cannot be undone.")) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/inspections/${inspectionId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Failed to delete inspection");
+        return;
+      }
+      toast.success("Draft inspection deleted");
+      router.refresh();
+    } catch {
+      toast.error("Failed to delete inspection");
     }
   }
 
@@ -253,6 +275,18 @@ export function InspectionsTable({
                     <Eye className="size-3.5" />
                     <span className="sr-only">View</span>
                   </Button>
+                  {inspection.status === "draft" && (
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={(e) => handleDelete(e, inspection.id)}
+                      title="Delete draft"
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="size-3.5" />
+                      <span className="sr-only">Delete</span>
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>
