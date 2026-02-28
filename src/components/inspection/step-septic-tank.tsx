@@ -79,49 +79,51 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
   const numberOfTanksValue = form.watch("septicTank.numberOfTanks");
   const numberOfTanks = Math.min(Math.max(Number.parseInt(numberOfTanksValue || "1", 10) || 1, 1), 3);
 
-  // Ensure the tanks array has enough entries
-  const currentTanks = form.getValues("septicTank.tanks") ?? [];
-  if (currentTanks.length < numberOfTanks) {
-    const newTanks = [...currentTanks];
-    for (let i = currentTanks.length; i < numberOfTanks; i++) {
-      newTanks.push({
-        liquidLevel: "",
-        primaryScumThickness: "",
-        primarySludgeThickness: "",
-        secondaryScumThickness: "",
-        secondarySludgeThickness: "",
-        liquidLevelNotDetermined: false,
-        tankDimensions: "",
-        tankCapacity: "",
-        capacityBasis: "",
-        capacityNotDeterminedReason: "",
-        tankMaterial: "",
-        tankMaterialOther: "",
-        accessOpenings: "",
-        accessOpeningsOther: "",
-        lidsRisersPresent: "",
-        lidsSecurelyFastened: "",
-        numberOfCompartments: "",
-        compartmentsOther: "",
-        compromisedTank: "",
-        deficiencyRootInvasion: false,
-        deficiencyExposedRebar: false,
-        deficiencyCracks: false,
-        deficiencyDamagedInlet: false,
-        deficiencyDamagedOutlet: false,
-        deficiencyDamagedLids: false,
-        deficiencyDeterioratingConcrete: false,
-        deficiencyOther: false,
-        baffleMaterial: "",
-        inletBaffleCondition: "",
-        outletBaffleCondition: "",
-        interiorBaffleCondition: "",
-        effluentFilterPresent: "",
-        effluentFilterServiced: "",
-      });
+  // Ensure the tanks array has enough entries (in useEffect to avoid side effects during render)
+  useEffect(() => {
+    const currentTanks = form.getValues("septicTank.tanks") ?? [];
+    if (currentTanks.length < numberOfTanks) {
+      const newTanks = [...currentTanks];
+      for (let i = currentTanks.length; i < numberOfTanks; i++) {
+        newTanks.push({
+          liquidLevel: "",
+          primaryScumThickness: "",
+          primarySludgeThickness: "",
+          secondaryScumThickness: "",
+          secondarySludgeThickness: "",
+          liquidLevelNotDetermined: false,
+          tankDimensions: "",
+          tankCapacity: "",
+          capacityBasis: "",
+          capacityNotDeterminedReason: "",
+          tankMaterial: "",
+          tankMaterialOther: "",
+          accessOpenings: "",
+          accessOpeningsOther: "",
+          lidsRisersPresent: "",
+          lidsSecurelyFastened: "",
+          numberOfCompartments: "",
+          compartmentsOther: "",
+          compromisedTank: "",
+          deficiencyRootInvasion: false,
+          deficiencyExposedRebar: false,
+          deficiencyCracks: false,
+          deficiencyDamagedInlet: false,
+          deficiencyDamagedOutlet: false,
+          deficiencyDamagedLids: false,
+          deficiencyDeterioratingConcrete: false,
+          deficiencyOther: false,
+          baffleMaterial: "",
+          inletBaffleCondition: "",
+          outletBaffleCondition: "",
+          interiorBaffleCondition: "",
+          effluentFilterPresent: "",
+          effluentFilterServiced: "",
+        });
+      }
+      form.setValue("septicTank.tanks", newTanks);
     }
-    form.setValue("septicTank.tanks", newTanks);
-  }
+  }, [numberOfTanks, form]);
 
   return (
     <div className="space-y-8">

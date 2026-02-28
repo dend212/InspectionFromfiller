@@ -104,12 +104,12 @@ export function SubmitForReviewButton({
                     ))}
                   </ul>
                   <p className="mt-3 text-sm">
-                    You can submit anyway -- Dan can request corrections later.
+                    You can submit anyway -- the reviewer can request corrections later.
                   </p>
                 </>
               ) : (
                 <p>
-                  Submit this inspection for review? Dan will be able to see and
+                  Submit this inspection for review? The admin will be able to see and
                   edit the report.
                 </p>
               )}

@@ -27,22 +27,7 @@ function MediaThumbnail({
   item: MediaRecord & { signedUrl?: string };
   onDelete: (mediaId: string) => void;
 }) {
-  const [caption, setCaption] = useState(item.label ?? "");
-  const [saving, setSaving] = useState(false);
-
-  const handleCaptionBlur = async () => {
-    if (caption === (item.label ?? "")) return;
-    setSaving(true);
-    try {
-      // Update label via PATCH on the media metadata
-      // Since we don't have a PATCH route, we'll use the existing label field
-      // This is a lightweight update -- we'll skip for now as the plan mentions
-      // POST/PATCH to update label, but the API only has POST/GET/DELETE.
-      // For caption editing, the label is stored on upload. Future enhancement.
-    } finally {
-      setSaving(false);
-    }
-  };
+  const caption = item.label ?? "";
 
   return (
     <div className="group relative rounded-lg border bg-card overflow-hidden">
@@ -50,7 +35,7 @@ function MediaThumbnail({
       <button
         type="button"
         onClick={() => onDelete(item.id)}
-        className="absolute right-1 top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+        className="absolute right-1 top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-destructive text-destructive-foreground sm:opacity-0 transition-opacity sm:group-hover:opacity-100 focus:opacity-100"
         aria-label="Delete media"
       >
         <X className="h-4 w-4" />
@@ -73,17 +58,13 @@ function MediaThumbnail({
       )}
 
       {/* Caption input */}
-      <div className="p-2">
-        <input
-          type="text"
-          value={caption}
-          onChange={(e) => setCaption(e.target.value)}
-          onBlur={handleCaptionBlur}
-          placeholder="Add caption..."
-          className="w-full bg-transparent text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/60"
-          disabled={saving}
-        />
-      </div>
+      {caption && (
+        <div className="p-2">
+          <p className="w-full text-xs text-muted-foreground truncate">
+            {caption}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

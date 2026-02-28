@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db";
-import { inspectionEmails, profiles } from "@/lib/db/schema";
+import { inspections, inspectionEmails, profiles } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { checkInspectionAccess } from "@/lib/supabase/auth-helpers";
 
 /**
  * GET /api/inspections/[id]/emails
  * Returns email send history for an inspection, ordered by most recent first.
  * Includes the sender's full name from the profiles table.
+ * Access: inspection owner, admin, or office_staff.
  */
 export async function GET(
   _request: Request,
@@ -21,6 +23,22 @@ export async function GET(
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Verify inspection exists and user has access
+  const [inspection] = await db
+    .select({ inspectorId: inspections.inspectorId })
+    .from(inspections)
+    .where(eq(inspections.id, id))
+    .limit(1);
+
+  if (!inspection) {
+    return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
+  }
+
+  const { allowed } = await checkInspectionAccess(supabase, user.id, inspection.inspectorId);
+  if (!allowed) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   // Query email history with sender name join

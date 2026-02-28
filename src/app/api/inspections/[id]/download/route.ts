@@ -7,11 +7,12 @@ import {
   getReportDownloadUrl,
   buildDownloadFilename,
 } from "@/lib/storage/pdf-storage";
+import { checkInspectionAccess } from "@/lib/supabase/auth-helpers";
 
 /**
  * GET /api/inspections/[id]/download
  * Returns a signed download URL for the finalized PDF report.
- * Any authenticated user can download (RLS handles row-level access).
+ * Access: inspection owner, admin, or office_staff.
  */
 export async function GET(
   _request: Request,
@@ -39,6 +40,12 @@ export async function GET(
       { error: "Inspection not found" },
       { status: 404 },
     );
+  }
+
+  // Verify user has access to this inspection
+  const { allowed } = await checkInspectionAccess(supabase, user.id, inspection.inspectorId);
+  if (!allowed) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   if (!inspection.finalizedPdfPath) {

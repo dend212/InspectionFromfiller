@@ -1,8 +1,36 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db";
-import { inspectionMedia } from "@/lib/db/schema";
+import { inspections, inspectionMedia } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
+import { checkInspectionAccess } from "@/lib/supabase/auth-helpers";
+
+/**
+ * Verify user has access to the inspection.
+ * Returns the inspection's inspectorId or an error response.
+ */
+async function verifyAccess(
+  inspectionId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+) {
+  const [inspection] = await db
+    .select({ inspectorId: inspections.inspectorId })
+    .from(inspections)
+    .where(eq(inspections.id, inspectionId))
+    .limit(1);
+
+  if (!inspection) {
+    return { error: NextResponse.json({ error: "Inspection not found" }, { status: 404 }) };
+  }
+
+  const { allowed } = await checkInspectionAccess(supabase, userId, inspection.inspectorId);
+  if (!allowed) {
+    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+  }
+
+  return { inspectorId: inspection.inspectorId };
+}
 
 /**
  * POST /api/inspections/[id]/media
@@ -21,6 +49,9 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const access = await verifyAccess(id, supabase, user.id);
+  if ("error" in access) return access.error;
 
   const body = await request.json();
   const { storagePath, type, label } = body as {
@@ -67,6 +98,9 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const access = await verifyAccess(id, supabase, user.id);
+  if ("error" in access) return access.error;
+
   const records = await db
     .select()
     .from(inspectionMedia)
@@ -93,6 +127,9 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const access = await verifyAccess(id, supabase, user.id);
+  if ("error" in access) return access.error;
 
   const body = await request.json();
   const { mediaId } = body as { mediaId: string };

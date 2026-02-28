@@ -25,7 +25,6 @@ export async function POST(request: Request) {
     }
 
     // Decode the access token to get the user_role claim
-    // The Custom Access Token Hook injects user_role into the JWT
     const tokenPayload = JSON.parse(
       Buffer.from(session.access_token.split(".")[1], "base64").toString(),
     );
@@ -56,7 +55,7 @@ export async function POST(request: Request) {
       await adminClient.auth.admin.createUser({
         email,
         password,
-        email_confirm: true, // Skip email confirmation since admin is creating
+        email_confirm: true,
         user_metadata: { full_name: fullName },
       });
 
@@ -67,31 +66,38 @@ export async function POST(request: Request) {
       );
     }
 
-    // Insert profile row
+    const newUserId = newUser.user.id;
+
+    // Insert profile row — clean up auth user on failure
     const { error: profileError } = await adminClient
       .from("profiles")
       .insert({
-        id: newUser.user.id,
+        id: newUserId,
         full_name: fullName,
         email,
       });
 
     if (profileError) {
+      // Rollback: delete the auth user we just created
+      await adminClient.auth.admin.deleteUser(newUserId);
       return NextResponse.json(
         { error: `Profile creation failed: ${profileError.message}` },
         { status: 400 },
       );
     }
 
-    // Insert role in user_roles table
+    // Insert role in user_roles table — clean up auth user + profile on failure
     const { error: roleError } = await adminClient
       .from("user_roles")
       .insert({
-        user_id: newUser.user.id,
+        user_id: newUserId,
         role,
       });
 
     if (roleError) {
+      // Rollback: delete profile, then auth user
+      await adminClient.from("profiles").delete().eq("id", newUserId);
+      await adminClient.auth.admin.deleteUser(newUserId);
       return NextResponse.json(
         { error: `Role assignment failed: ${roleError.message}` },
         { status: 400 },
@@ -101,7 +107,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         user: {
-          id: newUser.user.id,
+          id: newUserId,
           email: newUser.user.email,
           fullName,
           role,
