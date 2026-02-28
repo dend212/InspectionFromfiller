@@ -33,6 +33,20 @@ async function verifyAccess(
 }
 
 /**
+ * Generate a signed URL for a storage path (1 hour expiry).
+ * Returns null if URL generation fails.
+ */
+async function getSignedUrl(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  storagePath: string,
+): Promise<string | null> {
+  const { data } = await supabase.storage
+    .from("inspection-media")
+    .createSignedUrl(storagePath, 3600);
+  return data?.signedUrl ?? null;
+}
+
+/**
  * POST /api/inspections/[id]/media
  * Record media metadata after a successful Supabase Storage upload.
  */
@@ -77,7 +91,12 @@ export async function POST(
     })
     .returning();
 
-  return NextResponse.json(record, { status: 201 });
+  // Include signed URL so the client can display the photo immediately
+  const signedUrl = type === "photo"
+    ? await getSignedUrl(supabase, storagePath)
+    : null;
+
+  return NextResponse.json({ ...record, signedUrl }, { status: 201 });
 }
 
 /**
@@ -107,7 +126,17 @@ export async function GET(
     .where(eq(inspectionMedia.inspectionId, id))
     .orderBy(asc(inspectionMedia.sortOrder), asc(inspectionMedia.createdAt));
 
-  return NextResponse.json(records);
+  // Attach signed URLs for photos so the client can display them immediately
+  const withUrls = await Promise.all(
+    records.map(async (r) => ({
+      ...r,
+      signedUrl: r.type === "photo"
+        ? await getSignedUrl(supabase, r.storagePath)
+        : null,
+    }))
+  );
+
+  return NextResponse.json(withUrls);
 }
 
 /**

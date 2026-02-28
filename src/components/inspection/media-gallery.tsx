@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { X, Video as VideoIcon } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { Camera, X, Video as VideoIcon } from "lucide-react";
 
 export interface MediaRecord {
   id: string;
@@ -11,6 +9,7 @@ export interface MediaRecord {
   label: string | null;
   sortOrder: number | null;
   createdAt: string;
+  signedUrl?: string | null;
 }
 
 interface MediaGalleryProps {
@@ -24,7 +23,7 @@ function MediaThumbnail({
   item,
   onDelete,
 }: {
-  item: MediaRecord & { signedUrl?: string };
+  item: MediaRecord;
   onDelete: (mediaId: string) => void;
 }) {
   const caption = item.label ?? "";
@@ -51,13 +50,17 @@ function MediaThumbnail({
             loading="lazy"
           />
         </div>
+      ) : item.type === "photo" ? (
+        <div className="flex aspect-square items-center justify-center bg-muted">
+          <Camera className="h-10 w-10 text-muted-foreground" />
+        </div>
       ) : (
         <div className="flex aspect-square items-center justify-center bg-muted">
           <VideoIcon className="h-10 w-10 text-muted-foreground" />
         </div>
       )}
 
-      {/* Caption input */}
+      {/* Caption */}
       {caption && (
         <div className="p-2">
           <p className="w-full text-xs text-muted-foreground truncate">
@@ -75,46 +78,6 @@ export function MediaGallery({
   media,
   onDelete,
 }: MediaGalleryProps) {
-  const [signedUrls, setSignedUrls] = useState<Record<string, string>>(
-    {}
-  );
-
-  // Generate signed URLs for photo thumbnails
-  useEffect(() => {
-    if (media.length === 0) return;
-
-    const photos = media.filter((m) => m.type === "photo");
-    if (photos.length === 0) return;
-
-    const supabase = createClient();
-
-    async function loadUrls() {
-      const urls: Record<string, string> = {};
-
-      for (const photo of photos) {
-        // Skip if we already have a URL for this item
-        if (signedUrls[photo.id]) {
-          urls[photo.id] = signedUrls[photo.id];
-          continue;
-        }
-
-        const { data } = await supabase.storage
-          .from("inspection-media")
-          .createSignedUrl(photo.storagePath, 3600);
-
-        if (data?.signedUrl) {
-          urls[photo.id] = data.signedUrl;
-        }
-      }
-
-      setSignedUrls((prev) => ({ ...prev, ...urls }));
-    }
-
-    loadUrls();
-    // Only re-run when media list changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [media]);
-
   if (media.length === 0) {
     return (
       <div className="flex min-h-[80px] items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25">
@@ -128,7 +91,7 @@ export function MediaGallery({
       {media.map((item) => (
         <MediaThumbnail
           key={item.id}
-          item={{ ...item, signedUrl: signedUrls[item.id] }}
+          item={item}
           onDelete={onDelete}
         />
       ))}
