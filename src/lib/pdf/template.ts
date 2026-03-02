@@ -53,7 +53,7 @@ function checkbox(name: string, x: number, y: number): Schema {
   return {
     name,
     type: "text",
-    position: { x, y: y - 1 },
+    position: { x: x + 4, y: y - 1 },
     width: 4,
     height: 4,
     fontSize: 10,
@@ -140,22 +140,22 @@ const PAGE_2_SCHEMAS: Schema[] = [
 
   // Inspector qualifications checkboxes and detail fields
   // "ADEQ-Recognized Course: ____" at x=17.8, y=106.0 — checkbox at ~x=13, data after label ~x=72
-  checkbox("hasAdeqCourse", 13, 104),
+  checkbox("hasAdeqCourse", 9, 104),
   textField("adeqCourseDetails", 72, 104, 80, 4.5),
   // "Date Completed: ____" — label near end of line, data after ~x=176
   textField("adeqCourseDate", 174, 104, 32, 4.5),
 
   // Professional Engineer / Registered Sanitarian / WW Operator row at y=115.9
   // "Professional Engineer" at x=17.8 — checkbox 5mm left
-  checkbox("isProfessionalEngineer", 13, 113.9),
+  checkbox("isProfessionalEngineer", 9, 113.9),
   // "(Expiration date:____)" at y=120.2 — data after "Expiration date:" ~x=42
   textField("peExpirationDate", 42, 118.2, 25, 4),
   // "Registered Sanitarian" at x=58.7
-  checkbox("isRegisteredSanitarian", 53, 113.9),
+  checkbox("isRegisteredSanitarian", 49, 113.9),
   // Second "(Expiration date:____)" — data ~x=100
   textField("rsExpirationDate", 100, 118.2, 18, 4),
   // "Wastewater Treatment Plant Operator" at x=99.2
-  checkbox("isWastewaterOperator", 95, 113.9),
+  checkbox("isWastewaterOperator", 91, 113.9),
   // "(Grade:____)" at x=101.6, y=120.9 — data after "Grade:" ~x=120
   textField("operatorGrade", 120, 118.9, 20, 4),
 
@@ -172,8 +172,8 @@ const PAGE_2_SCHEMAS: Schema[] = [
 
   // Records Obtained by Inspector
   // "Were there facility permit... records available..." at y=162.6; "Yes" at x=160.6; "No" at x=172.9
-  checkbox("recordsAvailableYes", 156, 160.6),
-  checkbox("recordsAvailableNo", 168, 160.6),
+  checkbox("recordsAvailableYes", 152, 160.6),
+  checkbox("recordsAvailableNo", 164, 160.6),
 
   // "Discharge Authorization..." at x=30.5, y=173.3
   checkbox("hasDischargeAuth", 26, 171.3),
@@ -195,8 +195,8 @@ const PAGE_2_SCHEMAS: Schema[] = [
 
   // Cesspool section
   // "Is a cesspool serving the property?" at y=224.0; "Yes" at x=76.6; "No" at x=94.5
-  checkbox("isCesspoolYes", 72, 222.0),
-  checkbox("isCesspoolNo", 91, 222.0),
+  checkbox("isCesspoolYes", 68, 222.0),
+  checkbox("isCesspoolNo", 87, 222.0),
 ];
 
 // ---------------------------------------------------------------------------
@@ -213,51 +213,51 @@ const PAGE_3_SCHEMAS: Schema[] = [
   // Summary of Inspection
   // "Onsite Wastewater Treatment Facility Serves" checkboxes at y=49.2
   // "Residence/Dwelling" at x=28.2 — checkbox 5mm left
-  checkbox("facilityTypeResidence", 23, 47.2),
+  checkbox("facilityTypeResidence", 19, 47.2),
   // "Single family" at x=72.0
-  checkbox("facilityTypeSingleFamily", 67, 47.2),
+  checkbox("facilityTypeSingleFamily", 63, 47.2),
   // "Multi- family/Shared" at x=104.0
-  checkbox("facilityTypeMultiFamily", 99, 47.2),
+  checkbox("facilityTypeMultiFamily", 95, 47.2),
   // "Commercial" at x=146.9
-  checkbox("facilityTypeCommercial", 142, 47.2),
+  checkbox("facilityTypeCommercial", 138, 47.2),
   // "Other (Explain): ____" at x=28.2, y=57.5 — data after label ~x=62
   textField("facilityTypeOther", 62, 55.5, 146, 4.5),
 
   // Type of Facility checkboxes at y=71.5
   // "Conventional System" at x=28.2
-  checkbox("facilitySystemConventional", 23, 69.5),
+  checkbox("facilitySystemConventional", 19, 69.5),
   // "Alternative System" at x=70.7
-  checkbox("facilitySystemAlternative", 66, 69.5),
+  checkbox("facilitySystemAlternative", 62, 69.5),
   // "Gray Water System Observed" at x=108.4
-  checkbox("facilitySystemGrayWater", 104, 69.5),
+  checkbox("facilitySystemGrayWater", 100, 69.5),
 
   // "Number of Onsite Wastewater Systems on the property: ____" at y=78.1 — data after ~x=120
   textField("numberOfSystems", 120, 76.1, 20, 4.5),
   // "Age of inspected... Facility: ____ years" at y=88.1 — data after "Facility:" ~x=72
-  textField("facilityAge", 72, 86.1, 18, 4.5),
+  textField("facilityAge", 72, 88.1, 18, 4.5),
   // "If estimated, explain how it was determined: ____" at y=93.0 — data after ~x=90
   textField("facilityAgeEstimateExplanation", 90, 91.0, 118, 4.5),
 
   // Condition ratings
   // Septic Tank Condition at y=109.0: "Operational" x=53.1, "Operational with concerns" x=79.3, "Not Operational" x=125.6
-  checkbox("septicTankConditionOperational", 47, 107.0),
-  checkbox("septicTankConditionConcerns", 74, 107.0),
-  checkbox("septicTankConditionNotOp", 121, 107.0),
+  checkbox("septicTankConditionOperational", 43, 107.0),
+  checkbox("septicTankConditionConcerns", 70, 107.0),
+  checkbox("septicTankConditionNotOp", 117, 107.0),
 
   // Disposal Works Condition at y=121.1: "Operational" x=58.7, "with concerns" x=84.9, "Not Op" x=131.2
-  checkbox("disposalWorksConditionOperational", 54, 119.1),
-  checkbox("disposalWorksConditionConcerns", 79, 119.1),
-  checkbox("disposalWorksConditionNotOp", 127, 119.1),
+  checkbox("disposalWorksConditionOperational", 50, 119.1),
+  checkbox("disposalWorksConditionConcerns", 75, 119.1),
+  checkbox("disposalWorksConditionNotOp", 123, 119.1),
 
   // Alternative System Condition at y=132.8: "Operational" x=88.2, "with concerns" x=114.4, "Not Op" x=160.8
-  checkbox("altSystemConditionOperational", 84, 130.8),
-  checkbox("altSystemConditionConcerns", 110, 130.8),
-  checkbox("altSystemConditionNotOp", 156, 130.8),
+  checkbox("altSystemConditionOperational", 80, 130.8),
+  checkbox("altSystemConditionConcerns", 106, 130.8),
+  checkbox("altSystemConditionNotOp", 152, 130.8),
 
   // Alternative Disposal Condition at y=144.1: "Operational" x=75.4, "with concerns" x=101.6, "Not Op" x=147.9
-  checkbox("altDisposalConditionOperational", 71, 142.1),
-  checkbox("altDisposalConditionConcerns", 97, 142.1),
-  checkbox("altDisposalConditionNotOp", 143, 142.1),
+  checkbox("altDisposalConditionOperational", 67, 142.1),
+  checkbox("altDisposalConditionConcerns", 93, 142.1),
+  checkbox("altDisposalConditionNotOp", 139, 142.1),
 
   // Section 1: Facility Information
   // A) Domestic Water Source checkboxes at y=174.1
@@ -280,7 +280,7 @@ const PAGE_3_SCHEMAS: Schema[] = [
   // C) Occupancy/Use at y=197.5
   // "___ Full Time" at x=12.4 (data ~x=37); "____ Seasonal/Part Time" at x=69.8; "___ Vacant" at x=112.7; "____ Unknown" at x=139.8
   // Checkboxes go on the blank underlines before each label
-  checkbox("occupancyFullTime", 14, 195.5),
+  checkbox("occupancyFullTime", 16, 195.5),
   checkbox("occupancySeasonalPartTime", 71, 195.5),
   checkbox("occupancyVacant", 114, 195.5),
   checkbox("occupancyUnknown", 141, 195.5),
@@ -445,7 +445,7 @@ const PAGE_5_SCHEMAS: Schema[] = [
   // "Measurement/dimensions of tank: ____" at x=114.6, y=28.9 — data ~x=160
   textField("tank1_tankDimensions", 160, 26.9, 45, 4.5),
   // "Volume Pumped" at x=51.0, y=34.0
-  checkbox("tank1_capacityBasisVolumePumped", 45, 32.0),
+  checkbox("tank1_capacityBasisVolumePumped", 47, 32.0),
   // "Estimate" at x=114.5, y=34.0
   checkbox("tank1_capacityBasisEstimate", 110, 32.0),
   // "Permit Document" at x=165.3, y=34.0
@@ -468,7 +468,7 @@ const PAGE_5_SCHEMAS: Schema[] = [
   // 4G: Access openings at y=61.9
   // "One" x=69.3, "Two" x=83.6, "Three" x=96.3, "Other (Describe):____" x=112.2
   checkbox("tank1_accessOne", 65, 59.9),
-  checkbox("tank1_accessTwo", 77, 59.9),
+  checkbox("tank1_accessTwo", 79, 59.9),
   checkbox("tank1_accessThree", 92, 59.9),
   checkbox("tank1_accessOther", 108, 59.9),
   textField("tank1_accessOpeningsOther", 140, 59.9, 65, 4.5),
@@ -478,13 +478,13 @@ const PAGE_5_SCHEMAS: Schema[] = [
   checkbox("tank1_lidsPresent", 57, 68.5),
   checkbox("tank1_lidsNotPresent", 74, 68.5),
   // "Yes" at x=89.5, y=75.4 (securely fastened); "No" at x=104.2
-  checkbox("tank1_lidsSecureYes", 83, 73.4),
+  checkbox("tank1_lidsSecureYes", 85, 73.4),
   checkbox("tank1_lidsSecureNo", 100, 73.4),
 
   // 4I: Compartments at y=87.8
   // "One" x=84.4, "Two" x=97.9, "Other (Describe): ____" x=110.7
   checkbox("tank1_compartmentsOne", 80, 85.8),
-  checkbox("tank1_compartmentsTwo", 92, 84.8),
+  checkbox("tank1_compartmentsTwo", 94, 84.8),
   checkbox("tank1_compartmentsOther", 107, 85.0),
   textField("tank1_compartmentsOther_text", 138, 85.0, 68, 4.5),
 
@@ -549,7 +549,7 @@ const PAGE_5_SCHEMAS: Schema[] = [
   checkbox("tank1_effluentFilterNotServiced", 125, 174.4),
 
   // Septic tank comments (inspector comments section) at y≈198.4
-  multilineField("septicTankComments", 14, 196.4, 194, 20),
+  multilineField("septicTankComments", 14, 202, 194, 14),
 
   // 4.1 Disposal Works section
   // "Was the location of disposal works determined?" at y=222.0
@@ -667,7 +667,7 @@ const PAGE_6_SCHEMAS: Schema[] = [
 
   // Inspector Comments (disposal works) at y≈144.3 — "Inspector Comments:" at x=19.1
   // Comment underlines from y≈148.6 to y≈157.0
-  multilineField("disposalWorksComments", 19, 144.3, 189, 14),
+  multilineField("disposalWorksComments", 19, 149, 189, 9),
 
   // Signature area
   // "Signature: ____" at x=19.1, y=204.4 — signature image on the underline ~x=48
