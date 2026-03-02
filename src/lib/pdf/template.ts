@@ -109,32 +109,32 @@ const PAGE_2_SCHEMAS: Schema[] = [
   textField("inspectorInitials", 198, 11.3, 12, 5),
 
   // Property info
-  // "Property Name: ____" label at x=12.7, y=48.4 — label ends ~50mm, underline to ~208
-  textField("facilityName", 50, 46.4, 158, 5),
-  // "Property Address: ____" at y=53.4 — label ends ~56mm; "City:" at ~x=127; "County:" at ~x=165
-  textField("facilityAddress", 56, 51.4, 70, 5),
-  textField("facilityCity", 137, 51.4, 25, 5),
-  textField("facilityCounty", 180, 51.4, 28, 5),
+  // "Property Name: ____" label ends at 35.5mm; underline 36.4–201.6mm
+  textField("facilityName", 37, 46.4, 164, 5),
+  // "Property Address: ____" underline 39.4–99mm; "City:" 100–106mm, underline 107–145mm; "County:" 145–156mm, underline 157–201mm
+  textField("facilityAddress", 40, 51.4, 59, 5),
+  textField("facilityCity", 107, 51.4, 37, 5),
+  textField("facilityCounty", 157, 51.4, 44, 5),
 
   // Seller/Transferor info
-  // "Seller/Transferor Name: ____" at y=58.3 — label ends ~62mm
-  textField("sellerName", 62, 56.3, 146, 5),
-  // "Seller/Transferor Address: ____" at y=63.2 — label ends ~68mm; City ~x=140; State ~x=170; ZIP ~x=192
-  textField("sellerAddress", 68, 61.2, 70, 5),
-  textField("sellerCity", 145, 61.2, 22, 5),
-  textField("sellerState", 175, 61.2, 12, 5),
-  textField("sellerZip", 195, 61.2, 13, 5),
+  // "Seller/Transferor Name:" label ends at 47.4mm; underline 48.2–201mm
+  textField("sellerName", 48, 56.3, 153, 5),
+  // "Seller/Transferor Address:" underline 51–99mm; "City:" underline 107–146mm; "State:" underline 157–164mm; "ZIP Code:" underline 180–201mm
+  textField("sellerAddress", 52, 61.2, 47, 5),
+  textField("sellerCity", 107, 61.2, 39, 5),
+  textField("sellerState", 157, 61.2, 7, 5),
+  textField("sellerZip", 180, 61.2, 21, 5),
 
   // Inspector info
-  // "Inspector Name: ____" at y=77.7 — label ends ~50mm
-  textField("inspectorName", 50, 75.7, 158, 5),
-  // "Company Address: ____" at y=82.7 — label ends ~56mm; City ~x=140; State ~x=170; ZIP ~x=192
-  textField("companyAddress", 56, 80.7, 82, 5),
-  textField("companyCity", 145, 80.7, 22, 5),
-  textField("companyState", 175, 80.7, 12, 5),
-  textField("companyZip", 195, 80.7, 13, 5),
-  // "Company Name: ____" at y=87.6 — label ends ~52mm
-  textField("company", 52, 85.6, 156, 5),
+  // "Inspector Name:" label ends at 36.5mm; underline 37.3–199.6mm
+  textField("inspectorName", 38, 75.7, 162, 5),
+  // "Company Address:" underline 40–99mm; "City:" underline 107–146mm; "State:" underline 157–164mm; "ZIP Code:" underline 180–201mm
+  textField("companyAddress", 41, 80.7, 58, 5),
+  textField("companyCity", 107, 80.7, 39, 5),
+  textField("companyState", 157, 80.7, 7, 5),
+  textField("companyZip", 180, 80.7, 21, 5),
+  // "Company Name:" label ends at 36.6mm; underline 37.3–200.7mm
+  textField("company", 38, 85.6, 163, 5),
 
   // Inspector qualifications checkboxes and detail fields
   // "ADEQ-Recognized Course: ____" at x=17.8, y=106.0 — checkbox at ~x=13, data after label ~x=72
@@ -147,7 +147,7 @@ const PAGE_2_SCHEMAS: Schema[] = [
   // "Professional Engineer" at x=17.8 — checkbox 5mm left
   checkbox("isProfessionalEngineer", 13, 113.9),
   // "(Expiration date:____)" at y=120.2 — data after "Expiration date:" ~x=42
-  textField("peExpirationDate", 42, 118.2, 18, 4),
+  textField("peExpirationDate", 42, 118.2, 25, 4),
   // "Registered Sanitarian" at x=58.7
   checkbox("isRegisteredSanitarian", 54, 113.9),
   // Second "(Expiration date:____)" — data ~x=100
@@ -277,10 +277,11 @@ const PAGE_3_SCHEMAS: Schema[] = [
 
   // C) Occupancy/Use at y=197.5
   // "___ Full Time" at x=12.4 (data ~x=37); "____ Seasonal/Part Time" at x=69.8; "___ Vacant" at x=112.7; "____ Unknown" at x=139.8
-  checkbox("occupancyFullTime", 33, 195.5),
-  checkbox("occupancySeasonalPartTime", 65, 195.5),
-  checkbox("occupancyVacant", 108, 195.5),
-  checkbox("occupancyUnknown", 135, 195.5),
+  // Checkboxes go on the blank underlines before each label
+  checkbox("occupancyFullTime", 14, 195.5),
+  checkbox("occupancySeasonalPartTime", 71, 195.5),
+  checkbox("occupancyVacant", 114, 195.5),
+  checkbox("occupancyUnknown", 141, 195.5),
 
   // Section 2: General Treatment and Disposal Works
   // Left column GP 4.02-4.04

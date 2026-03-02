@@ -1,7 +1,8 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { ArrowUpDown, Check, Download, Eye, Trash2 } from "lucide-react";
+import { ArrowUpDown, Check, Download, Eye, Trash2, X } from "lucide-react";
 import {
   Table,
   TableHeader,
@@ -12,6 +13,17 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
 export interface InspectionRow {
@@ -94,6 +106,48 @@ export function InspectionsTable({
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  const draftIds = inspections
+    .filter((i) => i.status === "draft")
+    .map((i) => i.id);
+
+  const selectedDraftCount = Array.from(selectedIds).filter((id) =>
+    draftIds.includes(id)
+  ).length;
+
+  const selectedNonDraftCount = selectedIds.size - selectedDraftCount;
+
+  const allSelected =
+    inspections.length > 0 && inspections.every((i) => selectedIds.has(i.id));
+  const someSelected = selectedIds.size > 0 && !allSelected;
+
+  const handleSelectAll = useCallback(() => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(inspections.map((i) => i.id)));
+    }
+  }, [allSelected, inspections]);
+
+  const handleSelectOne = useCallback((id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
   function handleSort(column: string) {
     const params = new URLSearchParams(searchParams.toString());
     if (sortColumn === column) {
@@ -149,9 +203,51 @@ export function InspectionsTable({
         return;
       }
       toast.success("Draft inspection deleted");
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(inspectionId);
+        return next;
+      });
       router.refresh();
     } catch {
       toast.error("Failed to delete inspection");
+    }
+  }
+
+  async function handleBulkDelete() {
+    const idsToDelete = Array.from(selectedIds).filter((id) =>
+      draftIds.includes(id)
+    );
+
+    if (idsToDelete.length === 0) {
+      toast.error("No draft inspections selected to delete");
+      setShowDeleteDialog(false);
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch("/api/inspections/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: idsToDelete }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Failed to delete inspections");
+        return;
+      }
+
+      const data = await res.json();
+      toast.success(`Deleted ${data.deletedCount} inspection(s)`);
+      setSelectedIds(new Set());
+      router.refresh();
+    } catch {
+      toast.error("Failed to delete inspections");
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteDialog(false);
     }
   }
 
@@ -162,10 +258,12 @@ export function InspectionsTable({
     } else {
       params.set("page", String(newPage));
     }
+    setSelectedIds(new Set());
     router.replace(`${pathname}?${params.toString()}`);
   }
 
   function handleClearFilters() {
+    setSelectedIds(new Set());
     router.replace(pathname);
   }
 
@@ -194,9 +292,52 @@ export function InspectionsTable({
 
   return (
     <div className="space-y-4">
+      {/* Floating action bar when items are selected */}
+      {selectedIds.size > 0 && (
+        <div className="sticky top-0 z-20 flex items-center gap-3 rounded-lg border bg-background/95 px-4 py-3 shadow-md backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <span className="text-sm font-medium">
+            {selectedIds.size} selected
+          </span>
+          {selectedNonDraftCount > 0 && (
+            <span className="text-xs text-muted-foreground">
+              ({selectedDraftCount} draft{selectedDraftCount !== 1 ? "s" : ""}{" "}
+              can be deleted)
+            </span>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDeselectAll}
+            >
+              <X className="size-3.5" />
+              Deselect All
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={selectedDraftCount === 0}
+              onClick={() => setShowDeleteDialog(true)}
+            >
+              <Trash2 className="size-3.5" />
+              Delete Selected
+              {selectedDraftCount > 0 && ` (${selectedDraftCount})`}
+            </Button>
+          </div>
+        </div>
+      )}
+
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-[40px]">
+              <Checkbox
+                checked={allSelected}
+                {...(someSelected ? { "data-state": "indeterminate" } : {})}
+                onCheckedChange={handleSelectAll}
+                aria-label="Select all inspections"
+              />
+            </TableHead>
             {SORTABLE_COLUMNS.map((col) => (
               <TableHead key={col.key}>
                 <button
@@ -220,9 +361,22 @@ export function InspectionsTable({
           {inspections.map((inspection) => (
             <TableRow
               key={inspection.id}
-              className="cursor-pointer"
+              className={`cursor-pointer ${
+                selectedIds.has(inspection.id) ? "bg-muted/50" : ""
+              }`}
               onClick={() => handleRowClick(inspection)}
             >
+              <TableCell onClick={(e) => e.stopPropagation()}>
+                <Checkbox
+                  checked={selectedIds.has(inspection.id)}
+                  onCheckedChange={(checked) =>
+                    handleSelectOne(inspection.id, checked === true)
+                  }
+                  aria-label={`Select inspection at ${
+                    inspection.facilityAddress || "unknown address"
+                  }`}
+                />
+              </TableCell>
               <TableCell className="max-w-[200px] truncate">
                 {inspection.facilityAddress || "No address"}
               </TableCell>
@@ -318,6 +472,36 @@ export function InspectionsTable({
           </Button>
         </div>
       </div>
+
+      {/* Bulk delete confirmation dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedDraftCount} draft inspection{selectedDraftCount !== 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. Only draft inspections will be
+              deleted.
+              {selectedNonDraftCount > 0 && (
+                <>
+                  {" "}
+                  {selectedNonDraftCount} non-draft inspection
+                  {selectedNonDraftCount !== 1 ? "s" : ""} will be skipped.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
