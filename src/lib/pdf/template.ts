@@ -46,12 +46,14 @@ function textField(
   } as Schema;
 }
 
-/** Small checkbox rendered as centered "X" text overlay */
+/** Small checkbox rendered as centered "X" text overlay.
+ *  y is shifted up 1mm to compensate for font metrics rendering
+ *  the "X" glyph slightly below the geometric center. */
 function checkbox(name: string, x: number, y: number): Schema {
   return {
     name,
     type: "text",
-    position: { x, y },
+    position: { x, y: y - 1 },
     width: 4,
     height: 4,
     fontSize: 10,
@@ -106,7 +108,7 @@ const PAGE_2_SCHEMAS: Schema[] = [
   // "DATE OF INSPECTION:" label at x=118.8, y=13.3 — data after label
   textField("dateOfInspection", 148, 11.3, 15, 5),
   // "Initials of Inspector _______" label at x=165.3, y=13.3 — data on underline
-  textField("inspectorInitials", 198, 11.3, 12, 5),
+  textField("inspectorInitials", 192, 11.3, 14, 5),
 
   // Property info
   // "Property Name: ____" label ends at 35.5mm; underline 36.4–201.6mm
@@ -141,7 +143,7 @@ const PAGE_2_SCHEMAS: Schema[] = [
   checkbox("hasAdeqCourse", 13, 104),
   textField("adeqCourseDetails", 72, 104, 80, 4.5),
   // "Date Completed: ____" — label near end of line, data after ~x=176
-  textField("adeqCourseDate", 176, 104, 30, 4.5),
+  textField("adeqCourseDate", 174, 104, 32, 4.5),
 
   // Professional Engineer / Registered Sanitarian / WW Operator row at y=115.9
   // "Professional Engineer" at x=17.8 — checkbox 5mm left
@@ -149,7 +151,7 @@ const PAGE_2_SCHEMAS: Schema[] = [
   // "(Expiration date:____)" at y=120.2 — data after "Expiration date:" ~x=42
   textField("peExpirationDate", 42, 118.2, 25, 4),
   // "Registered Sanitarian" at x=58.7
-  checkbox("isRegisteredSanitarian", 54, 113.9),
+  checkbox("isRegisteredSanitarian", 53, 113.9),
   // Second "(Expiration date:____)" — data ~x=100
   textField("rsExpirationDate", 100, 118.2, 18, 4),
   // "Wastewater Treatment Plant Operator" at x=99.2
@@ -194,7 +196,7 @@ const PAGE_2_SCHEMAS: Schema[] = [
   // Cesspool section
   // "Is a cesspool serving the property?" at y=224.0; "Yes" at x=76.6; "No" at x=94.5
   checkbox("isCesspoolYes", 72, 222.0),
-  checkbox("isCesspoolNo", 90, 222.0),
+  checkbox("isCesspoolNo", 91, 222.0),
 ];
 
 // ---------------------------------------------------------------------------
@@ -238,13 +240,13 @@ const PAGE_3_SCHEMAS: Schema[] = [
 
   // Condition ratings
   // Septic Tank Condition at y=109.0: "Operational" x=53.1, "Operational with concerns" x=79.3, "Not Operational" x=125.6
-  checkbox("septicTankConditionOperational", 48, 107.0),
+  checkbox("septicTankConditionOperational", 47, 107.0),
   checkbox("septicTankConditionConcerns", 74, 107.0),
   checkbox("septicTankConditionNotOp", 121, 107.0),
 
   // Disposal Works Condition at y=121.1: "Operational" x=58.7, "with concerns" x=84.9, "Not Op" x=131.2
   checkbox("disposalWorksConditionOperational", 54, 119.1),
-  checkbox("disposalWorksConditionConcerns", 80, 119.1),
+  checkbox("disposalWorksConditionConcerns", 79, 119.1),
   checkbox("disposalWorksConditionNotOp", 127, 119.1),
 
   // Alternative System Condition at y=132.8: "Operational" x=88.2, "with concerns" x=114.4, "Not Op" x=160.8
@@ -273,7 +275,7 @@ const PAGE_3_SCHEMAS: Schema[] = [
   // "Residential" at x=31.1, y=190.8; "Commercial" at x=61.2, y=190.1; "Other ____" at x=94.8, y=190.1
   checkbox("wastewaterResidential", 27, 188.8),
   checkbox("wastewaterCommercial", 57, 188.1),
-  textField("wastewaterOther", 108, 188.1, 100, 4.5),
+  textField("wastewaterOther", 100, 188.1, 108, 4.5),
 
   // C) Occupancy/Use at y=197.5
   // "___ Full Time" at x=12.4 (data ~x=37); "____ Seasonal/Part Time" at x=69.8; "___ Vacant" at x=112.7; "____ Unknown" at x=139.8
@@ -289,8 +291,8 @@ const PAGE_3_SCHEMAS: Schema[] = [
   checkbox("checkbox_gp402_conventional", 15, 213.5),
   // Sub-items at x=44.2: Septic Tank y=220.4, Disposal Trench y=225.4, Disposal Bed y=230.4,
   // Chamber y=235.3, Seepage Pit y=240.3
-  checkbox("checkbox_gp402_septic_tank", 39, 218.4),
-  checkbox("checkbox_gp402_disposal_trench", 39, 223.4),
+  checkbox("checkbox_gp402_septic_tank", 40, 218.4),
+  checkbox("checkbox_gp402_disposal_trench", 40, 223.4),
   checkbox("checkbox_gp402_disposal_bed", 39, 228.4),
   checkbox("checkbox_gp402_chamber", 39, 233.3),
   checkbox("checkbox_gp402_seepage_pit", 39, 238.3),
@@ -358,7 +360,7 @@ const PAGE_4_SCHEMAS: Schema[] = [
 
   // Performance Assurance Plan: "Yes" at x=124.6, y=62.3; "No" at x=137.3
   checkbox("performanceAssurancePlanYes", 120, 60.3),
-  checkbox("performanceAssurancePlanNo", 133, 60.3),
+  checkbox("performanceAssurancePlanNo", 135, 60.3),
 
   // Section 3: Design Flow and Septic Tank Sizing
   // "Estimated Design Flow:" at x=25.4, y=82.6; "gallons per day" at x=77.0, y=83.4
@@ -443,7 +445,7 @@ const PAGE_5_SCHEMAS: Schema[] = [
   // "Measurement/dimensions of tank: ____" at x=114.6, y=28.9 — data ~x=160
   textField("tank1_tankDimensions", 160, 26.9, 45, 4.5),
   // "Volume Pumped" at x=51.0, y=34.0
-  checkbox("tank1_capacityBasisVolumePumped", 47, 32.0),
+  checkbox("tank1_capacityBasisVolumePumped", 45, 32.0),
   // "Estimate" at x=114.5, y=34.0
   checkbox("tank1_capacityBasisEstimate", 110, 32.0),
   // "Permit Document" at x=165.3, y=34.0
@@ -466,7 +468,7 @@ const PAGE_5_SCHEMAS: Schema[] = [
   // 4G: Access openings at y=61.9
   // "One" x=69.3, "Two" x=83.6, "Three" x=96.3, "Other (Describe):____" x=112.2
   checkbox("tank1_accessOne", 65, 59.9),
-  checkbox("tank1_accessTwo", 79, 59.9),
+  checkbox("tank1_accessTwo", 77, 59.9),
   checkbox("tank1_accessThree", 92, 59.9),
   checkbox("tank1_accessOther", 108, 59.9),
   textField("tank1_accessOpeningsOther", 140, 59.9, 65, 4.5),
@@ -476,13 +478,13 @@ const PAGE_5_SCHEMAS: Schema[] = [
   checkbox("tank1_lidsPresent", 57, 68.5),
   checkbox("tank1_lidsNotPresent", 74, 68.5),
   // "Yes" at x=89.5, y=75.4 (securely fastened); "No" at x=104.2
-  checkbox("tank1_lidsSecureYes", 85, 73.4),
+  checkbox("tank1_lidsSecureYes", 83, 73.4),
   checkbox("tank1_lidsSecureNo", 100, 73.4),
 
   // 4I: Compartments at y=87.8
   // "One" x=84.4, "Two" x=97.9, "Other (Describe): ____" x=110.7
   checkbox("tank1_compartmentsOne", 80, 85.8),
-  checkbox("tank1_compartmentsTwo", 94, 85.8),
+  checkbox("tank1_compartmentsTwo", 92, 84.8),
   checkbox("tank1_compartmentsOther", 107, 85.0),
   textField("tank1_compartmentsOther_text", 138, 85.0, 68, 4.5),
 
@@ -536,7 +538,7 @@ const PAGE_5_SCHEMAS: Schema[] = [
   checkbox("tank1_interiorBafflePresent", 51, 167.2),
   checkbox("tank1_interiorBaffleOperational", 70, 167.2),
   checkbox("tank1_interiorBaffleNotOp", 95, 167.2),
-  checkbox("tank1_interiorBaffleNotPresent", 125, 167.2),
+  checkbox("tank1_interiorBaffleNotPresent", 127, 167.2),
   checkbox("tank1_interiorBaffleNotDetermined", 151, 167.2),
 
   // 4M: Effluent filter at y=176.4
@@ -544,7 +546,7 @@ const PAGE_5_SCHEMAS: Schema[] = [
   checkbox("tank1_effluentFilterPresent", 50, 174.4),
   checkbox("tank1_effluentFilterNotPresent", 69, 174.4),
   checkbox("tank1_effluentFilterServiced", 94, 174.4),
-  checkbox("tank1_effluentFilterNotServiced", 123, 174.4),
+  checkbox("tank1_effluentFilterNotServiced", 125, 174.4),
 
   // Septic tank comments (inspector comments section) at y≈198.4
   multilineField("septicTankComments", 14, 196.4, 194, 20),
@@ -596,7 +598,7 @@ const PAGE_6_SCHEMAS: Schema[] = [
 
   // Supply line material at y=29.6
   // "PVC" x=89.5, "Orangeburg" x=105.9, "Tile" x=136.0, "Other ____" x=153.4
-  checkbox("supplyLinePVC", 85, 27.6),
+  checkbox("supplyLinePVC", 87, 27.6),
   checkbox("supplyLineOrangeburg", 102, 27.6),
   checkbox("supplyLineTile", 132, 27.6),
   checkbox("supplyLineOther", 149, 27.6),
@@ -614,12 +616,12 @@ const PAGE_6_SCHEMAS: Schema[] = [
   // Port depths at y=55.8 and y=60.8
   // "________ Port 1" x=55.7, "Port 2" x=84.8, "Port 3" x=114.0, "Port 4" x=143.1
   // Data goes before the "Port N" label, on the underline
-  textField("portDepth1", 43, 53.8, 18, 4),
+  textField("portDepth1", 44, 53.8, 18, 4),
   textField("portDepth2", 72, 53.8, 18, 4),
   textField("portDepth3", 101, 53.8, 18, 4),
   textField("portDepth4", 130, 53.8, 18, 4),
   // "Port 5" x=55.6, "Port 6" x=84.7, "Port 7" x=113.8, "Port 8" x=143.0 at y=60.8
-  textField("portDepth5", 43, 58.8, 18, 4),
+  textField("portDepth5", 44, 58.8, 18, 4),
   textField("portDepth6", 72, 58.8, 18, 4),
   textField("portDepth7", 101, 58.8, 18, 4),
   textField("portDepth8", 130, 58.8, 18, 4),
@@ -661,11 +663,11 @@ const PAGE_6_SCHEMAS: Schema[] = [
   // Repairs recommended at y=139.0
   // "Yes" x=157.8, "No" x=172.5
   checkbox("repairsRecommendedYes", 153, 137.0),
-  checkbox("repairsRecommendedNo", 168, 137.0),
+  checkbox("repairsRecommendedNo", 170, 137.0),
 
   // Inspector Comments (disposal works) at y≈144.3 — "Inspector Comments:" at x=19.1
   // Comment underlines from y≈148.6 to y≈157.0
-  multilineField("disposalWorksComments", 19, 146.3, 189, 12),
+  multilineField("disposalWorksComments", 19, 144.3, 189, 14),
 
   // Signature area
   // "Signature: ____" at x=19.1, y=204.4 — signature image on the underline ~x=48
