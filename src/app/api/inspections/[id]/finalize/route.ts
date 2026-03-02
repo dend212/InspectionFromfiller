@@ -96,9 +96,7 @@ export async function POST(
   }));
 
   // Extract signature data URL from form data (if present)
-  const signatureDataUrl =
-    (formData as Record<string, unknown> & { disposalWorks?: { signatureDataUrl?: string } })
-      .disposalWorks?.signatureDataUrl ?? null;
+  const signatureDataUrl = formData.disposalWorks?.signatureDataUrl ?? null;
 
   // Generate PDF server-side
   let pdfData: Uint8Array;

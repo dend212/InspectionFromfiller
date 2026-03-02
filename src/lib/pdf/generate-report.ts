@@ -53,17 +53,22 @@ export async function generateReport(
   // Step 3: Detect comment overflow for building the comments overflow page
   const overflow = detectCommentOverflow(formData);
 
-  // Step 4: Embed signature image if provided
+  // Step 4: Embed signature image if provided, otherwise remove the field
+  // to avoid passing an empty string to pdfme's image schema (which crashes)
   if (signatureDataUrl) {
     inputs.signatureImage = signatureDataUrl;
+  } else {
+    delete inputs.signatureImage;
   }
 
-  // Auto-fill signature date to today's date (MM/DD/YYYY)
-  const today = new Date();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  const year = today.getFullYear();
-  inputs.signatureDate = `${month}/${day}/${year}`;
+  // Only auto-fill signature date if the user hasn't entered one
+  if (!inputs.signatureDate) {
+    const today = new Date();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    const year = today.getFullYear();
+    inputs.signatureDate = `${month}/${day}/${year}`;
+  }
 
   // Step 5: Generate the 6-page form PDF using pdfme
   const formPdf = await generate({

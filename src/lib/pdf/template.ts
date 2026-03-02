@@ -12,6 +12,7 @@
  */
 
 import type { Template, Font, Schema } from "@pdfme/common";
+import { loadPublicFile } from "./load-public-file";
 
 // ---------------------------------------------------------------------------
 // Reusable schema factory helpers
@@ -100,77 +101,100 @@ const PAGE_1_SCHEMAS: Schema[] = [];
 // ---------------------------------------------------------------------------
 const PAGE_2_SCHEMAS: Schema[] = [
   // Header line: Tax Parcel No. and Date of Inspection + Initials
-  textField("taxParcelNumber", 55, 10, 55, 5),
-  textField("dateOfInspection", 143, 10, 40, 5),
-  textField("inspectorInitials", 200, 10, 12, 5),
+  // "TAX PARCEL NO." label at x=64, y=13.3 — data goes on the line after the label
+  textField("taxParcelNumber", 90, 11.3, 27, 5),
+  // "DATE OF INSPECTION:" label at x=118.8, y=13.3 — data after label
+  textField("dateOfInspection", 148, 11.3, 15, 5),
+  // "Initials of Inspector _______" label at x=165.3, y=13.3 — data on underline
+  textField("inspectorInitials", 198, 11.3, 12, 5),
 
   // Property info
-  textField("facilityName", 35, 49, 170, 5),
-  textField("facilityAddress", 40, 55, 85, 5),
-  textField("facilityCity", 130, 55, 30, 5),
-  textField("facilityCounty", 165, 55, 40, 5),
+  // "Property Name: ____" label at x=12.7, y=48.4 — label ends ~50mm, underline to ~208
+  textField("facilityName", 50, 46.4, 158, 5),
+  // "Property Address: ____" at y=53.4 — label ends ~56mm; "City:" at ~x=127; "County:" at ~x=165
+  textField("facilityAddress", 56, 51.4, 70, 5),
+  textField("facilityCity", 137, 51.4, 25, 5),
+  textField("facilityCounty", 180, 51.4, 28, 5),
 
   // Seller/Transferor info
-  textField("sellerName", 48, 60, 157, 5),
-  textField("sellerAddress", 50, 65, 77, 5),
-  textField("sellerCity", 130, 65, 30, 5),
-  textField("sellerState", 160, 65, 10, 5),
-  textField("sellerZip", 177, 65, 28, 5),
+  // "Seller/Transferor Name: ____" at y=58.3 — label ends ~62mm
+  textField("sellerName", 62, 56.3, 146, 5),
+  // "Seller/Transferor Address: ____" at y=63.2 — label ends ~68mm; City ~x=140; State ~x=170; ZIP ~x=192
+  textField("sellerAddress", 68, 61.2, 70, 5),
+  textField("sellerCity", 145, 61.2, 22, 5),
+  textField("sellerState", 175, 61.2, 12, 5),
+  textField("sellerZip", 195, 61.2, 13, 5),
 
   // Inspector info
-  textField("inspectorName", 37, 79, 168, 5),
-  textField("companyAddress", 41, 84, 82, 5),
-  textField("companyCity", 130, 84, 30, 5),
-  textField("companyState", 160, 84, 10, 5),
-  textField("companyZip", 177, 84, 28, 5),
-  textField("company", 38, 89, 167, 5),
+  // "Inspector Name: ____" at y=77.7 — label ends ~50mm
+  textField("inspectorName", 50, 75.7, 158, 5),
+  // "Company Address: ____" at y=82.7 — label ends ~56mm; City ~x=140; State ~x=170; ZIP ~x=192
+  textField("companyAddress", 56, 80.7, 82, 5),
+  textField("companyCity", 145, 80.7, 22, 5),
+  textField("companyState", 175, 80.7, 12, 5),
+  textField("companyZip", 195, 80.7, 13, 5),
+  // "Company Name: ____" at y=87.6 — label ends ~52mm
+  textField("company", 52, 85.6, 156, 5),
 
   // Inspector qualifications checkboxes and detail fields
-  // ADEQ-Recognized Course
-  checkbox("hasAdeqCourse", 14.5, 109),
-  textField("adeqCourseDetails", 60, 109, 96, 4.5),
-  textField("adeqCourseDate", 170, 109, 36, 4.5),
+  // "ADEQ-Recognized Course: ____" at x=17.8, y=106.0 — checkbox at ~x=13, data after label ~x=72
+  checkbox("hasAdeqCourse", 13, 104),
+  textField("adeqCourseDetails", 72, 104, 80, 4.5),
+  // "Date Completed: ____" — label near end of line, data after ~x=176
+  textField("adeqCourseDate", 176, 104, 30, 4.5),
 
-  // Professional Engineer / Registered Sanitarian / WW Operator row
-  checkbox("isProfessionalEngineer", 14.5, 120),
-  textField("peExpirationDate", 40, 124, 25, 4),
-  checkbox("isRegisteredSanitarian", 80, 120),
-  textField("rsExpirationDate", 108, 124, 25, 4),
-  checkbox("isWastewaterOperator", 128, 120),
-  textField("operatorGrade", 155, 124, 20, 4),
+  // Professional Engineer / Registered Sanitarian / WW Operator row at y=115.9
+  // "Professional Engineer" at x=17.8 — checkbox 5mm left
+  checkbox("isProfessionalEngineer", 13, 113.9),
+  // "(Expiration date:____)" at y=120.2 — data after "Expiration date:" ~x=42
+  textField("peExpirationDate", 42, 118.2, 18, 4),
+  // "Registered Sanitarian" at x=58.7
+  checkbox("isRegisteredSanitarian", 54, 113.9),
+  // Second "(Expiration date:____)" — data ~x=100
+  textField("rsExpirationDate", 100, 118.2, 18, 4),
+  // "Wastewater Treatment Plant Operator" at x=99.2
+  checkbox("isWastewaterOperator", 95, 113.9),
+  // "(Grade:____)" at x=101.6, y=120.9 — data after "Grade:" ~x=120
+  textField("operatorGrade", 120, 118.9, 20, 4),
 
-  // Licensed Contractor
-  checkbox("isLicensedContractor", 14.5, 132),
-  textField("contractorLicenseCategory", 78, 132, 127, 4.5),
+  // "Arizona Licensed Contractor for License Category: ____" at x=18.6, y=128.7
+  checkbox("isLicensedContractor", 14, 126.7),
+  textField("contractorLicenseCategory", 96, 126.7, 112, 4.5),
 
-  // Pumper Truck
-  checkbox("hasPumperTruck", 14.5, 140),
-  textField("pumperTruckRegistration", 84, 140, 121, 4.5),
+  // "Owner of pumper truck and ADEQ Truck Registration No: ____" at x=17.8, y=138.6
+  checkbox("hasPumperTruck", 13, 136.6),
+  textField("pumperTruckRegistration", 105, 136.6, 103, 4.5),
 
-  // Employee Name
-  textField("employeeName", 65, 150, 140, 4.5),
+  // "Employee Name Performing Inspection: ____" at x=17.8, y=148.5 — data after label ~x=85
+  textField("employeeName", 85, 146.5, 123, 4.5),
 
   // Records Obtained by Inspector
-  checkbox("recordsAvailableYes", 148, 163),
-  checkbox("recordsAvailableNo", 162, 163),
+  // "Were there facility permit... records available..." at y=162.6; "Yes" at x=160.6; "No" at x=172.9
+  checkbox("recordsAvailableYes", 156, 160.6),
+  checkbox("recordsAvailableNo", 168, 160.6),
 
-  // Discharge Auth
-  checkbox("hasDischargeAuth", 20, 175),
-  textField("dischargeAuthPermitNo", 36, 179, 40, 4),
+  // "Discharge Authorization..." at x=30.5, y=173.3
+  checkbox("hasDischargeAuth", 26, 171.3),
+  // "Permit No.____" at x=31.0, y=178.2 — data after "Permit No." ~x=60
+  textField("dischargeAuthPermitNo", 60, 176.2, 40, 4),
 
-  // Approval of Construction
-  checkbox("hasApprovalOfConstruction", 20, 185),
-  textField("approvalPermitNo", 56, 190, 40, 4),
+  // "Approval of Construction..." at x=30.5, y=183.2
+  checkbox("hasApprovalOfConstruction", 26, 181.2),
+  // "January 1, 2001, Permit No." at x=31.0, y=188.1 — data after ~x=85
+  textField("approvalPermitNo", 85, 186.1, 40, 4),
 
-  // Site plan, Operation docs, Other
-  checkbox("hasSitePlan", 20, 195),
-  checkbox("hasOperationDocs", 20, 199),
-  checkbox("hasOtherRecords", 20, 203),
-  textField("otherRecordsDescription", 40, 203, 165, 4.5),
+  // "Site plan, plot plan..." at x=30.5, y=193.1
+  checkbox("hasSitePlan", 26, 191.1),
+  // "Documents relating to operation..." at x=30.5, y=198.1
+  checkbox("hasOperationDocs", 26, 196.1),
+  // "Other: ____" at x=30.5, y=203.0
+  checkbox("hasOtherRecords", 26, 201.0),
+  textField("otherRecordsDescription", 46, 201.0, 162, 4.5),
 
-  // Cesspool
-  checkbox("isCesspoolYes", 103, 228),
-  checkbox("isCesspoolNo", 118, 228),
+  // Cesspool section
+  // "Is a cesspool serving the property?" at y=224.0; "Yes" at x=76.6; "No" at x=94.5
+  checkbox("isCesspoolYes", 72, 222.0),
+  checkbox("isCesspoolNo", 90, 222.0),
 ];
 
 // ---------------------------------------------------------------------------
@@ -179,89 +203,118 @@ const PAGE_2_SCHEMAS: Schema[] = [
 // ---------------------------------------------------------------------------
 const PAGE_3_SCHEMAS: Schema[] = [
   // Header repeaters
-  textField("taxParcelNumber_p3", 55, 10, 55, 5),
-  textField("dateOfInspection_p3", 143, 10, 40, 5),
-  textField("inspectorInitials_p3", 200, 10, 12, 5),
+  // "TAX PARCEL NO." at x=64.9, y=12.9; "DATE OF INSPECTION:" at x=118.3, y=13.2; "Initials" at x=165.3, y=13.3
+  textField("taxParcelNumber_p3", 90, 10.9, 27, 5),
+  textField("dateOfInspection_p3", 148, 11.2, 15, 5),
+  textField("inspectorInitials_p3", 198, 11.3, 12, 5),
 
   // Summary of Inspection
-  // "Onsite Wastewater Treatment Facility Serves" checkboxes
-  checkbox("facilityTypeResidence", 14, 47),
-  checkbox("facilityTypeSingleFamily", 65, 47),
-  checkbox("facilityTypeMultiFamily", 100, 47),
-  checkbox("facilityTypeCommercial", 150, 47),
-  textField("facilityTypeOther", 40, 53, 165, 4.5),
+  // "Onsite Wastewater Treatment Facility Serves" checkboxes at y=49.2
+  // "Residence/Dwelling" at x=28.2 — checkbox 5mm left
+  checkbox("facilityTypeResidence", 23, 47.2),
+  // "Single family" at x=72.0
+  checkbox("facilityTypeSingleFamily", 67, 47.2),
+  // "Multi- family/Shared" at x=104.0
+  checkbox("facilityTypeMultiFamily", 99, 47.2),
+  // "Commercial" at x=146.9
+  checkbox("facilityTypeCommercial", 142, 47.2),
+  // "Other (Explain): ____" at x=28.2, y=57.5 — data after label ~x=62
+  textField("facilityTypeOther", 62, 55.5, 146, 4.5),
 
-  // Type of Facility checkboxes
-  checkbox("facilitySystemConventional", 20, 63),
-  checkbox("facilitySystemAlternative", 87, 63),
-  checkbox("facilitySystemGrayWater", 136, 63),
+  // Type of Facility checkboxes at y=71.5
+  // "Conventional System" at x=28.2
+  checkbox("facilitySystemConventional", 23, 69.5),
+  // "Alternative System" at x=70.7
+  checkbox("facilitySystemAlternative", 66, 69.5),
+  // "Gray Water System Observed" at x=108.4
+  checkbox("facilitySystemGrayWater", 104, 69.5),
 
-  // Number of systems and age
-  textField("numberOfSystems", 102, 70, 30, 4.5),
-  textField("facilityAge", 85, 80, 15, 4.5),
-  textField("facilityAgeEstimateExplanation", 72, 86, 133, 4.5),
+  // "Number of Onsite Wastewater Systems on the property: ____" at y=78.1 — data after ~x=120
+  textField("numberOfSystems", 120, 76.1, 20, 4.5),
+  // "Age of inspected... Facility: ____ years" at y=88.1 — data after "Facility:" ~x=72
+  textField("facilityAge", 72, 86.1, 18, 4.5),
+  // "If estimated, explain how it was determined: ____" at y=93.0 — data after ~x=90
+  textField("facilityAgeEstimateExplanation", 90, 91.0, 118, 4.5),
 
   // Condition ratings
-  // Septic Tank Condition
-  checkbox("septicTankConditionOperational", 83, 108),
-  checkbox("septicTankConditionConcerns", 110, 108),
-  checkbox("septicTankConditionNotOp", 140, 108),
+  // Septic Tank Condition at y=109.0: "Operational" x=53.1, "Operational with concerns" x=79.3, "Not Operational" x=125.6
+  checkbox("septicTankConditionOperational", 48, 107.0),
+  checkbox("septicTankConditionConcerns", 74, 107.0),
+  checkbox("septicTankConditionNotOp", 121, 107.0),
 
-  // Disposal Works Condition
-  checkbox("disposalWorksConditionOperational", 88, 130),
-  checkbox("disposalWorksConditionConcerns", 118, 130),
-  checkbox("disposalWorksConditionNotOp", 148, 130),
+  // Disposal Works Condition at y=121.1: "Operational" x=58.7, "with concerns" x=84.9, "Not Op" x=131.2
+  checkbox("disposalWorksConditionOperational", 54, 119.1),
+  checkbox("disposalWorksConditionConcerns", 80, 119.1),
+  checkbox("disposalWorksConditionNotOp", 127, 119.1),
 
-  // Alternative System Condition
-  checkbox("altSystemConditionOperational", 108, 140),
-  checkbox("altSystemConditionConcerns", 130, 140),
-  checkbox("altSystemConditionNotOp", 165, 140),
+  // Alternative System Condition at y=132.8: "Operational" x=88.2, "with concerns" x=114.4, "Not Op" x=160.8
+  checkbox("altSystemConditionOperational", 84, 130.8),
+  checkbox("altSystemConditionConcerns", 110, 130.8),
+  checkbox("altSystemConditionNotOp", 156, 130.8),
 
-  // Alternative Disposal Condition
-  checkbox("altDisposalConditionOperational", 102, 150),
-  checkbox("altDisposalConditionConcerns", 130, 150),
-  checkbox("altDisposalConditionNotOp", 160, 150),
+  // Alternative Disposal Condition at y=144.1: "Operational" x=75.4, "with concerns" x=101.6, "Not Op" x=147.9
+  checkbox("altDisposalConditionOperational", 71, 142.1),
+  checkbox("altDisposalConditionConcerns", 97, 142.1),
+  checkbox("altDisposalConditionNotOp", 143, 142.1),
 
   // Section 1: Facility Information
-  // A) Domestic Water Source checkboxes
-  checkbox("waterSourceHauled", 17, 180),
-  checkbox("waterSourceMunicipal", 58, 180),
-  checkbox("waterSourcePrivateCompany", 102, 180),
-  checkbox("waterSourceSharedWell", 137, 180),
-  checkbox("waterSourcePrivateWell", 175, 180),
-  textField("wellDistance", 108, 185, 75, 4.5),
+  // A) Domestic Water Source checkboxes at y=174.1
+  // "Hauled Water" x=29.6, "Municipal System" x=59.5, "Private Water Company" x=95.6,
+  // "Shared Private Well" x=139.0, "Private Well" x=175.2
+  checkbox("waterSourceHauled", 25, 172.1),
+  checkbox("waterSourceMunicipal", 55, 172.1),
+  checkbox("waterSourcePrivateCompany", 91, 172.1),
+  checkbox("waterSourceSharedWell", 135, 172.1),
+  checkbox("waterSourcePrivateWell", 171, 172.0),
+  // "If a well is nearby... distance... ____" at y=180.4 — data after ~x=115
+  textField("wellDistance", 115, 178.4, 60, 4.5),
 
-  // B) Type of Wastewater Source
-  checkbox("wastewaterResidential", 20, 195),
-  checkbox("wastewaterCommercial", 80, 195),
-  textField("wastewaterOther", 115, 195, 90, 4.5),
+  // B) Type of Wastewater Source at y≈190
+  // "Residential" at x=31.1, y=190.8; "Commercial" at x=61.2, y=190.1; "Other ____" at x=94.8, y=190.1
+  checkbox("wastewaterResidential", 27, 188.8),
+  checkbox("wastewaterCommercial", 57, 188.1),
+  textField("wastewaterOther", 108, 188.1, 100, 4.5),
 
-  // C) Occupancy/Use
-  checkbox("occupancyFullTime", 73, 201),
-  checkbox("occupancySeasonalPartTime", 108, 201),
-  checkbox("occupancyVacant", 138, 201),
-  checkbox("occupancyUnknown", 167, 201),
+  // C) Occupancy/Use at y=197.5
+  // "___ Full Time" at x=12.4 (data ~x=37); "____ Seasonal/Part Time" at x=69.8; "___ Vacant" at x=112.7; "____ Unknown" at x=139.8
+  checkbox("occupancyFullTime", 33, 195.5),
+  checkbox("occupancySeasonalPartTime", 65, 195.5),
+  checkbox("occupancyVacant", 108, 195.5),
+  checkbox("occupancyUnknown", 135, 195.5),
 
   // Section 2: General Treatment and Disposal Works
-  // GP 4.02 system type checkboxes (left column)
-  checkbox("checkbox_gp402_conventional", 13, 218),
-  checkbox("checkbox_gp402_septic_tank", 28, 225),
-  checkbox("checkbox_gp402_disposal_trench", 28, 231),
-  checkbox("checkbox_gp402_disposal_bed", 28, 237),
-  checkbox("checkbox_gp402_chamber", 28, 242),
-  checkbox("checkbox_gp402_seepage_pit", 28, 247),
-  checkbox("checkbox_gp403_composting", 13, 253),
-  checkbox("checkbox_gp404_pressure", 13, 259),
+  // Left column GP 4.02-4.04
+  // "GP 4.02 Conventional..." at x=19.7, y=215.5
+  checkbox("checkbox_gp402_conventional", 15, 213.5),
+  // Sub-items at x=44.2: Septic Tank y=220.4, Disposal Trench y=225.4, Disposal Bed y=230.4,
+  // Chamber y=235.3, Seepage Pit y=240.3
+  checkbox("checkbox_gp402_septic_tank", 39, 218.4),
+  checkbox("checkbox_gp402_disposal_trench", 39, 223.4),
+  checkbox("checkbox_gp402_disposal_bed", 39, 228.4),
+  checkbox("checkbox_gp402_chamber", 39, 233.3),
+  checkbox("checkbox_gp402_seepage_pit", 39, 238.3),
+  // "GP 4.03 Composting Toilet" at x=19.7, y=244.5
+  checkbox("checkbox_gp403_composting", 15, 242.5),
+  // "GP 4.04 Pressure Distribution System" at x=19.7, y=249.5
+  checkbox("checkbox_gp404_pressure", 15, 247.5),
 
-  // GP 4.05+ system type checkboxes (right column)
-  checkbox("checkbox_gp405_gravelless", 123, 218),
-  checkbox("checkbox_gp406_natural_evap", 123, 225),
-  checkbox("checkbox_gp407_lined_evap", 123, 231),
-  checkbox("checkbox_gp408_mound", 123, 237),
-  checkbox("checkbox_gp409_engineered_pad", 123, 242),
-  checkbox("checkbox_gp410_sand_filter", 123, 247),
-  checkbox("checkbox_gp411_peat_filter", 123, 253),
-  checkbox("checkbox_gp412_textile_filter", 123, 259),
+  // Right column GP 4.05-4.12
+  // "GP 4.05 Gravelless Trench" at x=112.2, y=215.6
+  checkbox("checkbox_gp405_gravelless", 108, 213.6),
+  // "GP 4.06 Natural Seal..." at x=112.2, y=220.5
+  checkbox("checkbox_gp406_natural_evap", 108, 218.5),
+  // "GP 4.07 Lined Evapotranspiration..." at x=112.2, y=225.5
+  checkbox("checkbox_gp407_lined_evap", 108, 223.5),
+  // "GP 4.08 Wisconsin Mound" at x=112.2, y=230.4
+  checkbox("checkbox_gp408_mound", 108, 228.4),
+  // "GP 4.09 Engineered Pad System" at x=112.2, y=235.4
+  checkbox("checkbox_gp409_engineered_pad", 108, 233.4),
+  // "GP 4.10 Intermittent Sand Filter" at x=112.2, y=240.3
+  checkbox("checkbox_gp410_sand_filter", 108, 238.3),
+  // "GP 4.11 Peat Filter" at x=112.3, y=244.6
+  checkbox("checkbox_gp411_peat_filter", 108, 242.6),
+  // "GP 4.12 Textile Filter" at x=112.3, y=249.3
+  checkbox("checkbox_gp412_textile_filter", 108, 247.3),
 ];
 
 // ---------------------------------------------------------------------------
@@ -270,76 +323,107 @@ const PAGE_3_SCHEMAS: Schema[] = [
 // ---------------------------------------------------------------------------
 const PAGE_4_SCHEMAS: Schema[] = [
   // Header repeaters
-  textField("taxParcelNumber_p4", 55, 10, 55, 5),
-  textField("dateOfInspection_p4", 143, 10, 40, 5),
-  textField("inspectorInitials_p4", 200, 10, 12, 5),
+  // "TAX PARCEL NO." at x=64.4, y=12.7
+  textField("taxParcelNumber_p4", 90, 10.7, 27, 5),
+  textField("dateOfInspection_p4", 148, 11.0, 15, 5),
+  textField("inspectorInitials_p4", 198, 11.3, 12, 5),
 
   // Section 2 continued: GP 4.13-4.23 system type checkboxes
   // Left column
-  checkbox("checkbox_gp413_denitrifying", 13, 27),
-  checkbox("checkbox_gp414_sewage_vault", 13, 35),
-  checkbox("checkbox_gp415_aerobic", 13, 41),
-  checkbox("checkbox_gp416_nitrate_filter", 13, 47),
-  checkbox("checkbox_gp417_cap", 13, 53),
-  checkbox("checkbox_gp418_wetland", 13, 59),
-  checkbox("checkbox_gp419_sand_lined", 13, 65),
+  // "GP 4.13..." at x=19.9, y=33.3
+  checkbox("checkbox_gp413_denitrifying", 15, 31.3),
+  // "GP 4.14 Sewage Vault" at x=19.9, y=43.2
+  checkbox("checkbox_gp414_sewage_vault", 15, 41.2),
+  // "GP 4.15 Aerobic System" at x=19.9, y=48.1
+  checkbox("checkbox_gp415_aerobic", 15, 46.1),
+  // "GP 4.16 Nitrate-Reactive Media Filter" at x=19.9, y=53.1
+  checkbox("checkbox_gp416_nitrate_filter", 15, 51.1),
+  // "GP 4.17 Cap System" at x=19.9, y=58.1
+  checkbox("checkbox_gp417_cap", 15, 56.1),
+  // "GP 4.18 Constructed Wetland" at x=19.9, y=63.0
+  checkbox("checkbox_gp418_wetland", 15, 61.0),
+  // "GP 4.19 Sand-Lined Trench" at x=19.9, y=68.0
+  checkbox("checkbox_gp419_sand_lined", 15, 66.0),
 
   // Right column
-  checkbox("checkbox_gp420_disinfection", 113, 27),
-  checkbox("checkbox_gp421_surface", 113, 35),
-  checkbox("checkbox_gp422_drip", 113, 41),
-  checkbox("checkbox_gp423_large_flow", 113, 47),
+  // "GP 4.20 Disinfection Device" at x=112.6, y=33.2
+  checkbox("checkbox_gp420_disinfection", 108, 31.2),
+  // "GP 4.21 Surface Disposal" at x=112.6, y=38.0
+  checkbox("checkbox_gp421_surface", 108, 36.0),
+  // "GP 4.22 Subsurface Drip..." at x=112.6, y=42.6
+  checkbox("checkbox_gp422_drip", 108, 40.6),
+  // "GP 4.23 Design flow..." at x=112.6, y=47.4
+  checkbox("checkbox_gp423_large_flow", 108, 45.4),
 
-  // Performance Assurance Plan
-  checkbox("performanceAssurancePlanYes", 140, 62),
-  checkbox("performanceAssurancePlanNo", 155, 62),
+  // Performance Assurance Plan: "Yes" at x=124.6, y=62.3; "No" at x=137.3
+  checkbox("performanceAssurancePlanYes", 120, 60.3),
+  checkbox("performanceAssurancePlanNo", 133, 60.3),
 
   // Section 3: Design Flow and Septic Tank Sizing
-  // 3A: Estimated Design Flow
-  textField("estimatedDesignFlow", 65, 82, 35, 5),
-  checkbox("designFlowUnknown", 125, 82),
+  // "Estimated Design Flow:" at x=25.4, y=82.6; "gallons per day" at x=77.0, y=83.4
+  // Data goes between label end (~x=60) and "gallons per day" (~x=75)
+  textField("estimatedDesignFlow", 60, 80.6, 15, 5),
+  // "Unknown" checkbox at x=120.3, y=83.4
+  checkbox("designFlowUnknown", 116, 81.4),
 
   // 3B: Basis for design flow
-  checkbox("designFlowBasisPermit", 20, 96),
-  checkbox("designFlowBasisCalculated", 20, 101),
-  textField("numberOfBedrooms", 80, 108, 35, 4),
-  textField("fixtureCount", 80, 114, 35, 4),
-  textField("nonDwellingGpd", 57, 119, 25, 4),
+  // "Designated in permitting documents" at x=31.3, y=94.7
+  checkbox("designFlowBasisPermit", 27, 92.7),
+  // "Calculated or estimated..." at x=31.3, y=99.7
+  checkbox("designFlowBasisCalculated", 27, 97.7),
+  // "Number of bedrooms for a dwelling: ____" at x=44.0, y=104.6 — data after ~x=110
+  textField("numberOfBedrooms", 110, 102.6, 20, 4),
+  // "Fixture count for a dwelling: ____" at x=44.0, y=109.6 — data after ~x=105
+  textField("fixtureCount", 105, 107.6, 20, 4),
+  // "If not a dwelling: ____ gallons per day" at x=44.0, y=114.5 — data after ~x=80
+  textField("nonDwellingGpd", 80, 112.5, 25, 4),
 
   // 3C: Actual flow evaluation
-  checkbox("actualFlowNotExceed", 20, 126),
-  checkbox("actualFlowMayExceed", 20, 132),
-  checkbox("actualFlowUnknown", 20, 137),
+  // "Actual flow did not appear to exceed design flow" at x=31.3, y=124.5
+  checkbox("actualFlowNotExceed", 27, 122.5),
+  // "Actual flow may exceed design flow" at x=31.3, y=129.4
+  checkbox("actualFlowMayExceed", 27, 127.4),
+  // "Unknown" at x=31.3, y=134.4
+  checkbox("actualFlowUnknown", 27, 132.4),
 
-  // 3D: Inspector Comments (design flow)
-  multilineField("designFlowComments", 50, 142, 155, 12),
+  // 3D: "Inspector Comments: ____" at x=25.4, y=139.3 — data after ~x=62
+  multilineField("designFlowComments", 62, 137.3, 146, 10),
 
   // Section 4: Septic Tank Inspection and Pumping
-  // 4A: Number of tanks
-  checkbox("numberOfTanks1", 145, 163),
-  checkbox("numberOfTanks2OrMore", 162, 163),
+  // 4A: Number of tanks — "1" at x=152.9, y=160.0; "2 or more" at x=170.3
+  checkbox("numberOfTanks1", 148, 158.0),
+  checkbox("numberOfTanks2OrMore", 166, 158.0),
 
   // 4B: Liquid levels
-  textField("tank1_liquidLevel", 156, 170, 30, 4.5),
-  textField("tank1_primaryScumThickness", 105, 177, 15, 4),
-  textField("tank1_primarySludgeThickness", 155, 177, 15, 4),
-  textField("tank1_secondaryScumThickness", 105, 183, 15, 4),
-  textField("tank1_secondarySludgeThickness", 155, 183, 15, 4),
-  checkbox("tank1_liquidLevelNotDetermined", 20, 188),
+  // "B) Septic tank liquid level..." at y=166.2
+  // "Primary (inlet) chamber: Scum thickness ____ inches, Sludge thickness ____ inches" at y=172.0
+  // "Scum thickness" label ends ~x=92; "Sludge thickness" label ends ~x=152
+  textField("tank1_primaryScumThickness", 92, 170.0, 15, 4),
+  textField("tank1_primarySludgeThickness", 152, 170.0, 15, 4),
+  // "Secondary (outlet) chamber: ..." at y=176.9
+  textField("tank1_secondaryScumThickness", 92, 174.9, 15, 4),
+  textField("tank1_secondarySludgeThickness", 152, 174.9, 15, 4),
+  // "Liquid level not determined" at x=29.7, y=181.9
+  checkbox("tank1_liquidLevelNotDetermined", 25, 179.9),
 
-  // 4C: Pumping
-  checkbox("tanksPumpedYes", 138, 194),
-  checkbox("tanksPumpedNo", 155, 194),
-  textField("haulerCompany", 92, 201, 113, 4.5),
-  textField("haulerLicense", 72, 207, 133, 4.5),
+  // 4C: Pumping — "Yes" at x=139.3, y=191.7; "No" at x=152.0
+  checkbox("tanksPumpedYes", 135, 189.7),
+  checkbox("tanksPumpedNo", 148, 189.7),
+  // "If yes... septic hauler company? ____" at x=26.0, y=196.8 — data after ~x=96
+  textField("haulerCompany", 96, 194.8, 112, 4.5),
+  // "License number issued by ADEQ: ____" at x=38.7, y=203.5 — data after ~x=92
+  textField("haulerLicense", 92, 201.5, 116, 4.5),
 
-  // Pumping not performed reasons (checkboxes)
-  checkbox("pumpingNotPerformed_dischAuth", 18, 220),
-  checkbox("pumpingNotPerformed_notNecessary", 18, 229),
-  checkbox("pumpingNotPerformed_noAccumulation", 18, 238),
+  // Pumping not performed reasons
+  // "A Discharge Authorization..." at x=31.1, y=215.0
+  checkbox("pumpingNotPerformed_dischAuth", 26, 213.0),
+  // "Pumping or servicing was not necessary..." at x=30.6, y=224.6
+  checkbox("pumpingNotPerformed_notNecessary", 26, 222.6),
+  // "No accumulation..." at x=30.6, y=234.1
+  checkbox("pumpingNotPerformed_noAccumulation", 26, 232.1),
 
-  // 4D: Date of inspection for tank
-  textField("tankInspectionDate", 80, 248, 40, 4.5),
+  // 4D: "Indicate the date the inspection was performed. ____" at x=12.7, y=242.0 — data after ~x=95
+  textField("tankInspectionDate", 95, 240.0, 40, 4.5),
 ];
 
 // ---------------------------------------------------------------------------
@@ -347,127 +431,150 @@ const PAGE_4_SCHEMAS: Schema[] = [
 // ---------------------------------------------------------------------------
 const PAGE_5_SCHEMAS: Schema[] = [
   // Header repeaters
-  textField("taxParcelNumber_p5", 55, 10, 55, 5),
-  textField("dateOfInspection_p5", 143, 10, 40, 5),
-  textField("inspectorInitials_p5", 200, 10, 12, 5),
+  // "TAX PARCEL NO." at x=64.9, y=13.0
+  textField("taxParcelNumber_p5", 90, 11.0, 27, 5),
+  textField("dateOfInspection_p5", 148, 11.0, 15, 5),
+  textField("inspectorInitials_p5", 198, 11.0, 12, 5),
 
   // 4E: Capacity
-  textField("tank1_tankCapacity", 67, 27, 25, 4.5),
-  textField("tank1_tankDimensions", 155, 27, 45, 4.5),
-  checkbox("tank1_capacityBasisVolumePumped", 36, 33),
-  checkbox("tank1_capacityBasisEstimate", 80, 33),
-  checkbox("tank1_capacityBasisPermit", 113, 33),
-  checkbox("tank1_capacityBasisNotDetermined", 36, 39),
-  textField("tank1_capacityNotDeterminedReason", 91, 39, 114, 4),
+  // "The Capacity of the septic tank is ____ gallons" at x=13.2, y=29.1 — data ~x=72
+  textField("tank1_tankCapacity", 72, 27.1, 25, 4.5),
+  // "Measurement/dimensions of tank: ____" at x=114.6, y=28.9 — data ~x=160
+  textField("tank1_tankDimensions", 160, 26.9, 45, 4.5),
+  // "Volume Pumped" at x=51.0, y=34.0
+  checkbox("tank1_capacityBasisVolumePumped", 47, 32.0),
+  // "Estimate" at x=114.5, y=34.0
+  checkbox("tank1_capacityBasisEstimate", 110, 32.0),
+  // "Permit Document" at x=165.3, y=34.0
+  checkbox("tank1_capacityBasisPermit", 161, 32.0),
+  // "Capacity not determined (Explain): ____" at x=51.0, y=38.6 — data after ~x=105
+  checkbox("tank1_capacityBasisNotDetermined", 47, 36.6),
+  textField("tank1_capacityNotDeterminedReason", 105, 36.6, 103, 4),
 
-  // 4F: Septic tank material
-  checkbox("tank1_materialPrecastConcrete", 20, 48),
-  checkbox("tank1_materialFiberglass", 62, 48),
-  checkbox("tank1_materialPlastic", 95, 48),
-  checkbox("tank1_materialSteel", 122, 48),
-  checkbox("tank1_materialCastInPlace", 148, 48),
-  checkbox("tank1_materialOther", 20, 54),
-  textField("tank1_tankMaterialOther", 50, 54, 155, 4.5),
+  // 4F: Septic tank material at y=49.2
+  // "Pre-cast concrete" x=32.1, "Fiberglass" x=68.6, "Plastic" x=95.2, "Steel" x=116.6, "Cast-in-place concrete" x=135.3
+  checkbox("tank1_materialPrecastConcrete", 28, 47.2),
+  checkbox("tank1_materialFiberglass", 64, 47.2),
+  checkbox("tank1_materialPlastic", 91, 47.2),
+  checkbox("tank1_materialSteel", 112, 47.2),
+  checkbox("tank1_materialCastInPlace", 131, 47.2),
+  // "Other (Describe): ____" at x=32.1, y=54.2
+  checkbox("tank1_materialOther", 28, 52.2),
+  textField("tank1_tankMaterialOther", 60, 52.2, 148, 4.5),
 
-  // 4G: Access openings
-  checkbox("tank1_accessOne", 90, 65),
-  checkbox("tank1_accessTwo", 112, 65),
-  checkbox("tank1_accessThree", 133, 65),
-  checkbox("tank1_accessOther", 160, 65),
-  textField("tank1_accessOpeningsOther", 180, 65, 25, 4.5),
+  // 4G: Access openings at y=61.9
+  // "One" x=69.3, "Two" x=83.6, "Three" x=96.3, "Other (Describe):____" x=112.2
+  checkbox("tank1_accessOne", 65, 59.9),
+  checkbox("tank1_accessTwo", 79, 59.9),
+  checkbox("tank1_accessThree", 92, 59.9),
+  checkbox("tank1_accessOther", 108, 59.9),
+  textField("tank1_accessOpeningsOther", 140, 59.9, 65, 4.5),
 
   // 4H: Lids & risers
-  checkbox("tank1_lidsPresent", 85, 75),
-  checkbox("tank1_lidsNotPresent", 110, 75),
-  checkbox("tank1_lidsSecureYes", 110, 80),
-  checkbox("tank1_lidsSecureNo", 130, 80),
+  // "Present" at x=60.9, y=70.5; "Not Present" at x=78.6
+  checkbox("tank1_lidsPresent", 57, 68.5),
+  checkbox("tank1_lidsNotPresent", 74, 68.5),
+  // "Yes" at x=89.5, y=75.4 (securely fastened); "No" at x=104.2
+  checkbox("tank1_lidsSecureYes", 85, 73.4),
+  checkbox("tank1_lidsSecureNo", 100, 73.4),
 
-  // 4I: Compartments
-  checkbox("tank1_compartmentsOne", 108, 91),
-  checkbox("tank1_compartmentsTwo", 128, 91),
-  checkbox("tank1_compartmentsOther", 148, 91),
-  textField("tank1_compartmentsOther_text", 175, 91, 30, 4.5),
+  // 4I: Compartments at y=87.8
+  // "One" x=84.4, "Two" x=97.9, "Other (Describe): ____" x=110.7
+  checkbox("tank1_compartmentsOne", 80, 85.8),
+  checkbox("tank1_compartmentsTwo", 94, 85.8),
+  checkbox("tank1_compartmentsOther", 107, 85.0),
+  textField("tank1_compartmentsOther_text", 138, 85.0, 68, 4.5),
 
-  // 4J: Compromised tank
-  checkbox("tank1_compromisedYes", 148, 100),
-  checkbox("tank1_compromisedNo", 168, 100),
+  // 4J: Compromised tank at y=94.2
+  // "Yes" x=153.6, "No" x=166.8
+  checkbox("tank1_compromisedYes", 149, 92.2),
+  checkbox("tank1_compromisedNo", 163, 92.2),
 
-  // 4K: Deficiencies
-  checkbox("tank1_deficiencyRootInvasion", 16, 117),
-  checkbox("tank1_deficiencyExposedRebar", 113, 117),
-  checkbox("tank1_deficiencyCracks", 16, 123),
-  checkbox("tank1_deficiencyDamagedInlet", 113, 123),
-  checkbox("tank1_deficiencyDamagedLids", 16, 128),
-  checkbox("tank1_deficiencyDamagedOutlet", 113, 128),
-  checkbox("tank1_deficiencyDeterioratingConcrete", 16, 133),
-  checkbox("tank1_deficiencyOther", 113, 133),
+  // 4K: Deficiencies — left column at x=24.6/24.5, right column at x=76.1/76.2
+  // "Root invasion" x=24.6, y=111.5; "Exposed rebar" x=76.1, y=111.5
+  checkbox("tank1_deficiencyRootInvasion", 20, 109.5),
+  checkbox("tank1_deficiencyExposedRebar", 72, 109.5),
+  // "Cracks in tank" x=24.5, y=116.4; "Damaged inlet pipe" x=76.1, y=116.4
+  checkbox("tank1_deficiencyCracks", 20, 114.4),
+  checkbox("tank1_deficiencyDamagedInlet", 72, 114.4),
+  // "Damaged lids or risers" x=24.5, y=121.4; "Damaged outlet pipe" x=76.2, y=121.4
+  checkbox("tank1_deficiencyDamagedLids", 20, 119.4),
+  checkbox("tank1_deficiencyDamagedOutlet", 72, 119.4),
+  // "Deteriorating concrete" x=24.5, y=126.4; "Other concerns..." x=76.1, y=126.4
+  checkbox("tank1_deficiencyDeterioratingConcrete", 20, 124.4),
+  checkbox("tank1_deficiencyOther", 72, 124.4),
 
-  // 4L: Baffle/sanitary T material
-  checkbox("tank1_baffleMaterialPrecast", 20, 142),
-  checkbox("tank1_baffleMaterialFiberglass", 85, 142),
-  checkbox("tank1_baffleMaterialPlastic", 112, 142),
-  checkbox("tank1_baffleMaterialCite", 140, 142),
-  checkbox("tank1_baffleMaterialNotDetermined", 165, 142),
+  // 4L: Baffle/sanitary T material at y=138.4
+  // "Pre-cast concrete" x=30.1, "Fiberglass" x=63.4, "Plastic" x=85.9, "Clay" x=103.5,
+  // "Could not be determined..." x=119.4
+  checkbox("tank1_baffleMaterialPrecast", 26, 136.4),
+  checkbox("tank1_baffleMaterialFiberglass", 59, 136.4),
+  checkbox("tank1_baffleMaterialPlastic", 82, 136.4),
+  checkbox("tank1_baffleMaterialCite", 99, 136.4),
+  checkbox("tank1_baffleMaterialNotDetermined", 115, 136.4),
 
   // Baffle conditions
-  // Inlet baffle
-  checkbox("tank1_inletBafflePresent", 82, 155),
-  checkbox("tank1_inletBaffleOperational", 108, 155),
-  checkbox("tank1_inletBaffleNotOp", 140, 155),
-  checkbox("tank1_inletBaffleNotPresent", 168, 155),
-  checkbox("tank1_inletBaffleNotDetermined", 190, 155),
+  // Inlet baffle at y=149.4: "Present" x=55.2, "Operational" x=73.7, "Not operational" x=99.1,
+  //   "Not present" x=129.3, "Not determined" x=155.5
+  checkbox("tank1_inletBafflePresent", 51, 147.4),
+  checkbox("tank1_inletBaffleOperational", 69, 147.4),
+  checkbox("tank1_inletBaffleNotOp", 95, 147.4),
+  checkbox("tank1_inletBaffleNotPresent", 125, 147.4),
+  checkbox("tank1_inletBaffleNotDetermined", 151, 147.4),
 
-  // Outlet baffle
-  checkbox("tank1_outletBafflePresent", 82, 163),
-  checkbox("tank1_outletBaffleOperational", 108, 163),
-  checkbox("tank1_outletBaffleNotOp", 140, 163),
-  checkbox("tank1_outletBaffleNotPresent", 168, 163),
-  checkbox("tank1_outletBaffleNotDetermined", 190, 163),
+  // Outlet baffle at y=159.3: "Present" x=55.4, "Operational" x=74.7, "Not operational" x=99.3,
+  //   "Not present" x=129.6, "Not determined" x=155.8
+  checkbox("tank1_outletBafflePresent", 51, 157.3),
+  checkbox("tank1_outletBaffleOperational", 70, 157.3),
+  checkbox("tank1_outletBaffleNotOp", 95, 157.3),
+  checkbox("tank1_outletBaffleNotPresent", 125, 157.3),
+  checkbox("tank1_outletBaffleNotDetermined", 152, 157.3),
 
-  // Interior baffle
-  checkbox("tank1_interiorBafflePresent", 82, 170),
-  checkbox("tank1_interiorBaffleOperational", 108, 170),
-  checkbox("tank1_interiorBaffleNotOp", 140, 170),
-  checkbox("tank1_interiorBaffleNotPresent", 168, 170),
-  checkbox("tank1_interiorBaffleNotDetermined", 190, 170),
+  // Interior baffle at y=169.2: "Present" x=54.9, "Operational" x=74.3, "Not operational" x=98.8,
+  //   "Not present" x=129.1, "Not determined" x=155.3
+  checkbox("tank1_interiorBafflePresent", 51, 167.2),
+  checkbox("tank1_interiorBaffleOperational", 70, 167.2),
+  checkbox("tank1_interiorBaffleNotOp", 95, 167.2),
+  checkbox("tank1_interiorBaffleNotPresent", 125, 167.2),
+  checkbox("tank1_interiorBaffleNotDetermined", 151, 167.2),
 
-  // 4M: Effluent filter
-  checkbox("tank1_effluentFilterPresent", 80, 180),
-  checkbox("tank1_effluentFilterNotPresent", 108, 180),
-  checkbox("tank1_effluentFilterServiced", 140, 180),
-  checkbox("tank1_effluentFilterNotServiced", 168, 180),
+  // 4M: Effluent filter at y=176.4
+  // "Present" x=54.3, "Not Present" x=73.6, "Serviced" x=98.1, "Not serviced" x=127.4
+  checkbox("tank1_effluentFilterPresent", 50, 174.4),
+  checkbox("tank1_effluentFilterNotPresent", 69, 174.4),
+  checkbox("tank1_effluentFilterServiced", 94, 174.4),
+  checkbox("tank1_effluentFilterNotServiced", 123, 174.4),
 
-  // Septic tank comments (inspector comments section)
-  multilineField("septicTankComments", 14, 202, 192, 17),
+  // Septic tank comments (inspector comments section) at y≈198.4
+  multilineField("septicTankComments", 14, 196.4, 194, 20),
 
-  // 4.1 Disposal Works section (starts on this page)
-  // Location determined
-  checkbox("disposalWorksLocationYes", 20, 230),
-  checkbox("disposalWorksLocationNo", 105, 230),
-  textField(
-    "disposalWorksLocationNotDeterminedReason",
-    120,
-    230,
-    85,
-    4.5,
-  ),
+  // 4.1 Disposal Works section
+  // "Was the location of disposal works determined?" at y=222.0
+  // "Yes (see sketch on last page)" at x=30.0, y=227.3; "No (explain why): ____" at x=79.2, y=227.3
+  checkbox("disposalWorksLocationYes", 26, 225.3),
+  checkbox("disposalWorksLocationNo", 75, 225.3),
+  textField("disposalWorksLocationNotDeterminedReason", 105, 225.3, 100, 4.5),
 
-  // Disposal works type
-  checkbox("disposalTypeTrench", 20, 242),
-  checkbox("disposalTypeBed", 60, 242),
-  checkbox("disposalTypeChamber", 95, 242),
-  checkbox("disposalTypeSeepagePit", 125, 242),
-  checkbox("disposalTypeOther", 155, 242),
-  textField("disposalTypeOtherText", 172, 242, 33, 4.5),
+  // Disposal works type at y=237.6
+  // "Trench" x=30.1, "Bed" x=55.5, "Chamber" x=80.9, "Seepage pit" x=106.3, "Other: ____" x=131.6
+  checkbox("disposalTypeTrench", 26, 235.6),
+  checkbox("disposalTypeBed", 51, 235.6),
+  checkbox("disposalTypeChamber", 77, 235.6),
+  checkbox("disposalTypeSeepagePit", 102, 235.6),
+  checkbox("disposalTypeOther", 127, 235.5),
+  textField("disposalTypeOtherText", 143, 235.5, 62, 4.5),
 
-  // Method of distribution
-  checkbox("distributionDiversion", 17, 253),
-  checkbox("distributionDropBox", 75, 253),
-  checkbox("distributionBox", 108, 253),
-  checkbox("distributionManifold", 140, 253),
-  checkbox("distributionSerial", 170, 253),
-  checkbox("distributionPressurized", 17, 259),
-  checkbox("distributionUnknown", 75, 259),
+  // Method of distribution at y=249.0
+  // "Diversion valve" x=30.1, "Drop box" x=65.0, "Distribution box" x=92.8,
+  // "Manifold" x=128.9, "Serial loading" x=154.2
+  checkbox("distributionDiversion", 26, 247.0),
+  checkbox("distributionDropBox", 61, 247.0),
+  checkbox("distributionBox", 88, 247.0),
+  checkbox("distributionManifold", 125, 247.0),
+  checkbox("distributionSerial", 150, 247.0),
+  // "Pressurized" x=30.1, y=253.9; "Unknown" x=64.4
+  checkbox("distributionPressurized", 26, 251.9),
+  checkbox("distributionUnknown", 60, 251.9),
 ];
 
 // ---------------------------------------------------------------------------
@@ -476,75 +583,102 @@ const PAGE_5_SCHEMAS: Schema[] = [
 // ---------------------------------------------------------------------------
 const PAGE_6_SCHEMAS: Schema[] = [
   // Header repeaters
-  textField("taxParcelNumber_p6", 55, 10, 55, 5),
-  textField("dateOfInspection_p6", 143, 10, 40, 5),
-  textField("inspectorInitials_p6", 200, 10, 12, 5),
+  // "TAX PARCEL NO." at x=64.2, y=13.1
+  textField("taxParcelNumber_p6", 90, 11.1, 27, 5),
+  textField("dateOfInspection_p6", 148, 11.1, 15, 5),
+  textField("inspectorInitials_p6", 198, 11.1, 12, 5),
 
-  // Distribution component inspected
-  checkbox("distributionInspectedYes", 100, 26),
-  checkbox("distributionInspectedNo", 118, 26),
+  // Distribution component inspected at y=24.1
+  // "Yes" x=82.9, "No" x=97.6
+  checkbox("distributionInspectedYes", 78, 22.1),
+  checkbox("distributionInspectedNo", 93, 22.1),
 
-  // Supply line material
-  checkbox("supplyLinePVC", 72, 32),
-  checkbox("supplyLineOrangeburg", 92, 32),
-  checkbox("supplyLineTile", 130, 32),
-  checkbox("supplyLineOther", 155, 32),
-  textField("supplyLineMaterialOtherText", 172, 32, 33, 4.5),
+  // Supply line material at y=29.6
+  // "PVC" x=89.5, "Orangeburg" x=105.9, "Tile" x=136.0, "Other ____" x=153.4
+  checkbox("supplyLinePVC", 85, 27.6),
+  checkbox("supplyLineOrangeburg", 102, 27.6),
+  checkbox("supplyLineTile", 132, 27.6),
+  checkbox("supplyLineOther", 149, 27.6),
+  textField("supplyLineMaterialOtherText", 165, 27.6, 40, 4.5),
 
-  // Inspection ports
-  checkbox("inspectionPortsPresent", 72, 38),
-  checkbox("inspectionPortsNotPresent", 105, 38),
+  // Inspection ports at y=34.9
+  // "Present" x=92.0, "Not present" x=112.1
+  checkbox("inspectionPortsPresent", 88, 32.9),
+  checkbox("inspectionPortsNotPresent", 108, 32.9),
 
   // Port details
-  textField("numberOfPorts", 60, 45, 15, 4),
-  // Port depths (8 ports)
-  textField("portDepth1", 26, 52, 18, 4),
-  textField("portDepth2", 68, 52, 18, 4),
-  textField("portDepth3", 111, 52, 18, 4),
-  textField("portDepth4", 155, 52, 18, 4),
-  textField("portDepth5", 26, 58, 18, 4),
-  textField("portDepth6", 68, 58, 18, 4),
-  textField("portDepth7", 111, 58, 18, 4),
-  textField("portDepth8", 155, 58, 18, 4),
+  // "Number of ports: ____" at x=55.6, y=45.3 — data after ~x=85
+  textField("numberOfPorts", 85, 43.3, 15, 4),
 
-  // Hydraulic load test
-  checkbox("hydraulicLoadTestYes", 130, 70),
-  checkbox("hydraulicLoadTestNo", 148, 70),
+  // Port depths at y=55.8 and y=60.8
+  // "________ Port 1" x=55.7, "Port 2" x=84.8, "Port 3" x=114.0, "Port 4" x=143.1
+  // Data goes before the "Port N" label, on the underline
+  textField("portDepth1", 43, 53.8, 18, 4),
+  textField("portDepth2", 72, 53.8, 18, 4),
+  textField("portDepth3", 101, 53.8, 18, 4),
+  textField("portDepth4", 130, 53.8, 18, 4),
+  // "Port 5" x=55.6, "Port 6" x=84.7, "Port 7" x=113.8, "Port 8" x=143.0 at y=60.8
+  textField("portDepth5", 43, 58.8, 18, 4),
+  textField("portDepth6", 72, 58.8, 18, 4),
+  textField("portDepth7", 101, 58.8, 18, 4),
+  textField("portDepth8", 130, 58.8, 18, 4),
 
-  // Disposal works deficiency
-  checkbox("hasDisposalDeficiencyYes", 115, 80),
-  checkbox("hasDisposalDeficiencyNo", 130, 80),
+  // Hydraulic load test at y=68.1
+  // "Yes" x=126.5, "No" x=144.0
+  checkbox("hydraulicLoadTestYes", 122, 66.1),
+  checkbox("hydraulicLoadTestNo", 140, 66.1),
 
-  // Deficiency checkboxes (list)
-  checkbox("defCrushedOutletPipe", 17, 87),
-  checkbox("defRootInvasion", 17, 93),
-  checkbox("defHighWaterLines", 17, 98),
-  checkbox("defDboxNotFunctioning", 17, 103),
-  checkbox("defSurfacing", 17, 108),
-  checkbox("defLushVegetation", 17, 113),
-  checkbox("defErosion", 17, 118),
-  checkbox("defPondingWater", 17, 123),
-  checkbox("defAnimalIntrusion", 17, 128),
-  checkbox("defLoadTestFailure", 17, 133),
-  checkbox("defCouldNotDetermine", 17, 138),
+  // Disposal works deficiency at y=74.0
+  // "Yes" x=93.6, "No" x=108.4
+  checkbox("hasDisposalDeficiencyYes", 89, 72.0),
+  checkbox("hasDisposalDeficiencyNo", 104, 72.0),
 
-  // Repairs recommended
-  checkbox("repairsRecommendedYes", 148, 142),
-  checkbox("repairsRecommendedNo", 168, 142),
+  // Deficiency checkboxes — all at x=29.7, checkboxes 5mm left = ~24.7
+  // "Crushed outlet pipe" y=84.0
+  checkbox("defCrushedOutletPipe", 25, 82.0),
+  // "Root invasion" y=88.9
+  checkbox("defRootInvasion", 25, 86.9),
+  // "High water lines..." y=93.9
+  checkbox("defHighWaterLines", 25, 91.9),
+  // "D-box or valve not functioning..." y=98.8
+  checkbox("defDboxNotFunctioning", 25, 96.8),
+  // "Surfacing..." y=103.8
+  checkbox("defSurfacing", 25, 101.8),
+  // "Unusually lush vegetation..." y=108.7
+  checkbox("defLushVegetation", 25, 106.7),
+  // "Erosion..." y=113.6
+  checkbox("defErosion", 25, 111.6),
+  // "Ponding water..." y=118.7
+  checkbox("defPondingWater", 25, 116.7),
+  // "Animal intrusion" y=123.6
+  checkbox("defAnimalIntrusion", 25, 121.6),
+  // "Operational (water loading) test failure" y=128.5
+  checkbox("defLoadTestFailure", 25, 126.5),
+  // "Could Not Determine" y=133.5
+  checkbox("defCouldNotDetermine", 25, 131.5),
 
-  // Inspector Comments (disposal works)
-  multilineField("disposalWorksComments", 19, 148, 186, 17),
+  // Repairs recommended at y=139.0
+  // "Yes" x=157.8, "No" x=172.5
+  checkbox("repairsRecommendedYes", 153, 137.0),
+  checkbox("repairsRecommendedNo", 168, 137.0),
+
+  // Inspector Comments (disposal works) at y≈144.3 — "Inspector Comments:" at x=19.1
+  // Comment underlines from y≈148.6 to y≈157.0
+  multilineField("disposalWorksComments", 19, 146.3, 189, 12),
 
   // Signature area
+  // "Signature: ____" at x=19.1, y=204.4 — signature image on the underline ~x=48
   {
     name: "signatureImage",
     type: "image",
-    position: { x: 19, y: 205 },
+    position: { x: 48, y: 198 },
     width: 60,
-    height: 12,
+    height: 14,
   } as Schema,
-  textField("signatureDate", 145, 208, 50, 5),
-  textField("printedName", 55, 220, 80, 5),
+  // "Date:_____" at x=136.9, y=204.4 — data after "Date:" ~x=148
+  textField("signatureDate", 148, 202.4, 50, 5),
+  // "Printed name: ____" at x=19.1, y=214.4 — data after "Printed name:" ~x=55
+  textField("printedName", 55, 212.4, 80, 5),
 ];
 
 // ---------------------------------------------------------------------------
@@ -576,38 +710,19 @@ export interface LoadedTemplate {
  * Loads the ADEQ form template with basePdf and fonts.
  * Caches the result so subsequent calls do not re-fetch.
  *
- * Must be called in a browser environment (uses fetch()).
+ * Works in both browser and server-side (Node.js / Vercel) environments.
  */
 export async function loadTemplate(): Promise<LoadedTemplate> {
   if (cachedTemplate && cachedFont) {
     return { template: cachedTemplate, font: cachedFont };
   }
 
-  // Fetch basePdf and fonts in parallel
-  const [pdfResponse, regularFontResponse, boldFontResponse] =
-    await Promise.all([
-      fetch("/septic_system_insp_form.pdf"),
-      fetch("/fonts/LiberationSans-Regular.ttf"),
-      fetch("/fonts/LiberationSans-Bold.ttf"),
-    ]);
-
-  if (!pdfResponse.ok) {
-    throw new Error(
-      `Failed to load base PDF: ${pdfResponse.status} ${pdfResponse.statusText}`,
-    );
-  }
-  if (!regularFontResponse.ok) {
-    throw new Error(
-      `Failed to load regular font: ${regularFontResponse.status}`,
-    );
-  }
-  if (!boldFontResponse.ok) {
-    throw new Error(`Failed to load bold font: ${boldFontResponse.status}`);
-  }
-
-  const basePdf = await pdfResponse.arrayBuffer();
-  const regularFontData = await regularFontResponse.arrayBuffer();
-  const boldFontData = await boldFontResponse.arrayBuffer();
+  // Load basePdf and fonts in parallel
+  const [basePdf, regularFontData, boldFontData] = await Promise.all([
+    loadPublicFile("/septic_system_insp_form.pdf"),
+    loadPublicFile("/fonts/LiberationSans-Regular.ttf"),
+    loadPublicFile("/fonts/LiberationSans-Bold.ttf"),
+  ]);
 
   const template: Template = {
     basePdf: new Uint8Array(basePdf),

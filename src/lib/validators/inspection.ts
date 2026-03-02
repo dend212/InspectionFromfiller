@@ -267,6 +267,7 @@ export const disposalWorksSchema = z.object({
   // Signature area
   signatureDate: z.string().optional().default(""),
   printedName: z.string().optional().default(""),
+  signatureDataUrl: z.string().optional().default(""),
 });
 
 // ============================================================================

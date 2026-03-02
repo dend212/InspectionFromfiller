@@ -49,6 +49,8 @@ export async function POST(
     .set({
       status: "in_review",
       completedAt: null,
+      finalizedPdfPath: null,
+      reviewedBy: null,
       updatedAt: new Date(),
     })
     .where(and(eq(inspections.id, id), eq(inspections.status, "completed")))

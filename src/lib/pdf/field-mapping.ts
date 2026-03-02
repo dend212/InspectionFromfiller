@@ -239,7 +239,7 @@ export function mapFormDataToInputs(
     inspectorInitials_p3: initials,
 
     // Facility type -- "Serves" checkboxes
-    facilityTypeResidence: fi?.facilityType ? "X" : "",
+    facilityTypeResidence: (fi?.facilityType === "single_family" || fi?.facilityType === "multifamily") ? "X" : "",
     facilityTypeSingleFamily: enumToX(fi?.facilityType, "single_family"),
     facilityTypeMultiFamily: enumToX(fi?.facilityType, "multifamily"),
     facilityTypeCommercial: enumToX(fi?.facilityType, "commercial"),
@@ -363,7 +363,7 @@ export function mapFormDataToInputs(
 
     // Section 3: Design Flow
     estimatedDesignFlow: str(df?.estimatedDesignFlow),
-    designFlowUnknown: str(df?.estimatedDesignFlow) === "" ? "X" : "",
+    designFlowUnknown: df?.designFlowBasis === "unknown" || df?.actualFlowEvaluation === "unknown" ? "X" : "",
 
     // Design flow basis
     designFlowBasisPermit: enumToX(df?.designFlowBasis, "permit_documents"),
@@ -385,9 +385,7 @@ export function mapFormDataToInputs(
 
     // Section 4A: Number of tanks
     numberOfTanks1: enumToX(st?.numberOfTanks, "1"),
-    numberOfTanks2OrMore: str(st?.numberOfTanks) !== "" && str(st?.numberOfTanks) !== "1"
-      ? "X"
-      : "",
+    numberOfTanks2OrMore: Number.parseInt(str(st?.numberOfTanks), 10) >= 2 ? "X" : "",
 
     // Section 4B: Tank 1 liquid levels
     tank1_liquidLevel: str(tank1?.liquidLevel),

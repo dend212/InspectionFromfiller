@@ -79,49 +79,56 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
   const numberOfTanksValue = form.watch("septicTank.numberOfTanks");
   const numberOfTanks = Math.min(Math.max(Number.parseInt(numberOfTanksValue || "1", 10) || 1, 1), 3);
 
-  // Ensure the tanks array has enough entries (in useEffect to avoid side effects during render)
+  // Sync the tanks array to match numberOfTanks (grow or shrink)
   useEffect(() => {
     const currentTanks = form.getValues("septicTank.tanks") ?? [];
+    if (currentTanks.length === numberOfTanks) return;
+
+    const emptyTank = {
+      liquidLevel: "",
+      primaryScumThickness: "",
+      primarySludgeThickness: "",
+      secondaryScumThickness: "",
+      secondarySludgeThickness: "",
+      liquidLevelNotDetermined: false,
+      tankDimensions: "",
+      tankCapacity: "",
+      capacityBasis: "",
+      capacityNotDeterminedReason: "",
+      tankMaterial: "",
+      tankMaterialOther: "",
+      accessOpenings: "",
+      accessOpeningsOther: "",
+      lidsRisersPresent: "" as "" | "present" | "not_present",
+      lidsSecurelyFastened: "" as "" | "yes" | "no",
+      numberOfCompartments: "",
+      compartmentsOther: "",
+      compromisedTank: "" as "" | "yes" | "no",
+      deficiencyRootInvasion: false,
+      deficiencyExposedRebar: false,
+      deficiencyCracks: false,
+      deficiencyDamagedInlet: false,
+      deficiencyDamagedOutlet: false,
+      deficiencyDamagedLids: false,
+      deficiencyDeterioratingConcrete: false,
+      deficiencyOther: false,
+      baffleMaterial: "",
+      inletBaffleCondition: "",
+      outletBaffleCondition: "",
+      interiorBaffleCondition: "",
+      effluentFilterPresent: "" as "" | "present" | "not_present",
+      effluentFilterServiced: "" as "" | "serviced" | "not_serviced",
+    };
+
     if (currentTanks.length < numberOfTanks) {
       const newTanks = [...currentTanks];
       for (let i = currentTanks.length; i < numberOfTanks; i++) {
-        newTanks.push({
-          liquidLevel: "",
-          primaryScumThickness: "",
-          primarySludgeThickness: "",
-          secondaryScumThickness: "",
-          secondarySludgeThickness: "",
-          liquidLevelNotDetermined: false,
-          tankDimensions: "",
-          tankCapacity: "",
-          capacityBasis: "",
-          capacityNotDeterminedReason: "",
-          tankMaterial: "",
-          tankMaterialOther: "",
-          accessOpenings: "",
-          accessOpeningsOther: "",
-          lidsRisersPresent: "",
-          lidsSecurelyFastened: "",
-          numberOfCompartments: "",
-          compartmentsOther: "",
-          compromisedTank: "",
-          deficiencyRootInvasion: false,
-          deficiencyExposedRebar: false,
-          deficiencyCracks: false,
-          deficiencyDamagedInlet: false,
-          deficiencyDamagedOutlet: false,
-          deficiencyDamagedLids: false,
-          deficiencyDeterioratingConcrete: false,
-          deficiencyOther: false,
-          baffleMaterial: "",
-          inletBaffleCondition: "",
-          outletBaffleCondition: "",
-          interiorBaffleCondition: "",
-          effluentFilterPresent: "",
-          effluentFilterServiced: "",
-        });
+        newTanks.push({ ...emptyTank });
       }
       form.setValue("septicTank.tanks", newTanks);
+    } else {
+      // Shrink: remove extra tanks
+      form.setValue("septicTank.tanks", currentTanks.slice(0, numberOfTanks));
     }
   }, [numberOfTanks, form]);
 
@@ -224,9 +231,18 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">If Not Pumped, Reason</FormLabel>
-                <FormControl>
-                  <Input {...field} className="min-h-[48px]" placeholder="Why pumping was not performed" />
-                </FormControl>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger className="min-h-[48px] w-full">
+                      <SelectValue placeholder="Select reason" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="discharge_auth">Discharge Authorization issued within 12 months</SelectItem>
+                    <SelectItem value="not_necessary">Pumping not necessary per manufacturer instructions</SelectItem>
+                    <SelectItem value="no_accumulation">No accumulation of waste</SelectItem>
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
@@ -463,9 +479,19 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-base">Access Openings</FormLabel>
-                    <FormControl>
-                      <Input {...field} className="min-h-[48px]" placeholder="Number and type" />
-                    </FormControl>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="min-h-[48px] w-full">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="one">One</SelectItem>
+                        <SelectItem value="two">Two</SelectItem>
+                        <SelectItem value="three">Three or more</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -551,9 +577,18 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-base">Number of Compartments</FormLabel>
-                    <FormControl>
-                      <Input {...field} className="min-h-[48px]" type="number" min="0" />
-                    </FormControl>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="min-h-[48px] w-full">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="one">One</SelectItem>
+                        <SelectItem value="two">Two</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

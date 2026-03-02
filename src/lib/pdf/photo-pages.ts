@@ -17,6 +17,7 @@ import { text, image } from "@pdfme/schemas";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
 import { STEP_LABELS } from "@/lib/constants/inspection";
 import { createClient } from "@/lib/supabase/client";
+import { loadPublicFile } from "./load-public-file";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -59,18 +60,14 @@ let cachedFont: Font | null = null;
 async function loadFont(): Promise<Font> {
   if (cachedFont) return cachedFont;
 
-  const [regularRes, boldRes] = await Promise.all([
-    fetch("/fonts/LiberationSans-Regular.ttf"),
-    fetch("/fonts/LiberationSans-Bold.ttf"),
+  const [regularData, boldData] = await Promise.all([
+    loadPublicFile("/fonts/LiberationSans-Regular.ttf"),
+    loadPublicFile("/fonts/LiberationSans-Bold.ttf"),
   ]);
 
-  if (!regularRes.ok || !boldRes.ok) {
-    throw new Error("Failed to load fonts for photo pages");
-  }
-
   cachedFont = {
-    LiberationSans: { data: await regularRes.arrayBuffer(), fallback: true },
-    LiberationSansBold: { data: await boldRes.arrayBuffer() },
+    LiberationSans: { data: regularData, fallback: true },
+    LiberationSansBold: { data: boldData },
   };
 
   return cachedFont;

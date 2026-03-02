@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useFormContext } from "react-hook-form";
+import { useFormContext, useWatch } from "react-hook-form";
 import {
   FormField,
   FormItem,
@@ -55,6 +55,10 @@ interface StepDisposalWorksProps {
 export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
   const form = useFormContext<InspectionFormData>();
   const [media, setMedia] = useState<MediaRecord[]>([]);
+
+  const portsPresent = useWatch({ control: form.control, name: "disposalWorks.inspectionPortsPresent" });
+  const numberOfPorts = useWatch({ control: form.control, name: "disposalWorks.numberOfPorts" });
+  const portCount = Math.min(Math.max(Number.parseInt(numberOfPorts || "0", 10) || 0, 0), 8);
 
   useEffect(() => {
     async function loadMedia() {
@@ -299,6 +303,36 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
             )}
           />
 
+        </div>
+
+        {/* Port Depth inputs — shown when ports are present and count > 0 */}
+        {portsPresent === "present" && portCount > 0 && (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {Array.from({ length: portCount }, (_, i) => (
+              <FormField
+                key={`portDepth-${i}`}
+                control={form.control}
+                name={`disposalWorks.portDepths.${i}` as const}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">Port {i + 1} Depth</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        value={field.value ?? ""}
+                        className="min-h-[48px]"
+                        placeholder='e.g. 12"'
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ))}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField
             control={form.control}
             name="disposalWorks.hydraulicLoadTestPerformed"

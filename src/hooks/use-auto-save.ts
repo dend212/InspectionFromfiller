@@ -20,11 +20,14 @@ export function useAutoSave(
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
 
-  // Observe all form values via useWatch (isolated from parent re-renders)
+  // Observe form changes via useWatch to trigger debounced saves.
+  // We use useWatch as a change trigger, but always send the complete
+  // form via form.getValues() to avoid partial data from unmounted steps.
   const watchedValues = useWatch({ control: form.control });
 
   const saveData = useCallback(
-    async (data: unknown) => {
+    async () => {
+      const data = form.getValues();
       const json = JSON.stringify(data);
       if (json === lastSavedRef.current) return;
 
@@ -54,7 +57,7 @@ export function useAutoSave(
         }
       }
     },
-    [inspectionId]
+    [form, inspectionId]
   );
 
   // Debounce saves on form value changes
@@ -67,7 +70,7 @@ export function useAutoSave(
     }
 
     timeoutRef.current = setTimeout(() => {
-      saveData(watchedValues);
+      saveData();
     }, debounceMs);
 
     return () => {
