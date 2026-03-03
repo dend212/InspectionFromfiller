@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { inspectionMedia, inspections } from "@/lib/db/schema";
 import { generateReport } from "@/lib/pdf/generate-report";
 import { buildDownloadFilename, uploadReport } from "@/lib/storage/pdf-storage";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { InspectionFormData } from "@/types/inspection";
 
@@ -14,7 +15,7 @@ import type { InspectionFormData } from "@/types/inspection";
  * Generates PDF server-side, uploads to Supabase Storage, then transitions status.
  * Allowed: admin only
  */
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -64,20 +65,44 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Cannot finalize: no form data" }, { status: 400 });
   }
 
+  // Parse request body for optional selectedMediaIds
+  const body = await request.json().catch(() => ({}));
+  const { selectedMediaIds } = body as { selectedMediaIds?: string[] };
+
   // Load media records for this inspection
   const mediaRows = await db
     .select()
     .from(inspectionMedia)
     .where(eq(inspectionMedia.inspectionId, id));
 
-  const mediaRecords: MediaRecord[] = mediaRows.map((m) => ({
-    id: m.id,
-    type: m.type as "photo" | "video",
-    storagePath: m.storagePath,
-    label: m.label,
-    sortOrder: m.sortOrder,
-    createdAt: m.createdAt.toISOString(),
-  }));
+  // Filter to selected photos if IDs provided, otherwise include all
+  const selectedSet = selectedMediaIds ? new Set(selectedMediaIds) : null;
+  const filteredRows = selectedSet
+    ? mediaRows.filter((m) => selectedSet.has(m.id))
+    : mediaRows;
+
+  // Generate signed URLs for photos so buildPhotoPages can fetch them
+  const storageAdmin = createAdminClient();
+  const mediaRecords: MediaRecord[] = await Promise.all(
+    filteredRows.map(async (m) => {
+      let signedUrl: string | null = null;
+      if (m.type === "photo") {
+        const { data } = await storageAdmin.storage
+          .from("inspection-media")
+          .createSignedUrl(m.storagePath, 3600);
+        signedUrl = data?.signedUrl ?? null;
+      }
+      return {
+        id: m.id,
+        type: m.type as "photo" | "video",
+        storagePath: m.storagePath,
+        label: m.label,
+        sortOrder: m.sortOrder,
+        createdAt: m.createdAt.toISOString(),
+        signedUrl,
+      };
+    }),
+  );
 
   // Extract signature data URL from form data (if present)
   const signatureDataUrl = formData.disposalWorks?.signatureDataUrl ?? null;

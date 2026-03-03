@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ReviewEditor } from "@/components/review/review-editor";
 import { db } from "@/lib/db";
 import { inspectionMedia, inspections } from "@/lib/db/schema";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { InspectionFormData } from "@/types/inspection";
 import type { AppRole } from "@/types/roles";
@@ -55,8 +56,33 @@ export default async function ReviewDetailPage({ params }: { params: Promise<{ i
     redirect("/review");
   }
 
-  // Load media records
-  const media = await db.select().from(inspectionMedia).where(eq(inspectionMedia.inspectionId, id));
+  // Load media records and generate signed URLs for photos
+  const mediaRows = await db
+    .select()
+    .from(inspectionMedia)
+    .where(eq(inspectionMedia.inspectionId, id));
+
+  const admin = createAdminClient();
+  const mediaWithUrls = await Promise.all(
+    mediaRows.map(async (m) => {
+      let signedUrl: string | null = null;
+      if (m.type === "photo") {
+        const { data } = await admin.storage
+          .from("inspection-media")
+          .createSignedUrl(m.storagePath, 3600);
+        signedUrl = data?.signedUrl ?? null;
+      }
+      return {
+        id: m.id,
+        type: m.type as "photo" | "video",
+        storagePath: m.storagePath,
+        label: m.label,
+        sortOrder: m.sortOrder,
+        createdAt: m.createdAt.toISOString(),
+        signedUrl,
+      };
+    }),
+  );
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -73,14 +99,7 @@ export default async function ReviewDetailPage({ params }: { params: Promise<{ i
           reviewNotes: inspection.reviewNotes,
           customerEmail: inspection.customerEmail ?? null,
         }}
-        media={media.map((m) => ({
-          id: m.id,
-          type: m.type as "photo" | "video",
-          storagePath: m.storagePath,
-          label: m.label,
-          sortOrder: m.sortOrder,
-          createdAt: m.createdAt.toISOString(),
-        }))}
+        media={mediaWithUrls}
       />
     </div>
   );

@@ -1,9 +1,18 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft, ChevronDown, ChevronRight, Loader2, RefreshCw, Save } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  ImageIcon,
+  Loader2,
+  RefreshCw,
+  Save,
+  Video,
+} from "lucide-react";
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
@@ -50,6 +59,30 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
   const [saving, setSaving] = useState(false);
   const [showAllFields, setShowAllFields] = useState<Record<number, boolean>>({});
 
+  // Media selection state — default all photos selected
+  const photos = useMemo(() => media.filter((m) => m.type === "photo"), [media]);
+  const videos = useMemo(() => media.filter((m) => m.type === "video"), [media]);
+  const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(
+    () => new Set(photos.map((p) => p.id)),
+  );
+
+  const toggleMedia = useCallback((id: string) => {
+    setSelectedMediaIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAllPhotos = useCallback(() => {
+    setSelectedMediaIds(new Set(photos.map((p) => p.id)));
+  }, [photos]);
+
+  const deselectAllPhotos = useCallback(() => {
+    setSelectedMediaIds(new Set());
+  }, []);
+
   const isReadOnly = status === "completed";
 
   const form = useForm<InspectionFormData>({
@@ -65,8 +98,10 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
     clearPdf();
     const formData = form.getValues();
     const signatureDataUrl = formData.disposalWorks?.signatureDataUrl ?? null;
-    await generatePdf(formData, signatureDataUrl, media);
-  }, [form, media, generatePdf, clearPdf]);
+    // Only include selected photos in the PDF
+    const selectedMedia = media.filter((m) => selectedMediaIds.has(m.id));
+    await generatePdf(formData, signatureDataUrl, selectedMedia);
+  }, [form, media, selectedMediaIds, generatePdf, clearPdf]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -231,6 +266,7 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
               status={status}
               facilityAddress={inspection.facilityAddress}
               customerEmail={inspection.customerEmail}
+              selectedMediaIds={Array.from(selectedMediaIds)}
               onStatusChange={handleStatusChange}
             />
 
@@ -644,6 +680,116 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                 </div>
               </div>
             </ReviewSection>
+
+            {/* Media Selection */}
+            {(photos.length > 0 || videos.length > 0) && (
+              <ReviewSection
+                title={`Inspection Media (${selectedMediaIds.size} of ${photos.length} photos selected)`}
+              >
+                <div className="space-y-4">
+                  {/* Photos */}
+                  {photos.length > 0 && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold uppercase text-muted-foreground">
+                          Photos
+                        </p>
+                        {!isReadOnly && (
+                          <div className="flex gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-xs"
+                              onClick={selectAllPhotos}
+                            >
+                              Select All
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-xs"
+                              onClick={deselectAllPhotos}
+                            >
+                              Deselect All
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {photos.map((photo, idx) => {
+                          const isSelected = selectedMediaIds.has(photo.id);
+                          return (
+                            <button
+                              key={photo.id}
+                              type="button"
+                              disabled={isReadOnly}
+                              className={`relative rounded-lg border overflow-hidden text-left transition-all ${
+                                isSelected
+                                  ? "ring-2 ring-primary border-primary"
+                                  : "opacity-50 border-muted"
+                              } ${!isReadOnly ? "cursor-pointer hover:opacity-80" : ""}`}
+                              onClick={() => toggleMedia(photo.id)}
+                            >
+                              {photo.signedUrl ? (
+                                <img
+                                  src={photo.signedUrl}
+                                  alt={photo.label ?? `Photo ${idx + 1}`}
+                                  className="aspect-square w-full object-cover"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="flex aspect-square w-full items-center justify-center bg-muted">
+                                  <ImageIcon className="size-6 text-muted-foreground" />
+                                </div>
+                              )}
+                              <div className="absolute left-1.5 top-1.5">
+                                <div
+                                  className={`flex size-5 items-center justify-center rounded border text-[10px] font-bold ${
+                                    isSelected
+                                      ? "border-primary bg-primary text-primary-foreground"
+                                      : "border-muted-foreground/50 bg-background/80 text-muted-foreground"
+                                  }`}
+                                >
+                                  {isSelected ? "✓" : ""}
+                                </div>
+                              </div>
+                              <p className="truncate px-1.5 py-1 text-[10px] text-muted-foreground">
+                                {photo.label ?? "Photo"}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Videos */}
+                  {videos.length > 0 && (
+                    <>
+                      <p className="text-xs font-semibold uppercase text-muted-foreground">
+                        Videos
+                      </p>
+                      <div className="space-y-1">
+                        {videos.map((video) => (
+                          <div
+                            key={video.id}
+                            className="flex items-center gap-2 rounded-md border px-3 py-2"
+                          >
+                            <Video className="size-4 text-muted-foreground" />
+                            <span className="text-sm">{video.label || "Video"}</span>
+                            <span className="ml-auto text-xs text-muted-foreground">
+                              {new Date(video.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </ReviewSection>
+            )}
 
             {/* Save button */}
             {!isReadOnly && (

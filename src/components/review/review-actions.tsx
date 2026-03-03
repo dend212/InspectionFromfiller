@@ -39,6 +39,7 @@ interface ReviewActionsProps {
   status: string;
   facilityAddress?: string | null;
   customerEmail?: string | null;
+  selectedMediaIds?: string[];
   onStatusChange: (newStatus: string) => void;
 }
 
@@ -47,6 +48,7 @@ export function ReviewActions({
   status,
   facilityAddress,
   customerEmail,
+  selectedMediaIds,
   onStatusChange,
 }: ReviewActionsProps) {
   const router = useRouter();
@@ -61,6 +63,7 @@ export function ReviewActions({
       const res = await fetch(`/api/inspections/${inspectionId}/finalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedMediaIds }),
       });
       if (!res.ok) {
         const data = await res.json();
