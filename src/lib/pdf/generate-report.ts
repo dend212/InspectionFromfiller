@@ -127,7 +127,12 @@ export async function generateReport(
 
   // Step 13: Generate photo appendix pages (if media provided)
   const photosPdf =
-    media && media.some((m) => m.type === "photo") ? await buildPhotoPages(media) : null;
+    media && media.some((m) => m.type === "photo")
+      ? await buildPhotoPages(media, {
+          address: formData.facilityInfo?.facilityAddress,
+          date: formData.facilityInfo?.dateOfInspection,
+        })
+      : null;
 
   // Step 14: Merge all PDFs: cover -> form -> comments -> photos
   const finalPdf = await mergeGeneratedPdfs(coverPdf, new Uint8Array(formPdf), commentsPdf, photosPdf);
