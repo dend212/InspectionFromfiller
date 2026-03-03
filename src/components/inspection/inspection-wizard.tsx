@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { type FieldPath, useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { ApnLookupInput } from "@/components/inspection/apn-lookup-input";
 import { ReviewNoteBanner } from "@/components/inspection/review-note-banner";
 import { ScanFormButton } from "@/components/inspection/scan-form-button";
 import { StepDesignFlow } from "@/components/inspection/step-design-flow";
@@ -94,7 +95,8 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
         {inspection.reviewNotes && <ReviewNoteBanner note={inspection.reviewNotes} />}
 
         {inspection.status === "draft" && (
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <ApnLookupInput form={form} />
             <ScanFormButton inspectionId={inspection.id} form={form} />
           </div>
         )}
