@@ -90,6 +90,10 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
     [inspectionId],
   );
 
+  const handleLabelUpdate = useCallback((mediaId: string, newLabel: string) => {
+    setMedia((prev) => prev.map((m) => (m.id === mediaId ? { ...m, label: newLabel } : m)));
+  }, []);
+
   return (
     <div className="space-y-8">
       {/* Disposal Works Location */}
@@ -517,6 +521,7 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
           section={SECTION_NAME}
           media={media.filter((m) => m.label === SECTION_NAME && m.type === "photo")}
           onDelete={handleDeleteMedia}
+          onLabelUpdate={handleLabelUpdate}
         />
         <PhotoCapture
           inspectionId={inspectionId}
@@ -538,6 +543,7 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
           inspectionId={inspectionId}
           media={media.filter((m) => m.type === "video")}
           onDelete={handleDeleteMedia}
+          onLabelUpdate={handleLabelUpdate}
         />
       </div>
     </div>

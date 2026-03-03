@@ -5,6 +5,7 @@ import { useState } from "react";
 import { type FieldPath, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { ReviewNoteBanner } from "@/components/inspection/review-note-banner";
+import { ScanFormButton } from "@/components/inspection/scan-form-button";
 import { StepDesignFlow } from "@/components/inspection/step-design-flow";
 import { StepDisposalWorks } from "@/components/inspection/step-disposal-works";
 import { StepFacilityInfo } from "@/components/inspection/step-facility-info";
@@ -91,6 +92,12 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
     <Form {...form}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-6 pb-4">
         {inspection.reviewNotes && <ReviewNoteBanner note={inspection.reviewNotes} />}
+
+        {inspection.status === "draft" && (
+          <div className="flex justify-end">
+            <ScanFormButton inspectionId={inspection.id} form={form} />
+          </div>
+        )}
 
         <WizardProgress currentStep={currentStep} onStepClick={handleStepClick} />
 

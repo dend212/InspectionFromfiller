@@ -54,14 +54,15 @@ interface ReviewEditorProps {
   media: MediaRecord[];
 }
 
-export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
+export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorProps) {
   const [status, setStatus] = useState(inspection.status);
   const [saving, setSaving] = useState(false);
   const [showAllFields, setShowAllFields] = useState<Record<number, boolean>>({});
+  const [mediaItems, setMediaItems] = useState(initialMedia);
 
   // Media selection state — default all photos selected
-  const photos = useMemo(() => media.filter((m) => m.type === "photo"), [media]);
-  const videos = useMemo(() => media.filter((m) => m.type === "video"), [media]);
+  const photos = useMemo(() => mediaItems.filter((m) => m.type === "photo"), [mediaItems]);
+  const videos = useMemo(() => mediaItems.filter((m) => m.type === "video"), [mediaItems]);
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(
     () => new Set(photos.map((p) => p.id)),
   );
@@ -83,6 +84,35 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
     setSelectedMediaIds(new Set());
   }, []);
 
+  const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
+  const [labelDraft, setLabelDraft] = useState("");
+
+  const saveLabel = useCallback(
+    async (mediaId: string, newLabel: string) => {
+      const trimmed = newLabel.trim();
+      const item = mediaItems.find((m) => m.id === mediaId);
+      if (trimmed === (item?.label ?? "")) {
+        setEditingLabelId(null);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/inspections/${inspection.id}/media`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mediaId, label: trimmed }),
+        });
+        if (res.ok) {
+          setMediaItems((prev) =>
+            prev.map((m) => (m.id === mediaId ? { ...m, label: trimmed } : m)),
+          );
+        }
+      } finally {
+        setEditingLabelId(null);
+      }
+    },
+    [inspection.id, mediaItems],
+  );
+
   const isReadOnly = status === "completed";
 
   const form = useForm<InspectionFormData>({
@@ -99,9 +129,9 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
     const formData = form.getValues();
     const signatureDataUrl = formData.disposalWorks?.signatureDataUrl ?? null;
     // Only include selected photos in the PDF
-    const selectedMedia = media.filter((m) => selectedMediaIds.has(m.id));
+    const selectedMedia = mediaItems.filter((m) => selectedMediaIds.has(m.id));
     await generatePdf(formData, signatureDataUrl, selectedMedia);
-  }, [form, media, selectedMediaIds, generatePdf, clearPdf]);
+  }, [form, mediaItems, selectedMediaIds, generatePdf, clearPdf]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -720,45 +750,79 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                         {photos.map((photo, idx) => {
                           const isSelected = selectedMediaIds.has(photo.id);
+                          const isEditingThis = editingLabelId === photo.id;
                           return (
-                            <button
+                            <div
                               key={photo.id}
-                              type="button"
-                              disabled={isReadOnly}
                               className={`relative rounded-lg border overflow-hidden text-left transition-all ${
                                 isSelected
                                   ? "ring-2 ring-primary border-primary"
                                   : "opacity-50 border-muted"
-                              } ${!isReadOnly ? "cursor-pointer hover:opacity-80" : ""}`}
-                              onClick={() => toggleMedia(photo.id)}
+                              }`}
                             >
-                              {photo.signedUrl ? (
-                                <img
-                                  src={photo.signedUrl}
-                                  alt={photo.label ?? `Photo ${idx + 1}`}
-                                  className="aspect-square w-full object-cover"
-                                  loading="lazy"
+                              <button
+                                type="button"
+                                disabled={isReadOnly}
+                                className={`w-full ${!isReadOnly ? "cursor-pointer hover:opacity-80" : ""}`}
+                                onClick={() => toggleMedia(photo.id)}
+                              >
+                                {photo.signedUrl ? (
+                                  <img
+                                    src={photo.signedUrl}
+                                    alt={photo.label ?? `Photo ${idx + 1}`}
+                                    className="aspect-square w-full object-cover"
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <div className="flex aspect-square w-full items-center justify-center bg-muted">
+                                    <ImageIcon className="size-6 text-muted-foreground" />
+                                  </div>
+                                )}
+                                <div className="absolute left-1.5 top-1.5">
+                                  <div
+                                    className={`flex size-5 items-center justify-center rounded border text-[10px] font-bold ${
+                                      isSelected
+                                        ? "border-primary bg-primary text-primary-foreground"
+                                        : "border-muted-foreground/50 bg-background/80 text-muted-foreground"
+                                    }`}
+                                  >
+                                    {isSelected ? "✓" : ""}
+                                  </div>
+                                </div>
+                              </button>
+                              {isEditingThis && !isReadOnly ? (
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={labelDraft}
+                                  onChange={(e) => setLabelDraft(e.target.value)}
+                                  onBlur={() => saveLabel(photo.id, labelDraft)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      saveLabel(photo.id, labelDraft);
+                                    } else if (e.key === "Escape") {
+                                      setEditingLabelId(null);
+                                    }
+                                  }}
+                                  className="w-full border-t bg-background px-1.5 py-1 text-[10px] outline-none focus:ring-1 focus:ring-ring"
+                                  placeholder="Add caption…"
                                 />
                               ) : (
-                                <div className="flex aspect-square w-full items-center justify-center bg-muted">
-                                  <ImageIcon className="size-6 text-muted-foreground" />
-                                </div>
-                              )}
-                              <div className="absolute left-1.5 top-1.5">
-                                <div
-                                  className={`flex size-5 items-center justify-center rounded border text-[10px] font-bold ${
-                                    isSelected
-                                      ? "border-primary bg-primary text-primary-foreground"
-                                      : "border-muted-foreground/50 bg-background/80 text-muted-foreground"
-                                  }`}
+                                <button
+                                  type="button"
+                                  disabled={isReadOnly}
+                                  className="w-full truncate px-1.5 py-1 text-left text-[10px] text-muted-foreground hover:text-foreground"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setLabelDraft(photo.label ?? "");
+                                    setEditingLabelId(photo.id);
+                                  }}
                                 >
-                                  {isSelected ? "✓" : ""}
-                                </div>
-                              </div>
-                              <p className="truncate px-1.5 py-1 text-[10px] text-muted-foreground">
-                                {photo.label ?? "Photo"}
-                              </p>
-                            </button>
+                                  {photo.label ?? "Photo"}
+                                </button>
+                              )}
+                            </div>
                           );
                         })}
                       </div>

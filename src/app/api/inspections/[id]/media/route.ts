@@ -124,6 +124,46 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 }
 
 /**
+ * PATCH /api/inspections/[id]/media
+ * Update a media record's label (caption).
+ *
+ * Body: { mediaId: string, label: string }
+ */
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const access = await verifyAccess(id, supabase, user.id);
+  if ("error" in access) return access.error;
+
+  const body = await request.json();
+  const { mediaId, label } = body as { mediaId: string; label: string };
+
+  if (!mediaId || typeof label !== "string") {
+    return NextResponse.json({ error: "mediaId and label are required" }, { status: 400 });
+  }
+
+  const [updated] = await db
+    .update(inspectionMedia)
+    .set({ label })
+    .where(and(eq(inspectionMedia.id, mediaId), eq(inspectionMedia.inspectionId, id)))
+    .returning();
+
+  if (!updated) {
+    return NextResponse.json({ error: "Media not found" }, { status: 404 });
+  }
+
+  return NextResponse.json(updated);
+}
+
+/**
  * DELETE /api/inspections/[id]/media
  * Remove a media record and its storage file.
  */
