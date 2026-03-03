@@ -6,26 +6,26 @@
  * Keys are the renamed PDF field names from septic_system_insp_form_v2.pdf.
  */
 
-import type { InspectionFormData } from "@/types/inspection";
 import {
-  CONDITION_SUMMARY,
-  RECORDS,
-  CESSPOOL,
-  PERFORMANCE_ASSURANCE,
-  TANK_COUNT,
-  PUMPING,
   ACCESS_OPENINGS,
-  LIDS_RISERS,
+  CESSPOOL,
   COMPARTMENTS,
   COMPROMISED_TANK,
-  DISPOSAL_LOCATION,
-  DISTRIBUTION_INSPECTION,
-  INSPECTION_PORTS,
-  HYDRAULIC_LOAD,
+  CONDITION_SUMMARY,
   DISPOSAL_DEFICIENCY,
+  DISPOSAL_LOCATION,
   DISPOSAL_REPAIRS,
+  DISTRIBUTION_INSPECTION,
   GP_SYSTEM_TYPES,
+  HYDRAULIC_LOAD,
+  INSPECTION_PORTS,
+  LIDS_RISERS,
+  PERFORMANCE_ASSURANCE,
+  PUMPING,
+  RECORDS,
+  TANK_COUNT,
 } from "@/lib/pdf/pdf-field-names";
+import type { InspectionFormData } from "@/types/inspection";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -47,10 +47,7 @@ function getInitials(name: string): string {
 
 /** Returns true if the baffle condition indicates baffle is present */
 function isBafflePresent(condition: string | undefined): boolean {
-  return (
-    condition === "present_operational" ||
-    condition === "present_not_operational"
-  );
+  return condition === "present_operational" || condition === "present_not_operational";
 }
 
 // ---------------------------------------------------------------------------
@@ -68,9 +65,7 @@ export interface OverflowResult {
   }>;
 }
 
-export function detectCommentOverflow(
-  data: InspectionFormData,
-): OverflowResult {
+export function detectCommentOverflow(data: InspectionFormData): OverflowResult {
   const overflowSections: OverflowResult["overflowSections"] = [];
 
   const commentFields = [
@@ -124,9 +119,7 @@ export interface FormFieldMapping {
  * Returns separate maps for text fields, checkboxes, and radio groups.
  * Every key must match a field name in septic_system_insp_form_v2.pdf.
  */
-export function mapFormDataToFields(
-  data: InspectionFormData,
-): FormFieldMapping {
+export function mapFormDataToFields(data: InspectionFormData): FormFieldMapping {
   const fi = data.facilityInfo;
   const gt = data.generalTreatment;
   const df = data.designFlow;
@@ -134,9 +127,7 @@ export function mapFormDataToFields(
   const dw = data.disposalWorks;
 
   const overflow = detectCommentOverflow(data);
-  const overflowFields = new Set(
-    overflow.overflowSections.map((s) => s.fieldName),
-  );
+  const overflowFields = new Set(overflow.overflowSections.map((s) => s.fieldName));
 
   function commentText(fieldName: string, text: string): string {
     return overflowFields.has(fieldName) ? "See Comments" : str(text);
@@ -201,19 +192,14 @@ export function mapFormDataToFields(
     wellDistance: str(fi?.wellDistance),
 
     // Wastewater source
-    wastewaterOtherText: str(
-      fi?.wastewaterSource === "other" ? "Other" : "",
-    ),
+    wastewaterOtherText: str(fi?.wastewaterSource === "other" ? "Other" : ""),
 
     // Design flow
     estimatedDesignFlow: str(df?.estimatedDesignFlow),
     numberOfBedrooms: str(df?.numberOfBedrooms),
     fixtureCount: str(df?.fixtureCount),
     nonDwellingGpd: str(df?.nonDwellingGpd),
-    designFlowComments: commentText(
-      "designFlowComments",
-      str(df?.designFlowComments),
-    ),
+    designFlowComments: commentText("designFlowComments", str(df?.designFlowComments)),
 
     // Tank liquid levels
     tankLiquidLevel: str(tank?.liquidLevel),
@@ -247,15 +233,10 @@ export function mapFormDataToFields(
     compartmentsOtherDescription: str(tank?.compartmentsOther),
 
     // Septic tank comments
-    septicTankComments: commentText(
-      "septicTankComments",
-      str(st?.septicTankComments),
-    ),
+    septicTankComments: commentText("septicTankComments", str(st?.septicTankComments)),
 
     // Disposal works
-    disposalWorksLocationExplanation: str(
-      dw?.disposalWorksLocationNotDeterminedReason,
-    ),
+    disposalWorksLocationExplanation: str(dw?.disposalWorksLocationNotDeterminedReason),
     disposalTypeOtherDescription: str(dw?.disposalTypeOther),
 
     // Supply line
@@ -273,14 +254,10 @@ export function mapFormDataToFields(
     portDepth8: str(dw?.portDepths?.[7]),
 
     // Disposal works comments
-    disposalWorksComments: commentText(
-      "disposalWorksComments",
-      str(dw?.disposalWorksComments),
-    ),
+    disposalWorksComments: commentText("disposalWorksComments", str(dw?.disposalWorksComments)),
 
     // Signature
     conventionalPrintedName: str(dw?.printedName),
-    conventionalPrintedName2: str(dw?.printedName),
   };
 
   // =========================================================================
@@ -305,23 +282,16 @@ export function mapFormDataToFields(
 
     // Facility serves
     facilityServesResidence:
-      fi?.facilityType === "single_family" ||
-      fi?.facilityType === "multifamily",
+      fi?.facilityType === "single_family" || fi?.facilityType === "multifamily",
     facilityServesSingleFamily: fi?.facilityType === "single_family",
     facilityServesMultiFamily: fi?.facilityType === "multifamily",
     facilityServesCommercial: fi?.facilityType === "commercial",
     facilityServesOther: fi?.facilityType === "other",
 
     // Facility type
-    facilityTypeConventional: (fi?.facilitySystemTypes ?? []).includes(
-      "conventional",
-    ),
-    facilityTypeAlternative: (fi?.facilitySystemTypes ?? []).includes(
-      "alternative",
-    ),
-    facilityTypeGrayWater: (fi?.facilitySystemTypes ?? []).includes(
-      "gray_water",
-    ),
+    facilityTypeConventional: (fi?.facilitySystemTypes ?? []).includes("conventional"),
+    facilityTypeAlternative: (fi?.facilitySystemTypes ?? []).includes("alternative"),
+    facilityTypeGrayWater: (fi?.facilitySystemTypes ?? []).includes("gray_water"),
 
     // Water source
     waterSourceHauled: fi?.waterSource === "hauled_water",
@@ -345,9 +315,7 @@ export function mapFormDataToFields(
     ...mapSystemTypeCheckboxes(gt?.systemTypes ?? []),
 
     // Design flow
-    designFlowUnknown:
-      df?.designFlowBasis === "unknown" ||
-      df?.actualFlowEvaluation === "unknown",
+    designFlowUnknown: df?.designFlowBasis === "unknown" || df?.actualFlowEvaluation === "unknown",
     designFlowBasisPermit: df?.designFlowBasis === "permit_documents",
     designFlowBasisCalculated: df?.designFlowBasis === "calculated",
     designFlowBasisBedrooms: !!df?.numberOfBedrooms,
@@ -358,12 +326,9 @@ export function mapFormDataToFields(
     actualFlowUnknown: df?.actualFlowEvaluation === "unknown",
 
     // Pumping not performed reasons
-    pumpingNotPerformedDischargeAuth:
-      st?.pumpingNotPerformedReason === "discharge_auth",
-    pumpingNotPerformedNotNecessary:
-      st?.pumpingNotPerformedReason === "not_necessary",
-    pumpingNotPerformedNoAccumulation:
-      st?.pumpingNotPerformedReason === "no_accumulation",
+    pumpingNotPerformedDischargeAuth: st?.pumpingNotPerformedReason === "discharge_auth",
+    pumpingNotPerformedNotNecessary: st?.pumpingNotPerformedReason === "not_necessary",
+    pumpingNotPerformedNoAccumulation: st?.pumpingNotPerformedReason === "no_accumulation",
 
     // Tank capacity basis
     capacityBasisMeasurement: tank?.capacityBasis === "measurement",
@@ -399,41 +364,30 @@ export function mapFormDataToFields(
 
     // Inlet baffle
     inletBafflePresent: isBafflePresent(tank?.inletBaffleCondition),
-    inletBaffleOperational:
-      tank?.inletBaffleCondition === "present_operational",
-    inletBaffleNotOperational:
-      tank?.inletBaffleCondition === "present_not_operational",
+    inletBaffleOperational: tank?.inletBaffleCondition === "present_operational",
+    inletBaffleNotOperational: tank?.inletBaffleCondition === "present_not_operational",
     inletBaffleNotPresent: tank?.inletBaffleCondition === "not_present",
-    inletBaffleNotDetermined:
-      tank?.inletBaffleCondition === "not_determined",
+    inletBaffleNotDetermined: tank?.inletBaffleCondition === "not_determined",
 
     // Outlet baffle
     outletBafflePresent: isBafflePresent(tank?.outletBaffleCondition),
-    outletBaffleOperational:
-      tank?.outletBaffleCondition === "present_operational",
-    outletBaffleNotOperational:
-      tank?.outletBaffleCondition === "present_not_operational",
+    outletBaffleOperational: tank?.outletBaffleCondition === "present_operational",
+    outletBaffleNotOperational: tank?.outletBaffleCondition === "present_not_operational",
     outletBaffleNotPresent: tank?.outletBaffleCondition === "not_present",
-    outletBaffleNotDetermined:
-      tank?.outletBaffleCondition === "not_determined",
+    outletBaffleNotDetermined: tank?.outletBaffleCondition === "not_determined",
 
     // Interior baffle
     interiorBafflePresent: isBafflePresent(tank?.interiorBaffleCondition),
-    interiorBaffleOperational:
-      tank?.interiorBaffleCondition === "present_operational",
-    interiorBaffleNotOperational:
-      tank?.interiorBaffleCondition === "present_not_operational",
-    interiorBaffleNotPresent:
-      tank?.interiorBaffleCondition === "not_present",
-    interiorBaffleNotDetermined:
-      tank?.interiorBaffleCondition === "not_determined",
+    interiorBaffleOperational: tank?.interiorBaffleCondition === "present_operational",
+    interiorBaffleNotOperational: tank?.interiorBaffleCondition === "present_not_operational",
+    interiorBaffleNotPresent: tank?.interiorBaffleCondition === "not_present",
+    interiorBaffleNotDetermined: tank?.interiorBaffleCondition === "not_determined",
 
     // Effluent filter
     effluentFilterPresent: tank?.effluentFilterPresent === "present",
     effluentFilterNotPresent: tank?.effluentFilterPresent === "not_present",
     effluentFilterServiced: tank?.effluentFilterServiced === "serviced",
-    effluentFilterNotServiced:
-      tank?.effluentFilterServiced === "not_serviced",
+    effluentFilterNotServiced: tank?.effluentFilterServiced === "not_serviced",
 
     // Disposal type
     disposalTypeTrench: dw?.disposalType === "trench",
@@ -479,11 +433,9 @@ export function mapFormDataToFields(
 
   // Records available
   if (fi?.recordsAvailable === "yes") {
-    radioFields[RECORDS.recordsAvailable] =
-      RECORDS.recordsAvailableOptions.yes;
+    radioFields[RECORDS.recordsAvailable] = RECORDS.recordsAvailableOptions.yes;
   } else if (fi?.recordsAvailable === "no") {
-    radioFields[RECORDS.recordsAvailable] =
-      RECORDS.recordsAvailableOptions.no;
+    radioFields[RECORDS.recordsAvailable] = RECORDS.recordsAvailableOptions.no;
   }
 
   // Cesspool
@@ -529,46 +481,30 @@ export function mapFormDataToFields(
 
   // Number of tanks
   if (st?.numberOfTanks === "1") {
-    radioFields[TANK_COUNT.numberOfTanks] =
-      TANK_COUNT.numberOfTanksOptions.one;
-  } else if (
-    st?.numberOfTanks &&
-    Number.parseInt(st.numberOfTanks, 10) >= 2
-  ) {
-    radioFields[TANK_COUNT.numberOfTanks] =
-      TANK_COUNT.numberOfTanksOptions.two;
+    radioFields[TANK_COUNT.numberOfTanks] = TANK_COUNT.numberOfTanksOptions.one;
+  } else if (st?.numberOfTanks && Number.parseInt(st.numberOfTanks, 10) >= 2) {
+    radioFields[TANK_COUNT.numberOfTanks] = TANK_COUNT.numberOfTanksOptions.two;
   }
 
   // Tanks pumped
-  mapYesNoRadio(
-    radioFields,
-    PUMPING.tanksPumped,
-    PUMPING.tanksPumpedOptions,
-    st?.tanksPumped,
-  );
+  mapYesNoRadio(radioFields, PUMPING.tanksPumped, PUMPING.tanksPumpedOptions, st?.tanksPumped);
 
   // Access openings
   if (tank?.accessOpenings === "one") {
-    radioFields[ACCESS_OPENINGS.accessOpenings] =
-      ACCESS_OPENINGS.accessOpeningsOptions.one;
+    radioFields[ACCESS_OPENINGS.accessOpenings] = ACCESS_OPENINGS.accessOpeningsOptions.one;
   } else if (tank?.accessOpenings === "two") {
-    radioFields[ACCESS_OPENINGS.accessOpenings] =
-      ACCESS_OPENINGS.accessOpeningsOptions.two;
+    radioFields[ACCESS_OPENINGS.accessOpenings] = ACCESS_OPENINGS.accessOpeningsOptions.two;
   } else if (tank?.accessOpenings === "three") {
-    radioFields[ACCESS_OPENINGS.accessOpenings] =
-      ACCESS_OPENINGS.accessOpeningsOptions.three;
+    radioFields[ACCESS_OPENINGS.accessOpenings] = ACCESS_OPENINGS.accessOpeningsOptions.three;
   } else if (tank?.accessOpenings === "other") {
-    radioFields[ACCESS_OPENINGS.accessOpenings] =
-      ACCESS_OPENINGS.accessOpeningsOptions.other;
+    radioFields[ACCESS_OPENINGS.accessOpenings] = ACCESS_OPENINGS.accessOpeningsOptions.other;
   }
 
   // Lids present
   if (tank?.lidsRisersPresent === "present") {
-    radioFields[LIDS_RISERS.lidsPresent] =
-      LIDS_RISERS.lidsPresentOptions.yes;
+    radioFields[LIDS_RISERS.lidsPresent] = LIDS_RISERS.lidsPresentOptions.yes;
   } else if (tank?.lidsRisersPresent === "not_present") {
-    radioFields[LIDS_RISERS.lidsPresent] =
-      LIDS_RISERS.lidsPresentOptions.no;
+    radioFields[LIDS_RISERS.lidsPresent] = LIDS_RISERS.lidsPresentOptions.no;
   }
 
   // Lids securely fastened
@@ -581,14 +517,11 @@ export function mapFormDataToFields(
 
   // Compartments
   if (tank?.numberOfCompartments === "one") {
-    radioFields[COMPARTMENTS.compartments] =
-      COMPARTMENTS.compartmentsOptions.one;
+    radioFields[COMPARTMENTS.compartments] = COMPARTMENTS.compartmentsOptions.one;
   } else if (tank?.numberOfCompartments === "two") {
-    radioFields[COMPARTMENTS.compartments] =
-      COMPARTMENTS.compartmentsOptions.two;
+    radioFields[COMPARTMENTS.compartments] = COMPARTMENTS.compartmentsOptions.two;
   } else if (tank?.numberOfCompartments === "other") {
-    radioFields[COMPARTMENTS.compartments] =
-      COMPARTMENTS.compartmentsOptions.other;
+    radioFields[COMPARTMENTS.compartments] = COMPARTMENTS.compartmentsOptions.other;
   }
 
   // Compromised tank
@@ -617,11 +550,9 @@ export function mapFormDataToFields(
 
   // Inspection ports present
   if (dw?.inspectionPortsPresent === "present") {
-    radioFields[INSPECTION_PORTS.present] =
-      INSPECTION_PORTS.presentOptions.yes;
+    radioFields[INSPECTION_PORTS.present] = INSPECTION_PORTS.presentOptions.yes;
   } else if (dw?.inspectionPortsPresent === "not_present") {
-    radioFields[INSPECTION_PORTS.present] =
-      INSPECTION_PORTS.presentOptions.no;
+    radioFields[INSPECTION_PORTS.present] = INSPECTION_PORTS.presentOptions.no;
   }
 
   // Hydraulic load test
@@ -687,24 +618,18 @@ function mapConditionRadio(
 // GP system type checkbox mapping
 // ---------------------------------------------------------------------------
 
-function mapSystemTypeCheckboxes(
-  systemTypes: string[],
-): Record<string, boolean> {
+function mapSystemTypeCheckboxes(systemTypes: string[]): Record<string, boolean> {
   const typeSet = new Set(systemTypes);
 
   return {
     [GP_SYSTEM_TYPES.gp402Conventional]: typeSet.has("gp402_conventional"),
     [GP_SYSTEM_TYPES.gp402SepticTank]: typeSet.has("gp402_septic_tank"),
-    [GP_SYSTEM_TYPES.gp402DisposalTrench]: typeSet.has(
-      "gp402_disposal_trench",
-    ),
+    [GP_SYSTEM_TYPES.gp402DisposalTrench]: typeSet.has("gp402_disposal_trench"),
     [GP_SYSTEM_TYPES.gp402DisposalBed]: typeSet.has("gp402_disposal_bed"),
     [GP_SYSTEM_TYPES.gp402Chamber]: typeSet.has("gp402_chamber"),
     [GP_SYSTEM_TYPES.gp402SeepagePit]: typeSet.has("gp402_seepage_pit"),
     [GP_SYSTEM_TYPES.gp403Composting]: typeSet.has("gp403_composting"),
-    [GP_SYSTEM_TYPES.gp404PressureDistribution]: typeSet.has(
-      "gp404_pressure",
-    ),
+    [GP_SYSTEM_TYPES.gp404PressureDistribution]: typeSet.has("gp404_pressure"),
     [GP_SYSTEM_TYPES.gp405GravellessTrench]: typeSet.has("gp405_gravelless"),
     [GP_SYSTEM_TYPES.gp406NaturalEvap]: typeSet.has("gp406_natural_evap"),
     [GP_SYSTEM_TYPES.gp407LinedEvap]: typeSet.has("gp407_lined_evap"),

@@ -1,12 +1,12 @@
+import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { db } from "@/lib/db";
-import { inspections, inspectionMedia } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
-import { generateReport } from "@/lib/pdf/generate-report";
-import { uploadReport, buildDownloadFilename } from "@/lib/storage/pdf-storage";
-import type { InspectionFormData } from "@/types/inspection";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
+import { db } from "@/lib/db";
+import { inspectionMedia, inspections } from "@/lib/db/schema";
+import { generateReport } from "@/lib/pdf/generate-report";
+import { buildDownloadFilename, uploadReport } from "@/lib/storage/pdf-storage";
+import { createClient } from "@/lib/supabase/server";
+import type { InspectionFormData } from "@/types/inspection";
 
 /**
  * POST /api/inspections/[id]/finalize
@@ -14,10 +14,7 @@ import type { MediaRecord } from "@/components/inspection/media-gallery";
  * Generates PDF server-side, uploads to Supabase Storage, then transitions status.
  * Allowed: admin only
  */
-export async function POST(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -45,24 +42,14 @@ export async function POST(
   }
 
   if (userRole !== "admin") {
-    return NextResponse.json(
-      { error: "Forbidden: admin only" },
-      { status: 403 },
-    );
+    return NextResponse.json({ error: "Forbidden: admin only" }, { status: 403 });
   }
 
   // Load the full inspection record
-  const [inspection] = await db
-    .select()
-    .from(inspections)
-    .where(eq(inspections.id, id))
-    .limit(1);
+  const [inspection] = await db.select().from(inspections).where(eq(inspections.id, id)).limit(1);
 
   if (!inspection) {
-    return NextResponse.json(
-      { error: "Inspection not found" },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
   }
 
   if (inspection.status !== "in_review") {
@@ -74,10 +61,7 @@ export async function POST(
 
   const formData = inspection.formData as InspectionFormData | null;
   if (!formData) {
-    return NextResponse.json(
-      { error: "Cannot finalize: no form data" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Cannot finalize: no form data" }, { status: 400 });
   }
 
   // Load media records for this inspection
@@ -109,10 +93,7 @@ export async function POST(
   } catch (err) {
     console.error("PDF generation failed:", err);
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { error: `PDF generation failed: ${message}` },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: `PDF generation failed: ${message}` }, { status: 500 });
   }
 
   // Upload PDF to Supabase Storage
@@ -122,10 +103,7 @@ export async function POST(
   } catch (err) {
     console.error("PDF upload failed:", err);
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { error: `PDF upload failed: ${message}` },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: `PDF upload failed: ${message}` }, { status: 500 });
   }
 
   // Atomic status transition: only update if current status is "in_review"

@@ -1,22 +1,16 @@
-import { redirect } from "next/navigation";
+import { desc, eq } from "drizzle-orm";
+import { ClipboardCheck, Clock } from "lucide-react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db";
 import { inspections, profiles } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/types/roles";
-import { ClipboardCheck, Clock } from "lucide-react";
 
 async function getUserRole(
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: Awaited<ReturnType<typeof createClient>>,
 ): Promise<AppRole | null> {
   const {
     data: { session },
@@ -25,7 +19,7 @@ async function getUserRole(
 
   try {
     const payload = JSON.parse(
-      Buffer.from(session.access_token.split(".")[1], "base64").toString()
+      Buffer.from(session.access_token.split(".")[1], "base64").toString(),
     );
     return payload.user_role ?? null;
   } catch {
@@ -108,8 +102,7 @@ export default async function ReviewQueuePage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Review Queue</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {reviewQueue.length} inspection{reviewQueue.length !== 1 ? "s" : ""}{" "}
-            awaiting review
+            {reviewQueue.length} inspection{reviewQueue.length !== 1 ? "s" : ""} awaiting review
           </p>
         </div>
       </div>
@@ -130,20 +123,14 @@ export default async function ReviewQueuePage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {reviewQueue.map((inspection) => (
-            <Link
-              key={inspection.id}
-              href={`/review/${inspection.id}`}
-            >
+            <Link key={inspection.id} href={`/review/${inspection.id}`}>
               <Card className="transition-colors hover:bg-accent/50">
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base truncate">
                       {inspection.facilityName || "Untitled Inspection"}
                     </CardTitle>
-                    <Badge
-                      className={STATUS_COLORS.in_review}
-                      variant="secondary"
-                    >
+                    <Badge className={STATUS_COLORS.in_review} variant="secondary">
                       {STATUS_LABELS.in_review}
                     </Badge>
                   </div>
@@ -153,9 +140,7 @@ export default async function ReviewQueuePage() {
                     {inspection.facilityCity && (
                       <span className="block">
                         {inspection.facilityCity}
-                        {inspection.facilityCounty
-                          ? `, ${inspection.facilityCounty} County`
-                          : ""}
+                        {inspection.facilityCounty ? `, ${inspection.facilityCounty} County` : ""}
                       </span>
                     )}
                     <span className="flex items-center gap-1 text-xs">
@@ -173,25 +158,17 @@ export default async function ReviewQueuePage() {
       {/* Recently Completed */}
       {recentlyCompleted.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-muted-foreground">
-            Recently Completed
-          </h2>
+          <h2 className="text-lg font-semibold text-muted-foreground">Recently Completed</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {recentlyCompleted.map((inspection) => (
-              <Link
-                key={inspection.id}
-                href={`/review/${inspection.id}`}
-              >
+              <Link key={inspection.id} href={`/review/${inspection.id}`}>
                 <Card className="transition-colors hover:bg-accent/50">
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-base truncate">
                         {inspection.facilityName || "Untitled Inspection"}
                       </CardTitle>
-                      <Badge
-                        className={STATUS_COLORS.completed}
-                        variant="secondary"
-                      >
+                      <Badge className={STATUS_COLORS.completed} variant="secondary">
                         {STATUS_LABELS.completed}
                       </Badge>
                     </div>
@@ -201,9 +178,7 @@ export default async function ReviewQueuePage() {
                       {inspection.facilityCity && (
                         <span className="block">
                           {inspection.facilityCity}
-                          {inspection.facilityCounty
-                            ? `, ${inspection.facilityCounty} County`
-                            : ""}
+                          {inspection.facilityCounty ? `, ${inspection.facilityCounty} County` : ""}
                         </span>
                       )}
                       <span className="block text-xs">

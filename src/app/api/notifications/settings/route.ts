@@ -1,8 +1,8 @@
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db";
 import { profiles } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * GET /api/notifications/settings
@@ -24,9 +24,7 @@ export async function GET() {
     .where(eq(profiles.id, user.id))
     .limit(1);
 
-  return NextResponse.json(
-    profile?.notificationSettings ?? { emailOnSubmission: false }
-  );
+  return NextResponse.json(profile?.notificationSettings ?? { emailOnSubmission: false });
 }
 
 /**

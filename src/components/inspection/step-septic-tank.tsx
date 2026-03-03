@@ -1,19 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFormContext } from "react-hook-form";
+import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
+import { PhotoCapture } from "@/components/inspection/photo-capture";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
+  FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
-  FormControl,
   FormMessage,
-  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -21,14 +21,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  TANK_MATERIALS,
-  BAFFLE_MATERIALS,
   BAFFLE_CONDITIONS,
+  BAFFLE_MATERIALS,
   CAPACITY_BASIS_OPTIONS,
+  TANK_MATERIALS,
 } from "@/lib/constants/inspection";
-import { PhotoCapture } from "@/components/inspection/photo-capture";
-import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
 import type { InspectionFormData } from "@/types/inspection";
 
 /** Deficiency labels matching the schema boolean fields */
@@ -68,16 +68,22 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
     loadMedia();
   }, [inspectionId]);
 
-  const handleDeleteMedia = useCallback(async (mediaId: string) => {
-    await fetch(`/api/inspections/${inspectionId}/media`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaId }),
-    });
-    setMedia((prev) => prev.filter((m) => m.id !== mediaId));
-  }, [inspectionId]);
+  const handleDeleteMedia = useCallback(
+    async (mediaId: string) => {
+      await fetch(`/api/inspections/${inspectionId}/media`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mediaId }),
+      });
+      setMedia((prev) => prev.filter((m) => m.id !== mediaId));
+    },
+    [inspectionId],
+  );
   const numberOfTanksValue = form.watch("septicTank.numberOfTanks");
-  const numberOfTanks = Math.min(Math.max(Number.parseInt(numberOfTanksValue || "1", 10) || 1, 1), 3);
+  const numberOfTanks = Math.min(
+    Math.max(Number.parseInt(numberOfTanksValue || "1", 10) || 1, 1),
+    3,
+  );
 
   // Sync the tanks array to match numberOfTanks (grow or shrink)
   useEffect(() => {
@@ -238,8 +244,12 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="discharge_auth">Discharge Authorization issued within 12 months</SelectItem>
-                    <SelectItem value="not_necessary">Pumping not necessary per manufacturer instructions</SelectItem>
+                    <SelectItem value="discharge_auth">
+                      Discharge Authorization issued within 12 months
+                    </SelectItem>
+                    <SelectItem value="not_necessary">
+                      Pumping not necessary per manufacturer instructions
+                    </SelectItem>
                     <SelectItem value="no_accumulation">No accumulation of waste</SelectItem>
                   </SelectContent>
                 </Select>
@@ -341,10 +351,7 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 <FormItem>
                   <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border p-3">
                     <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
+                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
                     <span className="text-base">Liquid level could not be determined</span>
                   </label>
@@ -366,7 +373,11 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                   <FormItem>
                     <FormLabel className="text-base">Tank Dimensions</FormLabel>
                     <FormControl>
-                      <Input {...field} className="min-h-[48px]" placeholder="e.g. 8'L x 4'W x 5'D" />
+                      <Input
+                        {...field}
+                        className="min-h-[48px]"
+                        placeholder="e.g. 8'L x 4'W x 5'D"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -824,9 +835,7 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
             </div>
           </div>
 
-          {tankIndex < numberOfTanks - 1 && (
-            <Separator className="my-8 border-2" />
-          )}
+          {tankIndex < numberOfTanks - 1 && <Separator className="my-8 border-2" />}
         </section>
       ))}
 

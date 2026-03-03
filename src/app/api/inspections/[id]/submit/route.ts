@@ -1,19 +1,16 @@
+import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db";
 import { inspections, profiles, userRoles } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
 import { sendSubmissionNotification } from "@/lib/email/send-notification";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * POST /api/inspections/[id]/submit
  * Transition: draft -> in_review
  * Allowed: inspector (owner) or admin
  */
-export async function POST(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -46,7 +43,7 @@ export async function POST(
       } = await supabase.auth.getSession();
       if (session) {
         const payload = JSON.parse(
-          Buffer.from(session.access_token.split(".")[1], "base64").toString()
+          Buffer.from(session.access_token.split(".")[1], "base64").toString(),
         );
         userRole = payload.user_role ?? null;
       }
@@ -75,7 +72,7 @@ export async function POST(
   if (result.length === 0) {
     return NextResponse.json(
       { error: "Cannot submit: inspection is not in draft status" },
-      { status: 409 }
+      { status: 409 },
     );
   }
 
@@ -94,16 +91,11 @@ export async function POST(
 
       const adminWantsEmail = admins.some(
         (a) =>
-          (a.notificationSettings as Record<string, unknown> | null)
-            ?.emailOnSubmission === true
+          (a.notificationSettings as Record<string, unknown> | null)?.emailOnSubmission === true,
       );
 
       if (adminWantsEmail) {
-        await sendSubmissionNotification(
-          updated.id,
-          updated.facilityName ?? null,
-          null
-        );
+        await sendSubmissionNotification(updated.id, updated.facilityName ?? null, null);
       }
     } catch (err) {
       console.error("Notification check failed:", err);

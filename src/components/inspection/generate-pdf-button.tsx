@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import { FileText, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface GeneratePdfButtonProps {
   /** Handler to trigger PDF generation */
@@ -18,11 +18,7 @@ interface GeneratePdfButtonProps {
  * Disabled during generation. Shows a spinner and status text while
  * the PDF is being created client-side.
  */
-export function GeneratePdfButton({
-  onGenerate,
-  isGenerating,
-  error,
-}: GeneratePdfButtonProps) {
+export function GeneratePdfButton({ onGenerate, isGenerating, error }: GeneratePdfButtonProps) {
   return (
     <div className="space-y-2">
       <Button
@@ -45,9 +41,7 @@ export function GeneratePdfButton({
           </>
         )}
       </Button>
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 }

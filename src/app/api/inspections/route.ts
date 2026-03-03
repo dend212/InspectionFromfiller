@@ -1,8 +1,8 @@
+import { desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db";
 import { inspections, profiles } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { createClient } from "@/lib/supabase/server";
 import { getDefaultFormValues } from "@/lib/validators/inspection";
 
 /**
@@ -58,10 +58,12 @@ export async function GET() {
   // Decode JWT to get user_role
   let userRole: string | null = null;
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (session) {
       const payload = JSON.parse(
-        Buffer.from(session.access_token.split(".")[1], "base64").toString()
+        Buffer.from(session.access_token.split(".")[1], "base64").toString(),
       );
       userRole = payload.user_role ?? null;
     }

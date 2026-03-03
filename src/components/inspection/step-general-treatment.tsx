@@ -1,24 +1,24 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFormContext } from "react-hook-form";
+import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
+import { PhotoCapture } from "@/components/inspection/photo-capture";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
+  FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
-  FormControl,
   FormMessage,
-  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { ButtonGroup } from "@/components/ui/button-group";
-import { GP402_SYSTEM_TYPES, CONDITION_OPTIONS } from "@/lib/constants/inspection";
-import { PhotoCapture } from "@/components/inspection/photo-capture";
-import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { CONDITION_OPTIONS, GP402_SYSTEM_TYPES } from "@/lib/constants/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 
 const SECTION_NAME = "general-treatment";
@@ -60,14 +60,17 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
     loadMedia();
   }, [inspectionId]);
 
-  const handleDeleteMedia = useCallback(async (mediaId: string) => {
-    await fetch(`/api/inspections/${inspectionId}/media`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaId }),
-    });
-    setMedia((prev) => prev.filter((m) => m.id !== mediaId));
-  }, [inspectionId]);
+  const handleDeleteMedia = useCallback(
+    async (mediaId: string) => {
+      await fetch(`/api/inspections/${inspectionId}/media`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mediaId }),
+      });
+      setMedia((prev) => prev.filter((m) => m.id !== mediaId));
+    },
+    [inspectionId],
+  );
 
   return (
     <div className="space-y-8">
@@ -95,7 +98,7 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
                           field.onChange(
                             checked
                               ? [...current, systemType.value]
-                              : current.filter((v: string) => v !== systemType.value)
+                              : current.filter((v: string) => v !== systemType.value),
                           );
                         }}
                       />
@@ -116,33 +119,34 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
             />
           </div>
 
-          {showAllTypes && RARE_SYSTEM_TYPES.map((systemType) => (
-            <FormField
-              key={systemType.value}
-              control={form.control}
-              name="generalTreatment.systemTypes"
-              render={({ field }) => (
-                <FormItem>
-                  <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border p-3">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value?.includes(systemType.value)}
-                        onCheckedChange={(checked) => {
-                          const current = field.value ?? [];
-                          field.onChange(
-                            checked
-                              ? [...current, systemType.value]
-                              : current.filter((v: string) => v !== systemType.value)
-                          );
-                        }}
-                      />
-                    </FormControl>
-                    <span className="text-base leading-snug">{systemType.label}</span>
-                  </label>
-                </FormItem>
-              )}
-            />
-          ))}
+          {showAllTypes &&
+            RARE_SYSTEM_TYPES.map((systemType) => (
+              <FormField
+                key={systemType.value}
+                control={form.control}
+                name="generalTreatment.systemTypes"
+                render={({ field }) => (
+                  <FormItem>
+                    <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border p-3">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value?.includes(systemType.value)}
+                          onCheckedChange={(checked) => {
+                            const current = field.value ?? [];
+                            field.onChange(
+                              checked
+                                ? [...current, systemType.value]
+                                : current.filter((v: string) => v !== systemType.value),
+                            );
+                          }}
+                        />
+                      </FormControl>
+                      <span className="text-base leading-snug">{systemType.label}</span>
+                    </label>
+                  </FormItem>
+                )}
+              />
+            ))}
         </div>
       </section>
 
@@ -159,7 +163,10 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
               <FormLabel className="text-base">Performance Assurance Plan Required?</FormLabel>
               <FormControl>
                 <ButtonGroup
-                  options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
+                  options={[
+                    { value: "yes", label: "Yes" },
+                    { value: "no", label: "No" },
+                  ]}
                   value={field.value}
                   onChange={field.onChange}
                 />
@@ -283,7 +290,12 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
                 <FormItem>
                   <FormLabel className="text-base">Notes</FormLabel>
                   <FormControl>
-                    <Textarea {...field} rows={3} className="min-h-[48px]" placeholder="Additional notes about the alternative system" />
+                    <Textarea
+                      {...field}
+                      rows={3}
+                      className="min-h-[48px]"
+                      placeholder="Additional notes about the alternative system"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

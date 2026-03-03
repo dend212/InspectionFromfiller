@@ -1,30 +1,20 @@
-import { redirect } from "next/navigation";
+import { and, asc, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import { db } from "@/lib/db";
-import { inspections, profiles, inspectionEmails } from "@/lib/db/schema";
-import {
-  eq,
-  desc,
-  asc,
-  ilike,
-  or,
-  and,
-  count,
-  sql,
-  inArray,
-} from "drizzle-orm";
-import { Button } from "@/components/ui/button";
+import { redirect } from "next/navigation";
+import type { InspectionRow } from "@/components/dashboard/inspections-table";
+import { InspectionsTable } from "@/components/dashboard/inspections-table";
 import { SearchBar } from "@/components/dashboard/search-bar";
 import { StatusTabs } from "@/components/dashboard/status-tabs";
-import { InspectionsTable } from "@/components/dashboard/inspections-table";
-import type { InspectionRow } from "@/components/dashboard/inspections-table";
+import { Button } from "@/components/ui/button";
+import { db } from "@/lib/db";
+import { inspectionEmails, inspections, profiles } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/types/roles";
 
 const PAGE_SIZE = 20;
 
 async function getUserRole(
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: Awaited<ReturnType<typeof createClient>>,
 ): Promise<AppRole | null> {
   const {
     data: { session },
@@ -33,7 +23,7 @@ async function getUserRole(
 
   try {
     const payload = JSON.parse(
-      Buffer.from(session.access_token.split(".")[1], "base64").toString()
+      Buffer.from(session.access_token.split(".")[1], "base64").toString(),
     );
     return payload.user_role ?? null;
   } catch {
@@ -78,7 +68,9 @@ export default async function InspectionsPage({
 
   // Status filter
   if (status && status !== "all") {
-    conditions.push(eq(inspections.status, status as typeof inspections.status.enumValues[number]));
+    conditions.push(
+      eq(inspections.status, status as (typeof inspections.status.enumValues)[number]),
+    );
   }
 
   // Text search across multiple columns
@@ -88,15 +80,21 @@ export default async function InspectionsPage({
         ilike(inspections.facilityAddress, `%${q}%`),
         ilike(inspections.facilityCity, `%${q}%`),
         ilike(inspections.facilityName, `%${q}%`),
-        ilike(inspections.customerName, `%${q}%`)
-      )!
+        ilike(inspections.customerName, `%${q}%`),
+      )!,
     );
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   // Determine sort column and direction
-  const sortColumnMap: Record<string, typeof inspections.facilityAddress | typeof inspections.createdAt | typeof inspections.customerName | typeof inspections.status> = {
+  const sortColumnMap: Record<
+    string,
+    | typeof inspections.facilityAddress
+    | typeof inspections.createdAt
+    | typeof inspections.customerName
+    | typeof inspections.status
+  > = {
     address: inspections.facilityAddress,
     date: inspections.createdAt,
     customer: inspections.customerName,
@@ -125,10 +123,7 @@ export default async function InspectionsPage({
     .offset(offset);
 
   // Count query for pagination
-  const [{ total }] = await db
-    .select({ total: count() })
-    .from(inspections)
-    .where(whereClause);
+  const [{ total }] = await db.select({ total: count() }).from(inspections).where(whereClause);
 
   const totalCount = Number(total);
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
@@ -148,7 +143,7 @@ export default async function InspectionsPage({
       .groupBy(inspectionEmails.inspectionId);
 
     emailCountMap = Object.fromEntries(
-      emailCounts.map((row) => [row.inspectionId, Number(row.emailCount)])
+      emailCounts.map((row) => [row.inspectionId, Number(row.emailCount)]),
     );
   }
 
@@ -157,8 +152,7 @@ export default async function InspectionsPage({
   if (!isPrivileged) {
     tabConditions.push(eq(inspections.inspectorId, user.id));
   }
-  const tabWhereClause =
-    tabConditions.length > 0 ? and(...tabConditions) : undefined;
+  const tabWhereClause = tabConditions.length > 0 ? and(...tabConditions) : undefined;
 
   const statusCountRows = await db
     .select({

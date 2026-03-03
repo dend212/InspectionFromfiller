@@ -1,8 +1,5 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { db } from "@/lib/db";
-import { profiles, userRoles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { redirect } from "next/navigation";
 import { CreateUserForm } from "@/components/admin/create-user-form";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -13,12 +10,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ROLE_LABELS } from "@/types/roles";
+import { db } from "@/lib/db";
+import { profiles, userRoles } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/types/roles";
+import { ROLE_LABELS } from "@/types/roles";
 
-async function getAdminRole(
-  supabase: Awaited<ReturnType<typeof createClient>>
-): Promise<boolean> {
+async function getAdminRole(supabase: Awaited<ReturnType<typeof createClient>>): Promise<boolean> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -26,7 +24,7 @@ async function getAdminRole(
 
   try {
     const payload = JSON.parse(
-      Buffer.from(session.access_token.split(".")[1], "base64").toString()
+      Buffer.from(session.access_token.split(".")[1], "base64").toString(),
     );
     return payload.user_role === "admin";
   } catch {
@@ -84,9 +82,7 @@ export default async function AdminUsersPage() {
 
       {/* Users List Section */}
       <div>
-        <h2 className="text-lg font-semibold mb-4">
-          Existing Users ({users.length})
-        </h2>
+        <h2 className="text-lg font-semibold mb-4">Existing Users ({users.length})</h2>
         <div className="rounded-md border">
           <Table>
             <TableHeader>
@@ -100,35 +96,24 @@ export default async function AdminUsersPage() {
             <TableBody>
               {users.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="text-center text-muted-foreground py-6"
-                  >
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-6">
                     No users found.
                   </TableCell>
                 </TableRow>
               ) : (
                 users.map((u) => (
                   <TableRow key={u.id}>
-                    <TableCell className="font-medium">
-                      {u.fullName}
-                    </TableCell>
+                    <TableCell className="font-medium">{u.fullName}</TableCell>
                     <TableCell>{u.email}</TableCell>
                     <TableCell>
                       {u.role ? (
-                        <Badge variant="secondary">
-                          {ROLE_LABELS[u.role as AppRole]}
-                        </Badge>
+                        <Badge variant="secondary">{ROLE_LABELS[u.role as AppRole]}</Badge>
                       ) : (
-                        <span className="text-muted-foreground text-sm">
-                          No role
-                        </span>
+                        <span className="text-muted-foreground text-sm">No role</span>
                       )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {u.createdAt
-                        ? new Date(u.createdAt).toLocaleDateString()
-                        : "-"}
+                      {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "-"}
                     </TableCell>
                   </TableRow>
                 ))

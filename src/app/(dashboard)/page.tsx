@@ -1,19 +1,13 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { ROLE_LABELS } from "@/types/roles";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/types/roles";
+import { ROLE_LABELS } from "@/types/roles";
 
 async function getUserRole(
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: Awaited<ReturnType<typeof createClient>>,
 ): Promise<AppRole | null> {
   const {
     data: { session },
@@ -22,7 +16,7 @@ async function getUserRole(
 
   try {
     const payload = JSON.parse(
-      Buffer.from(session.access_token.split(".")[1], "base64").toString()
+      Buffer.from(session.access_token.split(".")[1], "base64").toString(),
     );
     return payload.user_role ?? null;
   } catch {
@@ -41,25 +35,20 @@ export default async function DashboardPage() {
   }
 
   const role = await getUserRole(supabase);
-  const displayName =
-    user.user_metadata?.full_name || user.email || "User";
+  const displayName = user.user_metadata?.full_name || user.email || "User";
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          {role && (
-            <Badge variant="secondary">{ROLE_LABELS[role]}</Badge>
-          )}
+          {role && <Badge variant="secondary">{ROLE_LABELS[role]}</Badge>}
         </div>
       </div>
 
       {role === "admin" && (
         <div className="space-y-4">
-          <p className="text-muted-foreground">
-            Welcome, {displayName}. You have admin access.
-          </p>
+          <p className="text-muted-foreground">Welcome, {displayName}. You have admin access.</p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <QuickLinkCard
               title="Manage Users"
@@ -83,8 +72,7 @@ export default async function DashboardPage() {
       {role === "field_tech" && (
         <div className="space-y-4">
           <p className="text-muted-foreground">
-            Welcome back, {displayName}. Start a new inspection or view
-            your recent inspections.
+            Welcome back, {displayName}. Start a new inspection or view your recent inspections.
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <QuickLinkCard
@@ -123,8 +111,8 @@ export default async function DashboardPage() {
 
       {!role && (
         <p className="text-muted-foreground">
-          Welcome, {displayName}. Your account does not have a role
-          assigned. Please contact an administrator.
+          Welcome, {displayName}. Your account does not have a role assigned. Please contact an
+          administrator.
         </p>
       )}
     </div>

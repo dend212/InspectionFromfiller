@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import { MobileNav } from "@/components/layout/mobile-nav";
 import { LogOut, Menu } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { MobileNav } from "@/components/layout/mobile-nav";
+import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
 import type { AppRole } from "@/types/roles";
 
 export function Header() {
@@ -53,11 +53,7 @@ export function Header() {
 
       {/* Branding */}
       <div className="flex items-center">
-        <img
-          src="/sewertime-logo.png"
-          alt="SewerTime"
-          className="h-8 w-auto"
-        />
+        <img src="/sewertime-logo.png" alt="SewerTime" className="h-8 w-auto" />
       </div>
 
       {/* Spacer */}
@@ -66,9 +62,7 @@ export function Header() {
       {/* User info + Logout */}
       <div className="flex items-center gap-3">
         {userEmail && (
-          <span className="text-sm text-muted-foreground hidden sm:inline">
-            {userEmail}
-          </span>
+          <span className="text-sm text-muted-foreground hidden sm:inline">{userEmail}</span>
         )}
         <Button
           variant="ghost"
@@ -78,9 +72,7 @@ export function Header() {
           className="gap-1.5"
         >
           <LogOut className="size-4" />
-          <span className="hidden sm:inline">
-            {loggingOut ? "Signing out..." : "Sign Out"}
-          </span>
+          <span className="hidden sm:inline">{loggingOut ? "Signing out..." : "Sign Out"}</span>
         </Button>
       </div>
 

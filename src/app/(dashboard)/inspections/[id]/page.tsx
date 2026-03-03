@@ -1,10 +1,10 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { db } from "@/lib/db";
-import { inspections, inspectionMedia } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import type { AppRole } from "@/types/roles";
+import { redirect } from "next/navigation";
+import { db } from "@/lib/db";
+import { inspectionMedia, inspections } from "@/lib/db/schema";
+import { createClient } from "@/lib/supabase/server";
 import type { InspectionFormData } from "@/types/inspection";
+import type { AppRole } from "@/types/roles";
 import { InspectionPdfView } from "./inspection-pdf-view";
 
 export const metadata = {
@@ -46,11 +46,7 @@ export default async function InspectionDetailPage({
   }
 
   // Load inspection from database
-  const [inspection] = await db
-    .select()
-    .from(inspections)
-    .where(eq(inspections.id, id))
-    .limit(1);
+  const [inspection] = await db.select().from(inspections).where(eq(inspections.id, id)).limit(1);
 
   if (!inspection) {
     redirect("/inspections");
@@ -66,10 +62,7 @@ export default async function InspectionDetailPage({
   }
 
   // Load media records for this inspection
-  const media = await db
-    .select()
-    .from(inspectionMedia)
-    .where(eq(inspectionMedia.inspectionId, id));
+  const media = await db.select().from(inspectionMedia).where(eq(inspectionMedia.inspectionId, id));
 
   return (
     <div className="mx-auto max-w-4xl">

@@ -1,9 +1,9 @@
+import { and, asc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db";
-import { inspections, inspectionMedia } from "@/lib/db/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { inspectionMedia, inspections } from "@/lib/db/schema";
 import { checkInspectionAccess } from "@/lib/supabase/auth-helpers";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * Verify user has access to the inspection.
@@ -50,10 +50,7 @@ async function getSignedUrl(
  * POST /api/inspections/[id]/media
  * Record media metadata after a successful Supabase Storage upload.
  */
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -75,10 +72,7 @@ export async function POST(
   };
 
   if (!storagePath || !type) {
-    return NextResponse.json(
-      { error: "storagePath and type are required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "storagePath and type are required" }, { status: 400 });
   }
 
   const [record] = await db
@@ -92,9 +86,7 @@ export async function POST(
     .returning();
 
   // Include signed URL so the client can display the photo immediately
-  const signedUrl = type === "photo"
-    ? await getSignedUrl(supabase, storagePath)
-    : null;
+  const signedUrl = type === "photo" ? await getSignedUrl(supabase, storagePath) : null;
 
   return NextResponse.json({ ...record, signedUrl }, { status: 201 });
 }
@@ -103,10 +95,7 @@ export async function POST(
  * GET /api/inspections/[id]/media
  * List all media for an inspection, ordered by sortOrder then createdAt.
  */
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -130,10 +119,8 @@ export async function GET(
   const withUrls = await Promise.all(
     records.map(async (r) => ({
       ...r,
-      signedUrl: r.type === "photo"
-        ? await getSignedUrl(supabase, r.storagePath)
-        : null,
-    }))
+      signedUrl: r.type === "photo" ? await getSignedUrl(supabase, r.storagePath) : null,
+    })),
   );
 
   return NextResponse.json(withUrls);
@@ -143,10 +130,7 @@ export async function GET(
  * DELETE /api/inspections/[id]/media
  * Remove a media record and its storage file.
  */
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -164,22 +148,14 @@ export async function DELETE(
   const { mediaId } = body as { mediaId: string };
 
   if (!mediaId) {
-    return NextResponse.json(
-      { error: "mediaId is required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "mediaId is required" }, { status: 400 });
   }
 
   // Find the media record to get storagePath
   const [record] = await db
     .select()
     .from(inspectionMedia)
-    .where(
-      and(
-        eq(inspectionMedia.id, mediaId),
-        eq(inspectionMedia.inspectionId, id)
-      )
-    )
+    .where(and(eq(inspectionMedia.id, mediaId), eq(inspectionMedia.inspectionId, id)))
     .limit(1);
 
   if (!record) {
@@ -187,14 +163,10 @@ export async function DELETE(
   }
 
   // Remove from Supabase Storage
-  await supabase.storage
-    .from("inspection-media")
-    .remove([record.storagePath]);
+  await supabase.storage.from("inspection-media").remove([record.storagePath]);
 
   // Remove from database
-  await db
-    .delete(inspectionMedia)
-    .where(eq(inspectionMedia.id, mediaId));
+  await db.delete(inspectionMedia).where(eq(inspectionMedia.id, mediaId));
 
   return NextResponse.json({ deleted: true });
 }

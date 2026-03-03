@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { Eraser } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
 import { Button } from "@/components/ui/button";
-import { Eraser } from "lucide-react";
 
 interface SignaturePadProps {
   /** Called with the PNG data URL whenever the user finishes a stroke */
@@ -39,9 +39,7 @@ export function SignaturePad({ onSignatureCapture }: SignaturePadProps) {
 
   return (
     <div className="space-y-2">
-      <label className="text-sm font-medium leading-none">
-        Inspector Signature
-      </label>
+      <label className="text-sm font-medium leading-none">Inspector Signature</label>
       <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 bg-background">
         <SignatureCanvas
           ref={sigRef}
@@ -55,19 +53,11 @@ export function SignaturePad({ onSignatureCapture }: SignaturePadProps) {
       </div>
       <div className="flex items-center justify-between">
         {isEmpty ? (
-          <p className="text-xs text-muted-foreground">
-            Sign above using finger or stylus
-          </p>
+          <p className="text-xs text-muted-foreground">Sign above using finger or stylus</p>
         ) : (
           <p className="text-xs text-green-600">Signature captured</p>
         )}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleClear}
-          disabled={isEmpty}
-        >
+        <Button type="button" variant="outline" size="sm" onClick={handleClear} disabled={isEmpty}>
           <Eraser className="size-4" />
           Clear
         </Button>

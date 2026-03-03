@@ -1,18 +1,18 @@
+import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { InspectionWizard } from "@/components/inspection/inspection-wizard";
 import { db } from "@/lib/db";
 import { inspections } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { InspectionWizard } from "@/components/inspection/inspection-wizard";
-import type { AppRole } from "@/types/roles";
+import { createClient } from "@/lib/supabase/server";
 import type { InspectionFormData } from "@/types/inspection";
+import type { AppRole } from "@/types/roles";
 
 export const metadata = {
   title: "Edit Inspection",
 };
 
 async function getUserRole(
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: Awaited<ReturnType<typeof createClient>>,
 ): Promise<AppRole | null> {
   const {
     data: { session },
@@ -21,7 +21,7 @@ async function getUserRole(
 
   try {
     const payload = JSON.parse(
-      Buffer.from(session.access_token.split(".")[1], "base64").toString()
+      Buffer.from(session.access_token.split(".")[1], "base64").toString(),
     );
     return payload.user_role ?? null;
   } catch {
@@ -29,11 +29,7 @@ async function getUserRole(
   }
 }
 
-export default async function EditInspectionPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function EditInspectionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   const supabase = await createClient();
@@ -46,11 +42,7 @@ export default async function EditInspectionPage({
   }
 
   // Load inspection from database
-  const [inspection] = await db
-    .select()
-    .from(inspections)
-    .where(eq(inspections.id, id))
-    .limit(1);
+  const [inspection] = await db.select().from(inspections).where(eq(inspections.id, id)).limit(1);
 
   if (!inspection) {
     redirect("/inspections");

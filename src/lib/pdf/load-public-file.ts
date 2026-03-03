@@ -8,9 +8,7 @@ export async function loadPublicFile(relativePath: string): Promise<ArrayBuffer>
   if (typeof window !== "undefined") {
     const response = await fetch(relativePath);
     if (!response.ok) {
-      throw new Error(
-        `Failed to load ${relativePath}: ${response.status} ${response.statusText}`,
-      );
+      throw new Error(`Failed to load ${relativePath}: ${response.status} ${response.statusText}`);
     }
     return response.arrayBuffer();
   }
@@ -20,8 +18,5 @@ export async function loadPublicFile(relativePath: string): Promise<ArrayBuffer>
   const { join } = await import("node:path");
   const filePath = join(process.cwd(), "public", relativePath);
   const buffer = await readFile(filePath);
-  return buffer.buffer.slice(
-    buffer.byteOffset,
-    buffer.byteOffset + buffer.byteLength,
-  );
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 }

@@ -1,11 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -14,6 +11,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
 
 export function ResetPasswordForm() {
   const [email, setEmail] = useState("");
@@ -34,12 +34,9 @@ export function ResetPasswordForm() {
       return;
     }
 
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-      email,
-      {
-        redirectTo: `${window.location.origin}/auth/confirm?next=/reset-password`,
-      },
-    );
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/confirm?next=/reset-password`,
+    });
 
     if (resetError) {
       setError(resetError.message);
@@ -55,16 +52,11 @@ export function ResetPasswordForm() {
     <Card className="w-full max-w-sm">
       <CardHeader className="text-center">
         <div className="mb-3 flex items-center justify-center">
-          <img
-            src="/sewertime-logo.png"
-            alt="SewerTime Septic"
-            className="h-12 w-auto"
-          />
+          <img src="/sewertime-logo.png" alt="SewerTime Septic" className="h-12 w-auto" />
         </div>
         <CardTitle className="text-xl font-bold">Reset Password</CardTitle>
         <CardDescription>
-          Enter your email address and we will send you a link to reset your
-          password.
+          Enter your email address and we will send you a link to reset your password.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -72,8 +64,7 @@ export function ResetPasswordForm() {
           <div className="rounded-md bg-muted p-4 text-center">
             <p className="text-sm font-medium">Check your email</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              We sent a password reset link to{" "}
-              <span className="font-medium">{email}</span>
+              We sent a password reset link to <span className="font-medium">{email}</span>
             </p>
           </div>
         ) : (

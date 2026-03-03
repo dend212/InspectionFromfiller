@@ -752,4 +752,4 @@ export const ALT_SYSTEM_INSPECTOR = {
 // Template path
 // ---------------------------------------------------------------------------
 
-export const PDF_TEMPLATE_PATH = "septic_system_insp_form_v2.pdf";
+export const PDF_TEMPLATE_PATH = "/septic_system_insp_form_v2.pdf";

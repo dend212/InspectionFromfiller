@@ -9,11 +9,7 @@ import { toast } from "sonner";
  * Uses useWatch to observe form changes in an isolated context,
  * preventing full-form re-renders on every keystroke.
  */
-export function useAutoSave(
-  form: UseFormReturn<any>,
-  inspectionId: string,
-  debounceMs = 1000
-) {
+export function useAutoSave(form: UseFormReturn<any>, inspectionId: string, debounceMs = 1000) {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const lastSavedRef = useRef<string>("");
@@ -25,40 +21,37 @@ export function useAutoSave(
   // form via form.getValues() to avoid partial data from unmounted steps.
   const watchedValues = useWatch({ control: form.control });
 
-  const saveData = useCallback(
-    async () => {
-      const data = form.getValues();
-      const json = JSON.stringify(data);
-      if (json === lastSavedRef.current) return;
+  const saveData = useCallback(async () => {
+    const data = form.getValues();
+    const json = JSON.stringify(data);
+    if (json === lastSavedRef.current) return;
 
-      setSaving(true);
-      try {
-        const response = await fetch(`/api/inspections/${inspectionId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: json,
-        });
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/inspections/${inspectionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: json,
+      });
 
-        if (!response.ok) {
-          throw new Error(`Save failed: ${response.status}`);
-        }
-
-        lastSavedRef.current = json;
-        if (isMountedRef.current) {
-          setLastSaved(new Date());
-        }
-      } catch (error) {
-        if (isMountedRef.current) {
-          toast.error("Auto-save failed");
-        }
-      } finally {
-        if (isMountedRef.current) {
-          setSaving(false);
-        }
+      if (!response.ok) {
+        throw new Error(`Save failed: ${response.status}`);
       }
-    },
-    [form, inspectionId]
-  );
+
+      lastSavedRef.current = json;
+      if (isMountedRef.current) {
+        setLastSaved(new Date());
+      }
+    } catch (error) {
+      if (isMountedRef.current) {
+        toast.error("Auto-save failed");
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setSaving(false);
+      }
+    }
+  }, [form, inspectionId]);
 
   // Debounce saves on form value changes
   useEffect(() => {

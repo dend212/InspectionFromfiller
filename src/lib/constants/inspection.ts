@@ -54,7 +54,10 @@ export const GP402_SYSTEM_TYPES = [
   { value: "gp410_sand_filter", label: "GP 4.10 Intermittent Sand Filter" },
   { value: "gp411_peat_filter", label: "GP 4.11 Peat Filter" },
   { value: "gp412_textile_filter", label: "GP 4.12 Textile Filter" },
-  { value: "gp413_denitrifying", label: "GP 4.13 Denitrifying System Using Separated Wastewater Streams" },
+  {
+    value: "gp413_denitrifying",
+    label: "GP 4.13 Denitrifying System Using Separated Wastewater Streams",
+  },
   { value: "gp414_sewage_vault", label: "GP 4.14 Sewage Vault" },
   { value: "gp415_aerobic", label: "GP 4.15 Aerobic System" },
   { value: "gp416_nitrate_filter", label: "GP 4.16 Nitrate-Reactive Media Filter" },

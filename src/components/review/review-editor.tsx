@@ -1,40 +1,26 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { inspectionFormSchema } from "@/lib/validators/inspection";
-import { getDefaultFormValues } from "@/lib/validators/inspection";
-import { STEP_LABELS } from "@/lib/constants/inspection";
-import type { InspectionFormData } from "@/types/inspection";
+import { ArrowLeft, ChevronDown, ChevronRight, Loader2, RefreshCw, Save } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
-import { usePdfGeneration } from "@/hooks/use-pdf-generation";
 import { PdfPreview } from "@/components/inspection/pdf-preview";
-import { ReviewSection } from "./review-section";
-import { ReviewActions } from "./review-actions";
-import {
-  Form,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Loader2,
-  RefreshCw,
-  Save,
-  ArrowLeft,
-  ChevronDown,
-  ChevronRight,
-} from "lucide-react";
-import Link from "next/link";
-import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { usePdfGeneration } from "@/hooks/use-pdf-generation";
+import { STEP_LABELS } from "@/lib/constants/inspection";
+import { getDefaultFormValues, inspectionFormSchema } from "@/lib/validators/inspection";
+import type { InspectionFormData } from "@/types/inspection";
+import { ReviewActions } from "./review-actions";
+import { ReviewSection } from "./review-section";
 
 interface ReviewEditorProps {
   inspection: {
@@ -55,9 +41,7 @@ interface ReviewEditorProps {
 export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
   const [status, setStatus] = useState(inspection.status);
   const [saving, setSaving] = useState(false);
-  const [showAllFields, setShowAllFields] = useState<Record<number, boolean>>(
-    {}
-  );
+  const [showAllFields, setShowAllFields] = useState<Record<number, boolean>>({});
 
   const isReadOnly = status === "completed";
 
@@ -66,8 +50,7 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
     defaultValues: inspection.formData ?? getDefaultFormValues(""),
   });
 
-  const { generatePdf, pdfData, isGenerating, error, clearPdf } =
-    usePdfGeneration();
+  const { generatePdf, pdfData, isGenerating, error, clearPdf } = usePdfGeneration();
 
   const isDirty = form.formState.isDirty;
 
@@ -99,9 +82,7 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
       form.reset(data);
       toast.success("Changes saved");
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to save changes"
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to save changes");
     } finally {
       setSaving(false);
     }
@@ -119,16 +100,14 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
   const renderTextField = (
     name: string,
     label: string,
-    options?: { textarea?: boolean; disabled?: boolean }
+    options?: { textarea?: boolean; disabled?: boolean },
   ) => (
     <FormField
       control={form.control}
       name={name as any}
       render={({ field }) => (
         <FormItem>
-          <FormLabel className="text-xs font-medium text-muted-foreground">
-            {label}
-          </FormLabel>
+          <FormLabel className="text-xs font-medium text-muted-foreground">{label}</FormLabel>
           <FormControl>
             {options?.textarea ? (
               <Textarea
@@ -153,11 +132,7 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
   );
 
   // Helper to render a checkbox field
-  const renderCheckbox = (
-    name: string,
-    label: string,
-    options?: { disabled?: boolean }
-  ) => (
+  const renderCheckbox = (name: string, label: string, options?: { disabled?: boolean }) => (
     <FormField
       control={form.control}
       name={name as any}
@@ -222,23 +197,14 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
             {/* Section 1: Facility Information */}
             <ReviewSection title={STEP_LABELS[0]} defaultOpen>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {renderTextField(
-                  "facilityInfo.facilityName",
-                  "Facility / Property Name"
-                )}
+                {renderTextField("facilityInfo.facilityName", "Facility / Property Name")}
                 {renderTextField("facilityInfo.facilityAddress", "Address")}
                 {renderTextField("facilityInfo.facilityCity", "City")}
                 {renderTextField("facilityInfo.facilityCounty", "County")}
                 {renderTextField("facilityInfo.facilityState", "State")}
                 {renderTextField("facilityInfo.facilityZip", "Zip")}
-                {renderTextField(
-                  "facilityInfo.taxParcelNumber",
-                  "Tax Parcel Number"
-                )}
-                {renderTextField(
-                  "facilityInfo.dateOfInspection",
-                  "Date of Inspection"
-                )}
+                {renderTextField("facilityInfo.taxParcelNumber", "Tax Parcel Number")}
+                {renderTextField("facilityInfo.dateOfInspection", "Date of Inspection")}
               </div>
 
               <div className="mt-4 border-t pt-4">
@@ -247,10 +213,7 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {renderTextField("facilityInfo.sellerName", "Seller Name")}
-                  {renderTextField(
-                    "facilityInfo.sellerAddress",
-                    "Seller Address"
-                  )}
+                  {renderTextField("facilityInfo.sellerAddress", "Seller Address")}
                   {renderTextField("facilityInfo.sellerCity", "Seller City")}
                   {renderTextField("facilityInfo.sellerState", "Seller State")}
                   {renderTextField("facilityInfo.sellerZip", "Seller Zip")}
@@ -262,19 +225,10 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                   Inspector
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {renderTextField(
-                    "facilityInfo.inspectorName",
-                    "Inspector Name"
-                  )}
+                  {renderTextField("facilityInfo.inspectorName", "Inspector Name")}
                   {renderTextField("facilityInfo.company", "Company")}
-                  {renderTextField(
-                    "facilityInfo.certificationNumber",
-                    "Certification #"
-                  )}
-                  {renderTextField(
-                    "facilityInfo.registrationNumber",
-                    "Registration #"
-                  )}
+                  {renderTextField("facilityInfo.certificationNumber", "Certification #")}
+                  {renderTextField("facilityInfo.registrationNumber", "Registration #")}
                   {renderTextField("facilityInfo.truckNumber", "Truck #")}
                   {renderTextField("facilityInfo.employeeName", "Employee Name")}
                 </div>
@@ -291,8 +245,7 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                 ) : (
                   <ChevronRight className="size-3" />
                 )}
-                {showAllFields[0] ? "Hide" : "Show"} qualification &amp; records
-                fields
+                {showAllFields[0] ? "Hide" : "Show"} qualification &amp; records fields
               </button>
               {showAllFields[0] && (
                 <div className="mt-3 space-y-4 border-t pt-4">
@@ -300,71 +253,33 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                     Inspector Qualifications
                   </p>
                   <div className="space-y-2">
-                    {renderCheckbox(
-                      "facilityInfo.hasAdeqCourse",
-                      "Completed ADEQ Course"
-                    )}
-                    {renderTextField(
-                      "facilityInfo.adeqCourseDetails",
-                      "ADEQ Course Details"
-                    )}
-                    {renderCheckbox(
-                      "facilityInfo.isProfessionalEngineer",
-                      "Professional Engineer"
-                    )}
-                    {renderCheckbox(
-                      "facilityInfo.isRegisteredSanitarian",
-                      "Registered Sanitarian"
-                    )}
-                    {renderCheckbox(
-                      "facilityInfo.isWastewaterOperator",
-                      "Wastewater Operator"
-                    )}
-                    {renderCheckbox(
-                      "facilityInfo.isLicensedContractor",
-                      "Licensed Contractor"
-                    )}
-                    {renderCheckbox(
-                      "facilityInfo.hasPumperTruck",
-                      "Has Pumper Truck"
-                    )}
+                    {renderCheckbox("facilityInfo.hasAdeqCourse", "Completed ADEQ Course")}
+                    {renderTextField("facilityInfo.adeqCourseDetails", "ADEQ Course Details")}
+                    {renderCheckbox("facilityInfo.isProfessionalEngineer", "Professional Engineer")}
+                    {renderCheckbox("facilityInfo.isRegisteredSanitarian", "Registered Sanitarian")}
+                    {renderCheckbox("facilityInfo.isWastewaterOperator", "Wastewater Operator")}
+                    {renderCheckbox("facilityInfo.isLicensedContractor", "Licensed Contractor")}
+                    {renderCheckbox("facilityInfo.hasPumperTruck", "Has Pumper Truck")}
                   </div>
 
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">
-                    Records
-                  </p>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Records</p>
                   <div className="space-y-2">
-                    {renderCheckbox(
-                      "facilityInfo.hasDischargeAuth",
-                      "Discharge Authorization"
-                    )}
+                    {renderCheckbox("facilityInfo.hasDischargeAuth", "Discharge Authorization")}
                     {renderTextField(
                       "facilityInfo.dischargeAuthPermitNo",
-                      "Discharge Auth Permit #"
+                      "Discharge Auth Permit #",
                     )}
                     {renderCheckbox(
                       "facilityInfo.hasApprovalOfConstruction",
-                      "Approval of Construction"
+                      "Approval of Construction",
                     )}
-                    {renderTextField(
-                      "facilityInfo.approvalPermitNo",
-                      "Approval Permit #"
-                    )}
-                    {renderCheckbox(
-                      "facilityInfo.hasSitePlan",
-                      "Site Plan Available"
-                    )}
-                    {renderCheckbox(
-                      "facilityInfo.hasOperationDocs",
-                      "Operation Docs Available"
-                    )}
-                    {renderCheckbox(
-                      "facilityInfo.hasOtherRecords",
-                      "Other Records"
-                    )}
+                    {renderTextField("facilityInfo.approvalPermitNo", "Approval Permit #")}
+                    {renderCheckbox("facilityInfo.hasSitePlan", "Site Plan Available")}
+                    {renderCheckbox("facilityInfo.hasOperationDocs", "Operation Docs Available")}
+                    {renderCheckbox("facilityInfo.hasOtherRecords", "Other Records")}
                     {renderTextField(
                       "facilityInfo.otherRecordsDescription",
-                      "Other Records Description"
+                      "Other Records Description",
                     )}
                   </div>
 
@@ -372,30 +287,12 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                     Facility Details
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {renderTextField(
-                      "facilityInfo.waterSource",
-                      "Water Source"
-                    )}
-                    {renderTextField(
-                      "facilityInfo.wellDistance",
-                      "Well Distance"
-                    )}
-                    {renderTextField(
-                      "facilityInfo.wastewaterSource",
-                      "Wastewater Source"
-                    )}
-                    {renderTextField(
-                      "facilityInfo.occupancyType",
-                      "Occupancy Type"
-                    )}
-                    {renderTextField(
-                      "facilityInfo.facilityType",
-                      "Facility Type"
-                    )}
-                    {renderTextField(
-                      "facilityInfo.numberOfSystems",
-                      "# of Systems"
-                    )}
+                    {renderTextField("facilityInfo.waterSource", "Water Source")}
+                    {renderTextField("facilityInfo.wellDistance", "Well Distance")}
+                    {renderTextField("facilityInfo.wastewaterSource", "Wastewater Source")}
+                    {renderTextField("facilityInfo.occupancyType", "Occupancy Type")}
+                    {renderTextField("facilityInfo.facilityType", "Facility Type")}
+                    {renderTextField("facilityInfo.numberOfSystems", "# of Systems")}
                     {renderTextField("facilityInfo.facilityAge", "Facility Age")}
                   </div>
 
@@ -403,21 +300,18 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                     Overall Condition Ratings
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {renderTextField(
-                      "facilityInfo.septicTankCondition",
-                      "Septic Tank Condition"
-                    )}
+                    {renderTextField("facilityInfo.septicTankCondition", "Septic Tank Condition")}
                     {renderTextField(
                       "facilityInfo.disposalWorksCondition",
-                      "Disposal Works Condition"
+                      "Disposal Works Condition",
                     )}
                     {renderTextField(
                       "facilityInfo.alternativeSystemCondition",
-                      "Alternative System Condition"
+                      "Alternative System Condition",
                     )}
                     {renderTextField(
                       "facilityInfo.alternativeDisposalCondition",
-                      "Alternative Disposal Condition"
+                      "Alternative Disposal Condition",
                     )}
                   </div>
                 </div>
@@ -429,18 +323,14 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
               <div className="space-y-4">
                 {renderReadOnly(
                   "System Types",
-                  (
-                    form.getValues("generalTreatment.systemTypes") ?? []
-                  ).join(", ") || "None selected"
+                  (form.getValues("generalTreatment.systemTypes") ?? []).join(", ") ||
+                    "None selected",
                 )}
                 {renderTextField(
                   "generalTreatment.hasPerformanceAssurancePlan",
-                  "Performance Assurance Plan"
+                  "Performance Assurance Plan",
                 )}
-                {renderCheckbox(
-                  "generalTreatment.alternativeSystem",
-                  "Alternative System"
-                )}
+                {renderCheckbox("generalTreatment.alternativeSystem", "Alternative System")}
 
                 <button
                   type="button"
@@ -452,36 +342,18 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                   ) : (
                     <ChevronRight className="size-3" />
                   )}
-                  {showAllFields[1] ? "Hide" : "Show"} alternative system
-                  details
+                  {showAllFields[1] ? "Hide" : "Show"} alternative system details
                 </button>
                 {showAllFields[1] && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4">
-                    {renderTextField(
-                      "generalTreatment.altSystemManufacturer",
-                      "Manufacturer"
-                    )}
-                    {renderTextField(
-                      "generalTreatment.altSystemModel",
-                      "Model"
-                    )}
-                    {renderTextField(
-                      "generalTreatment.altSystemCapacity",
-                      "Capacity"
-                    )}
-                    {renderTextField(
-                      "generalTreatment.altSystemDateInstalled",
-                      "Date Installed"
-                    )}
-                    {renderTextField(
-                      "generalTreatment.altSystemCondition",
-                      "Condition"
-                    )}
-                    {renderTextField(
-                      "generalTreatment.altSystemNotes",
-                      "Notes",
-                      { textarea: true }
-                    )}
+                    {renderTextField("generalTreatment.altSystemManufacturer", "Manufacturer")}
+                    {renderTextField("generalTreatment.altSystemModel", "Model")}
+                    {renderTextField("generalTreatment.altSystemCapacity", "Capacity")}
+                    {renderTextField("generalTreatment.altSystemDateInstalled", "Date Installed")}
+                    {renderTextField("generalTreatment.altSystemCondition", "Condition")}
+                    {renderTextField("generalTreatment.altSystemNotes", "Notes", {
+                      textarea: true,
+                    })}
                   </div>
                 )}
               </div>
@@ -490,37 +362,17 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
             {/* Section 3: Design Flow */}
             <ReviewSection title={STEP_LABELS[2]}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {renderTextField(
-                  "designFlow.estimatedDesignFlow",
-                  "Estimated Design Flow"
-                )}
-                {renderTextField(
-                  "designFlow.designFlowBasis",
-                  "Design Flow Basis"
-                )}
-                {renderTextField(
-                  "designFlow.numberOfBedrooms",
-                  "Number of Bedrooms"
-                )}
-                {renderTextField(
-                  "designFlow.fixtureCount",
-                  "Fixture Count"
-                )}
-                {renderTextField(
-                  "designFlow.nonDwellingGpd",
-                  "Non-Dwelling GPD"
-                )}
-                {renderTextField(
-                  "designFlow.actualFlowEvaluation",
-                  "Actual Flow Evaluation"
-                )}
+                {renderTextField("designFlow.estimatedDesignFlow", "Estimated Design Flow")}
+                {renderTextField("designFlow.designFlowBasis", "Design Flow Basis")}
+                {renderTextField("designFlow.numberOfBedrooms", "Number of Bedrooms")}
+                {renderTextField("designFlow.fixtureCount", "Fixture Count")}
+                {renderTextField("designFlow.nonDwellingGpd", "Non-Dwelling GPD")}
+                {renderTextField("designFlow.actualFlowEvaluation", "Actual Flow Evaluation")}
               </div>
               <div className="mt-4">
-                {renderTextField(
-                  "designFlow.designFlowComments",
-                  "Design Flow Comments",
-                  { textarea: true }
-                )}
+                {renderTextField("designFlow.designFlowComments", "Design Flow Comments", {
+                  textarea: true,
+                })}
               </div>
             </ReviewSection>
 
@@ -528,180 +380,141 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
             <ReviewSection title={STEP_LABELS[3]}>
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {renderTextField(
-                    "septicTank.numberOfTanks",
-                    "Number of Tanks"
-                  )}
+                  {renderTextField("septicTank.numberOfTanks", "Number of Tanks")}
                   {renderTextField("septicTank.tanksPumped", "Tanks Pumped")}
-                  {renderTextField(
-                    "septicTank.haulerCompany",
-                    "Hauler Company"
-                  )}
-                  {renderTextField(
-                    "septicTank.haulerLicense",
-                    "Hauler License"
-                  )}
-                  {renderTextField(
-                    "septicTank.tankInspectionDate",
-                    "Tank Inspection Date"
-                  )}
+                  {renderTextField("septicTank.haulerCompany", "Hauler Company")}
+                  {renderTextField("septicTank.haulerLicense", "Hauler License")}
+                  {renderTextField("septicTank.tankInspectionDate", "Tank Inspection Date")}
                 </div>
 
                 {/* Per-tank data */}
-                {(form.getValues("septicTank.tanks") ?? []).map(
-                  (_tank: any, index: number) => (
-                    <div
-                      key={index}
-                      className="rounded-lg border p-4 space-y-4"
-                    >
-                      <p className="text-sm font-semibold">
-                        Tank {index + 1}
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {renderTextField(
-                          `septicTank.tanks.${index}.liquidLevel`,
-                          "Liquid Level"
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.tankCapacity`,
-                          "Tank Capacity"
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.tankMaterial`,
-                          "Tank Material"
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.tankDimensions`,
-                          "Tank Dimensions"
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.numberOfCompartments`,
-                          "Compartments"
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.primaryScumThickness`,
-                          "Scum Thickness"
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.primarySludgeThickness`,
-                          "Sludge Thickness"
-                        )}
-                      </div>
-
-                      <p className="text-xs font-semibold uppercase text-muted-foreground">
-                        Deficiencies
-                      </p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {renderCheckbox(
-                          `septicTank.tanks.${index}.deficiencyRootInvasion`,
-                          "Root Invasion"
-                        )}
-                        {renderCheckbox(
-                          `septicTank.tanks.${index}.deficiencyExposedRebar`,
-                          "Exposed Rebar"
-                        )}
-                        {renderCheckbox(
-                          `septicTank.tanks.${index}.deficiencyCracks`,
-                          "Cracks"
-                        )}
-                        {renderCheckbox(
-                          `septicTank.tanks.${index}.deficiencyDamagedInlet`,
-                          "Damaged Inlet"
-                        )}
-                        {renderCheckbox(
-                          `septicTank.tanks.${index}.deficiencyDamagedOutlet`,
-                          "Damaged Outlet"
-                        )}
-                        {renderCheckbox(
-                          `septicTank.tanks.${index}.deficiencyDamagedLids`,
-                          "Damaged Lids"
-                        )}
-                        {renderCheckbox(
-                          `septicTank.tanks.${index}.deficiencyDeterioratingConcrete`,
-                          "Deteriorating Concrete"
-                        )}
-                        {renderCheckbox(
-                          `septicTank.tanks.${index}.deficiencyOther`,
-                          "Other"
-                        )}
-                      </div>
-
-                      <button
-                        type="button"
-                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() =>
-                          toggleShowAll(30 + index)
-                        }
-                      >
-                        {showAllFields[30 + index] ? (
-                          <ChevronDown className="size-3" />
-                        ) : (
-                          <ChevronRight className="size-3" />
-                        )}
-                        {showAllFields[30 + index] ? "Hide" : "Show"} all tank
-                        fields
-                      </button>
-                      {showAllFields[30 + index] && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4">
-                          {renderTextField(
-                            `septicTank.tanks.${index}.capacityBasis`,
-                            "Capacity Basis"
-                          )}
-                          {renderTextField(
-                            `septicTank.tanks.${index}.accessOpenings`,
-                            "Access Openings"
-                          )}
-                          {renderTextField(
-                            `septicTank.tanks.${index}.lidsRisersPresent`,
-                            "Lids/Risers Present"
-                          )}
-                          {renderTextField(
-                            `septicTank.tanks.${index}.lidsSecurelyFastened`,
-                            "Lids Securely Fastened"
-                          )}
-                          {renderTextField(
-                            `septicTank.tanks.${index}.compromisedTank`,
-                            "Compromised Tank"
-                          )}
-                          {renderTextField(
-                            `septicTank.tanks.${index}.baffleMaterial`,
-                            "Baffle Material"
-                          )}
-                          {renderTextField(
-                            `septicTank.tanks.${index}.inletBaffleCondition`,
-                            "Inlet Baffle Condition"
-                          )}
-                          {renderTextField(
-                            `septicTank.tanks.${index}.outletBaffleCondition`,
-                            "Outlet Baffle Condition"
-                          )}
-                          {renderTextField(
-                            `septicTank.tanks.${index}.effluentFilterPresent`,
-                            "Effluent Filter Present"
-                          )}
-                          {renderTextField(
-                            `septicTank.tanks.${index}.effluentFilterServiced`,
-                            "Effluent Filter Serviced"
-                          )}
-                          {renderTextField(
-                            `septicTank.tanks.${index}.secondaryScumThickness`,
-                            "Secondary Scum Thickness"
-                          )}
-                          {renderTextField(
-                            `septicTank.tanks.${index}.secondarySludgeThickness`,
-                            "Secondary Sludge Thickness"
-                          )}
-                        </div>
+                {(form.getValues("septicTank.tanks") ?? []).map((_tank: any, index: number) => (
+                  <div key={index} className="rounded-lg border p-4 space-y-4">
+                    <p className="text-sm font-semibold">Tank {index + 1}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {renderTextField(`septicTank.tanks.${index}.liquidLevel`, "Liquid Level")}
+                      {renderTextField(`septicTank.tanks.${index}.tankCapacity`, "Tank Capacity")}
+                      {renderTextField(`septicTank.tanks.${index}.tankMaterial`, "Tank Material")}
+                      {renderTextField(
+                        `septicTank.tanks.${index}.tankDimensions`,
+                        "Tank Dimensions",
+                      )}
+                      {renderTextField(
+                        `septicTank.tanks.${index}.numberOfCompartments`,
+                        "Compartments",
+                      )}
+                      {renderTextField(
+                        `septicTank.tanks.${index}.primaryScumThickness`,
+                        "Scum Thickness",
+                      )}
+                      {renderTextField(
+                        `septicTank.tanks.${index}.primarySludgeThickness`,
+                        "Sludge Thickness",
                       )}
                     </div>
-                  )
-                )}
 
-                {renderTextField(
-                  "septicTank.septicTankComments",
-                  "Inspector Comments",
-                  { textarea: true }
-                )}
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">
+                      Deficiencies
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {renderCheckbox(
+                        `septicTank.tanks.${index}.deficiencyRootInvasion`,
+                        "Root Invasion",
+                      )}
+                      {renderCheckbox(
+                        `septicTank.tanks.${index}.deficiencyExposedRebar`,
+                        "Exposed Rebar",
+                      )}
+                      {renderCheckbox(`septicTank.tanks.${index}.deficiencyCracks`, "Cracks")}
+                      {renderCheckbox(
+                        `septicTank.tanks.${index}.deficiencyDamagedInlet`,
+                        "Damaged Inlet",
+                      )}
+                      {renderCheckbox(
+                        `septicTank.tanks.${index}.deficiencyDamagedOutlet`,
+                        "Damaged Outlet",
+                      )}
+                      {renderCheckbox(
+                        `septicTank.tanks.${index}.deficiencyDamagedLids`,
+                        "Damaged Lids",
+                      )}
+                      {renderCheckbox(
+                        `septicTank.tanks.${index}.deficiencyDeterioratingConcrete`,
+                        "Deteriorating Concrete",
+                      )}
+                      {renderCheckbox(`septicTank.tanks.${index}.deficiencyOther`, "Other")}
+                    </div>
+
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => toggleShowAll(30 + index)}
+                    >
+                      {showAllFields[30 + index] ? (
+                        <ChevronDown className="size-3" />
+                      ) : (
+                        <ChevronRight className="size-3" />
+                      )}
+                      {showAllFields[30 + index] ? "Hide" : "Show"} all tank fields
+                    </button>
+                    {showAllFields[30 + index] && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4">
+                        {renderTextField(
+                          `septicTank.tanks.${index}.capacityBasis`,
+                          "Capacity Basis",
+                        )}
+                        {renderTextField(
+                          `septicTank.tanks.${index}.accessOpenings`,
+                          "Access Openings",
+                        )}
+                        {renderTextField(
+                          `septicTank.tanks.${index}.lidsRisersPresent`,
+                          "Lids/Risers Present",
+                        )}
+                        {renderTextField(
+                          `septicTank.tanks.${index}.lidsSecurelyFastened`,
+                          "Lids Securely Fastened",
+                        )}
+                        {renderTextField(
+                          `septicTank.tanks.${index}.compromisedTank`,
+                          "Compromised Tank",
+                        )}
+                        {renderTextField(
+                          `septicTank.tanks.${index}.baffleMaterial`,
+                          "Baffle Material",
+                        )}
+                        {renderTextField(
+                          `septicTank.tanks.${index}.inletBaffleCondition`,
+                          "Inlet Baffle Condition",
+                        )}
+                        {renderTextField(
+                          `septicTank.tanks.${index}.outletBaffleCondition`,
+                          "Outlet Baffle Condition",
+                        )}
+                        {renderTextField(
+                          `septicTank.tanks.${index}.effluentFilterPresent`,
+                          "Effluent Filter Present",
+                        )}
+                        {renderTextField(
+                          `septicTank.tanks.${index}.effluentFilterServiced`,
+                          "Effluent Filter Serviced",
+                        )}
+                        {renderTextField(
+                          `septicTank.tanks.${index}.secondaryScumThickness`,
+                          "Secondary Scum Thickness",
+                        )}
+                        {renderTextField(
+                          `septicTank.tanks.${index}.secondarySludgeThickness`,
+                          "Secondary Sludge Thickness",
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {renderTextField("septicTank.septicTankComments", "Inspector Comments", {
+                  textarea: true,
+                })}
               </div>
             </ReviewSection>
 
@@ -716,51 +529,33 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                   {renderTextField(
                     "disposalWorks.disposalWorksComments",
                     "Inspector Summary / Comments",
-                    { textarea: true }
+                    { textarea: true },
                   )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {renderTextField(
                     "disposalWorks.disposalWorksLocationDetermined",
-                    "Location Determined"
+                    "Location Determined",
                   )}
-                  {renderTextField(
-                    "disposalWorks.disposalType",
-                    "Disposal Type"
-                  )}
-                  {renderTextField(
-                    "disposalWorks.distributionMethod",
-                    "Distribution Method"
-                  )}
-                  {renderTextField(
-                    "disposalWorks.supplyLineMaterial",
-                    "Supply Line Material"
-                  )}
+                  {renderTextField("disposalWorks.disposalType", "Disposal Type")}
+                  {renderTextField("disposalWorks.distributionMethod", "Distribution Method")}
+                  {renderTextField("disposalWorks.supplyLineMaterial", "Supply Line Material")}
                   {renderTextField(
                     "disposalWorks.distributionComponentInspected",
-                    "Distribution Component Inspected"
+                    "Distribution Component Inspected",
                   )}
                   {renderTextField(
                     "disposalWorks.inspectionPortsPresent",
-                    "Inspection Ports Present"
+                    "Inspection Ports Present",
                   )}
-                  {renderTextField(
-                    "disposalWorks.numberOfPorts",
-                    "Number of Ports"
-                  )}
+                  {renderTextField("disposalWorks.numberOfPorts", "Number of Ports")}
                   {renderTextField(
                     "disposalWorks.hydraulicLoadTestPerformed",
-                    "Hydraulic Load Test"
+                    "Hydraulic Load Test",
                   )}
-                  {renderTextField(
-                    "disposalWorks.hasDisposalDeficiency",
-                    "Has Deficiency"
-                  )}
-                  {renderTextField(
-                    "disposalWorks.repairsRecommended",
-                    "Repairs Recommended"
-                  )}
+                  {renderTextField("disposalWorks.hasDisposalDeficiency", "Has Deficiency")}
+                  {renderTextField("disposalWorks.repairsRecommended", "Repairs Recommended")}
                 </div>
 
                 {/* Disposal Works Deficiencies */}
@@ -769,79 +564,31 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                     Disposal Works Deficiencies
                   </p>
                   <div className="grid grid-cols-2 gap-2">
-                    {renderCheckbox(
-                      "disposalWorks.defCrushedOutletPipe",
-                      "Crushed Outlet Pipe"
-                    )}
-                    {renderCheckbox(
-                      "disposalWorks.defRootInvasion",
-                      "Root Invasion"
-                    )}
-                    {renderCheckbox(
-                      "disposalWorks.defHighWaterLines",
-                      "High Water Lines"
-                    )}
-                    {renderCheckbox(
-                      "disposalWorks.defDboxNotFunctioning",
-                      "D-box Not Functioning"
-                    )}
-                    {renderCheckbox(
-                      "disposalWorks.defSurfacing",
-                      "Surfacing"
-                    )}
-                    {renderCheckbox(
-                      "disposalWorks.defLushVegetation",
-                      "Lush Vegetation"
-                    )}
-                    {renderCheckbox(
-                      "disposalWorks.defErosion",
-                      "Erosion"
-                    )}
-                    {renderCheckbox(
-                      "disposalWorks.defPondingWater",
-                      "Ponding Water"
-                    )}
-                    {renderCheckbox(
-                      "disposalWorks.defAnimalIntrusion",
-                      "Animal Intrusion"
-                    )}
-                    {renderCheckbox(
-                      "disposalWorks.defLoadTestFailure",
-                      "Load Test Failure"
-                    )}
-                    {renderCheckbox(
-                      "disposalWorks.defCouldNotDetermine",
-                      "Could Not Determine"
-                    )}
+                    {renderCheckbox("disposalWorks.defCrushedOutletPipe", "Crushed Outlet Pipe")}
+                    {renderCheckbox("disposalWorks.defRootInvasion", "Root Invasion")}
+                    {renderCheckbox("disposalWorks.defHighWaterLines", "High Water Lines")}
+                    {renderCheckbox("disposalWorks.defDboxNotFunctioning", "D-box Not Functioning")}
+                    {renderCheckbox("disposalWorks.defSurfacing", "Surfacing")}
+                    {renderCheckbox("disposalWorks.defLushVegetation", "Lush Vegetation")}
+                    {renderCheckbox("disposalWorks.defErosion", "Erosion")}
+                    {renderCheckbox("disposalWorks.defPondingWater", "Ponding Water")}
+                    {renderCheckbox("disposalWorks.defAnimalIntrusion", "Animal Intrusion")}
+                    {renderCheckbox("disposalWorks.defLoadTestFailure", "Load Test Failure")}
+                    {renderCheckbox("disposalWorks.defCouldNotDetermine", "Could Not Determine")}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {renderTextField(
-                    "disposalWorks.signatureDate",
-                    "Signature Date"
-                  )}
-                  {renderTextField(
-                    "disposalWorks.printedName",
-                    "Printed Name"
-                  )}
+                  {renderTextField("disposalWorks.signatureDate", "Signature Date")}
+                  {renderTextField("disposalWorks.printedName", "Printed Name")}
                 </div>
               </div>
             </ReviewSection>
 
             {/* Save button */}
             {!isReadOnly && (
-              <Button
-                onClick={handleSave}
-                disabled={saving}
-                className="w-full"
-                size="lg"
-              >
-                {saving ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Save className="size-4" />
-                )}
+              <Button onClick={handleSave} disabled={saving} className="w-full" size="lg">
+                {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                 Save Changes
               </Button>
             )}
@@ -852,11 +599,7 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
             <Card>
               <CardContent className="pt-6 space-y-4">
                 {!isReadOnly && (
-                  <Button
-                    onClick={handleRegenerate}
-                    disabled={isGenerating}
-                    className="w-full"
-                  >
+                  <Button onClick={handleRegenerate} disabled={isGenerating} className="w-full">
                     {isGenerating ? (
                       <Loader2 className="size-4 animate-spin" />
                     ) : (
@@ -866,30 +609,23 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                   </Button>
                 )}
 
-                {error && (
-                  <p className="text-sm text-destructive">{error}</p>
-                )}
+                {error && <p className="text-sm text-destructive">{error}</p>}
 
                 {isDirty && !isReadOnly && (
                   <p className="text-xs text-amber-600">
-                    Form data changed -- click &quot;Regenerate PDF&quot; to see
-                    updates
+                    Form data changed -- click &quot;Regenerate PDF&quot; to see updates
                   </p>
                 )}
 
                 {pdfData ? (
                   <PdfPreview
                     pdfData={pdfData}
-                    facilityName={
-                      form.watch("facilityInfo.facilityName") || undefined
-                    }
+                    facilityName={form.watch("facilityInfo.facilityName") || undefined}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                     <RefreshCw className="size-8 mb-2 opacity-30" />
-                    <p className="text-sm">
-                      Click &quot;Regenerate PDF&quot; to preview
-                    </p>
+                    <p className="text-sm">Click &quot;Regenerate PDF&quot; to preview</p>
                   </div>
                 )}
               </CardContent>

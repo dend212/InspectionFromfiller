@@ -1,11 +1,11 @@
 import type { z } from "zod";
 import type {
+  designFlowSchema,
+  disposalWorksSchema,
   facilityInfoSchema,
   generalTreatmentSchema,
-  designFlowSchema,
-  septicTankSchema,
-  disposalWorksSchema,
   inspectionFormSchema,
+  septicTankSchema,
 } from "@/lib/validators/inspection";
 
 export type FacilityInfo = z.infer<typeof facilityInfoSchema>;

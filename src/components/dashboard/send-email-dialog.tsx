@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Loader2, Mail } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -13,8 +15,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Mail } from "lucide-react";
-import { toast } from "sonner";
 
 interface EmailHistoryEntry {
   id: string;
@@ -51,9 +51,7 @@ export function SendEmailDialog({
   useEffect(() => {
     if (open) {
       setRecipientEmail(customerEmail ?? "");
-      setSubject(
-        `Inspection Report - ${facilityAddress || "Property Inspection"}`,
-      );
+      setSubject(`Inspection Report - ${facilityAddress || "Property Inspection"}`);
       setPersonalNote("");
       setIsSending(false);
 
@@ -102,9 +100,7 @@ SewerTime Septic`;
       toast.success(`Report sent successfully to ${recipientEmail.trim()}`);
       onOpenChange(false);
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to send email",
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to send email");
     } finally {
       setIsSending(false);
     }
@@ -172,10 +168,7 @@ SewerTime Septic`;
               <Label className="text-muted-foreground">Previously Sent</Label>
               <div className="space-y-1">
                 {emailHistory.map((entry) => (
-                  <p
-                    key={entry.id}
-                    className="text-xs text-muted-foreground"
-                  >
+                  <p key={entry.id} className="text-xs text-muted-foreground">
                     {new Date(entry.sentAt).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
@@ -192,22 +185,11 @@ SewerTime Septic`;
         </div>
 
         <AlertDialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isSending}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSending}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSend}
-            disabled={!isValidEmail || isSending}
-          >
-            {isSending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Mail className="size-4" />
-            )}
+          <Button onClick={handleSend} disabled={!isValidEmail || isSending}>
+            {isSending ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
             Send Email
           </Button>
         </AlertDialogFooter>

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { CheckCircle, Loader2, Mail, RotateCcw, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
+import { toast } from "sonner";
+import { SendEmailDialog } from "@/components/dashboard/send-email-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,10 +16,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ReturnDialog } from "./return-dialog";
-import { SendEmailDialog } from "@/components/dashboard/send-email-dialog";
-import { CheckCircle, Loader2, Mail, RotateCcw, Undo2 } from "lucide-react";
-import { toast } from "sonner";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -70,9 +70,7 @@ export function ReviewActions({
       onStatusChange("completed");
       router.refresh();
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to finalize inspection"
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to finalize inspection");
     } finally {
       setIsFinalizing(false);
     }
@@ -93,9 +91,7 @@ export function ReviewActions({
       onStatusChange("in_review");
       router.refresh();
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to reopen inspection"
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to reopen inspection");
     } finally {
       setIsReopening(false);
     }
@@ -109,10 +105,7 @@ export function ReviewActions({
   return (
     <div className="flex flex-wrap items-center gap-3">
       {/* Status badge */}
-      <Badge
-        variant="secondary"
-        className={STATUS_BADGE_STYLES[status] ?? "text-sm px-3 py-1"}
-      >
+      <Badge variant="secondary" className={STATUS_BADGE_STYLES[status] ?? "text-sm px-3 py-1"}>
         {STATUS_LABELS[status] ?? status}
       </Badge>
 
@@ -138,17 +131,13 @@ export function ReviewActions({
               <AlertDialogHeader>
                 <AlertDialogTitle>Finalize Inspection Report?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will mark the inspection as completed. The field tech will
-                  no longer be able to edit it. You can reopen it later if
-                  needed.
+                  This will mark the inspection as completed. The field tech will no longer be able
+                  to edit it. You can reopen it later if needed.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleFinalize}
-                  variant="default"
-                >
+                <AlertDialogAction onClick={handleFinalize} variant="default">
                   Finalize
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -177,10 +166,7 @@ export function ReviewActions({
       {/* Completed/Sent: Send to Customer and Reopen buttons */}
       {(status === "completed" || status === "sent") && (
         <>
-          <Button
-            size="sm"
-            onClick={() => setSendEmailDialogOpen(true)}
-          >
+          <Button size="sm" onClick={() => setSendEmailDialogOpen(true)}>
             <Mail className="size-4" />
             Send to Customer
           </Button>
@@ -200,8 +186,8 @@ export function ReviewActions({
               <AlertDialogHeader>
                 <AlertDialogTitle>Reopen Inspection?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will move the inspection back to &quot;In Review&quot;
-                  status, allowing further edits before re-finalizing.
+                  This will move the inspection back to &quot;In Review&quot; status, allowing
+                  further edits before re-finalizing.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

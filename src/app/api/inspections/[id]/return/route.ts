@@ -1,18 +1,15 @@
+import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db";
 import { inspections } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * POST /api/inspections/[id]/return
  * Transition: in_review -> draft (with optional note)
  * Allowed: admin only
  */
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -31,7 +28,7 @@ export async function POST(
     } = await supabase.auth.getSession();
     if (session) {
       const payload = JSON.parse(
-        Buffer.from(session.access_token.split(".")[1], "base64").toString()
+        Buffer.from(session.access_token.split(".")[1], "base64").toString(),
       );
       userRole = payload.user_role ?? null;
     }
@@ -61,7 +58,7 @@ export async function POST(
   if (result.length === 0) {
     return NextResponse.json(
       { error: "Cannot return: inspection is not in review" },
-      { status: 409 }
+      { status: 409 },
     );
   }
 

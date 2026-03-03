@@ -1,9 +1,9 @@
+import { desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db";
-import { inspections, inspectionEmails, profiles } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { inspectionEmails, inspections, profiles } from "@/lib/db/schema";
 import { checkInspectionAccess } from "@/lib/supabase/auth-helpers";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * GET /api/inspections/[id]/emails
@@ -11,10 +11,7 @@ import { checkInspectionAccess } from "@/lib/supabase/auth-helpers";
  * Includes the sender's full name from the profiles table.
  * Access: inspection owner, admin, or office_staff.
  */
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const {

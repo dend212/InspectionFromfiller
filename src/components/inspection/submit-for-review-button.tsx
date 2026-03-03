@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { Loader2, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { toast } from "sonner";
-import { Send, Loader2 } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { inspectionFormSchema } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 
@@ -42,7 +41,7 @@ export function SubmitForReviewButton({
 
     if (!result.success) {
       const issues = result.error.issues.map(
-        (issue) => `${issue.path.join(" > ")}: ${issue.message}`
+        (issue) => `${issue.path.join(" > ")}: ${issue.message}`,
       );
       setWarnings(issues);
     } else {
@@ -67,9 +66,7 @@ export function SubmitForReviewButton({
       toast.success("Inspection submitted for review");
       router.push("/inspections");
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to submit inspection"
-      );
+      toast.error(error instanceof Error ? error.message : "Failed to submit inspection");
       setIsSubmitting(false);
       setOpen(false);
     }
@@ -95,9 +92,7 @@ export function SubmitForReviewButton({
             <div>
               {warnings.length > 0 ? (
                 <>
-                  <p className="mb-2">
-                    The following fields have issues:
-                  </p>
+                  <p className="mb-2">The following fields have issues:</p>
                   <ul className="list-disc pl-5 space-y-1 text-sm max-h-48 overflow-y-auto">
                     {warnings.map((warning, i) => (
                       <li key={i}>{warning}</li>
@@ -109,8 +104,8 @@ export function SubmitForReviewButton({
                 </>
               ) : (
                 <p>
-                  Submit this inspection for review? The admin will be able to see and
-                  edit the report.
+                  Submit this inspection for review? The admin will be able to see and edit the
+                  report.
                 </p>
               )}
             </div>
@@ -118,10 +113,7 @@ export function SubmitForReviewButton({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-          >
+          <AlertDialogAction onClick={handleSubmit} disabled={isSubmitting}>
             {isSubmitting ? (
               <>
                 <Loader2 className="size-4 animate-spin mr-1.5" />

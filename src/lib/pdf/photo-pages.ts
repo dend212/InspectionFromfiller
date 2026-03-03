@@ -11,13 +11,23 @@
  * Returns a Uint8Array PDF or null if no photos exist.
  */
 
-import type { Template, Schema, Font } from "@pdfme/common";
+import type { Font, Schema, Template } from "@pdfme/common";
 import { generate } from "@pdfme/generator";
-import { text, image } from "@pdfme/schemas";
+import { image, text } from "@pdfme/schemas";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
 import { STEP_LABELS } from "@/lib/constants/inspection";
 import { createClient } from "@/lib/supabase/client";
 import { loadPublicFile } from "./load-public-file";
+
+/** Returns the appropriate Supabase client for the current environment */
+async function getStorageClient() {
+  if (typeof window !== "undefined") {
+    return createClient();
+  }
+  // Server-side: use admin client for private bucket access
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  return createAdminClient();
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -47,8 +57,7 @@ const LAYOUT = {
 // Computed positions
 const PHOTO_X = (LAYOUT.pageWidth - LAYOUT.photoWidth) / 2;
 const CAPTION_1_Y = LAYOUT.photo1Y + LAYOUT.photoHeight + LAYOUT.captionGap;
-const PHOTO_2_Y =
-  CAPTION_1_Y + LAYOUT.captionHeight + LAYOUT.photoGap;
+const PHOTO_2_Y = CAPTION_1_Y + LAYOUT.captionHeight + LAYOUT.photoGap;
 const CAPTION_2_Y = PHOTO_2_Y + LAYOUT.photoHeight + LAYOUT.captionGap;
 
 // ---------------------------------------------------------------------------
@@ -81,10 +90,8 @@ async function loadFont(): Promise<Font> {
  * Fetches a photo from Supabase storage and converts it to a base64 data URL.
  * pdfme's image schema accepts this format.
  */
-async function fetchPhotoAsDataUrl(
-  storagePath: string,
-): Promise<string | null> {
-  const supabase = createClient();
+async function fetchPhotoAsDataUrl(storagePath: string): Promise<string | null> {
+  const supabase = await getStorageClient();
   const { data } = await supabase.storage
     .from("inspection-media")
     .createSignedUrl(storagePath, 3600);
@@ -97,10 +104,7 @@ async function fetchPhotoAsDataUrl(
 
     const buffer = await response.arrayBuffer();
     const base64 = btoa(
-      new Uint8Array(buffer).reduce(
-        (data, byte) => data + String.fromCharCode(byte),
-        "",
-      ),
+      new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ""),
     );
     return `data:image/jpeg;base64,${base64}`;
   } catch {
@@ -269,9 +273,7 @@ function buildPageSchemaAndInput(
  * @param media - All media records for the inspection
  * @returns Uint8Array PDF of photo pages, or null if no photos exist
  */
-export async function buildPhotoPages(
-  media: MediaRecord[],
-): Promise<Uint8Array | null> {
+export async function buildPhotoPages(media: MediaRecord[]): Promise<Uint8Array | null> {
   // Filter to photos only
   const photos = media.filter((m) => m.type === "photo");
   if (photos.length === 0) return null;
@@ -305,12 +307,10 @@ export async function buildPhotoPages(
       const photo2CountInGroup = photo2 ? photoCountInGroup + 1 : 0;
 
       // Header text: "Inspection Photos" on first page, section name on others
-      const headerText = isFirstPage
-        ? "Inspection Photos"
-        : group.sectionLabel;
+      const headerText = isFirstPage ? "Inspection Photos" : group.sectionLabel;
 
       const photo1DataUrl = dataUrlMap.get(photo1.id) ?? null;
-      const photo2DataUrl = photo2 ? dataUrlMap.get(photo2.id) ?? null : null;
+      const photo2DataUrl = photo2 ? (dataUrlMap.get(photo2.id) ?? null) : null;
 
       // Caption format: "Section Name - Photo N"
       const caption1 = `${group.sectionLabel} - Photo ${i + 1}`;

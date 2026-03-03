@@ -5,9 +5,7 @@ import type { AppRole } from "@/types/roles";
  * Extract the user's role from their JWT access token.
  * Used across API routes to avoid repeating JWT decode logic.
  */
-export async function getUserRole(
-  supabase: SupabaseClient,
-): Promise<AppRole | null> {
+export async function getUserRole(supabase: SupabaseClient): Promise<AppRole | null> {
   try {
     const {
       data: { session },

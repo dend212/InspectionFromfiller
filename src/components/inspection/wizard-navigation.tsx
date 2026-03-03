@@ -1,8 +1,8 @@
 "use client";
 
+import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 interface WizardNavigationProps {
   currentStep: number;
@@ -61,12 +61,8 @@ export function WizardNavigation({
         {/* Next / Submit button */}
         <div className="flex-1 flex justify-end">
           {isLastStep ? (
-            submitButton ?? (
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="min-h-[48px] px-6 gap-1.5"
-              >
+            (submitButton ?? (
+              <Button type="submit" disabled={isSubmitting} className="min-h-[48px] px-6 gap-1.5">
                 {isSubmitting ? (
                   <>
                     <Loader2 className="size-4 animate-spin" />
@@ -76,13 +72,9 @@ export function WizardNavigation({
                   "Submit"
                 )}
               </Button>
-            )
+            ))
           ) : (
-            <Button
-              type="button"
-              onClick={onNext}
-              className="min-h-[48px] px-5 gap-1.5"
-            >
+            <Button type="button" onClick={onNext} className="min-h-[48px] px-5 gap-1.5">
               Next
               <ChevronRight className="size-4" />
             </Button>

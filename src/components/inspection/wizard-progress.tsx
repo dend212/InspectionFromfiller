@@ -1,7 +1,7 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import { STEP_LABELS } from "@/lib/constants/inspection";
+import { cn } from "@/lib/utils";
 
 interface WizardProgressProps {
   currentStep: number;
@@ -27,7 +27,7 @@ export function WizardProgress({ currentStep, onStepClick }: WizardProgressProps
                   "flex size-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                   isCurrent && "bg-primary text-primary-foreground",
                   isCompleted && "bg-primary/20 text-primary",
-                  !isCurrent && !isCompleted && "bg-muted text-muted-foreground"
+                  !isCurrent && !isCompleted && "bg-muted text-muted-foreground",
                 )}
               >
                 {index + 1}
@@ -36,7 +36,7 @@ export function WizardProgress({ currentStep, onStepClick }: WizardProgressProps
                 className={cn(
                   "hidden text-xs font-medium sm:block",
                   isCurrent && "text-primary",
-                  !isCurrent && "text-muted-foreground"
+                  !isCurrent && "text-muted-foreground",
                 )}
               >
                 {label}

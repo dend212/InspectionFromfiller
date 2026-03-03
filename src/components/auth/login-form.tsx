@@ -1,13 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
-import { loginSchema, type LoginFormData } from "@/lib/validators/auth";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -16,6 +12,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
+import { type LoginFormData, loginSchema } from "@/lib/validators/auth";
 
 export function LoginForm() {
   const [email, setEmail] = useState("");
@@ -57,11 +57,7 @@ export function LoginForm() {
     <Card className="w-full max-w-sm">
       <CardHeader className="text-center">
         <div className="mb-3 flex items-center justify-center">
-          <img
-            src="/sewertime-logo.png"
-            alt="SewerTime Septic"
-            className="h-14 w-auto"
-          />
+          <img src="/sewertime-logo.png" alt="SewerTime Septic" className="h-14 w-auto" />
         </div>
         <CardDescription>Inspection Management System</CardDescription>
       </CardHeader>

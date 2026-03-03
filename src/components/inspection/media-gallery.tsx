@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, X, Video as VideoIcon } from "lucide-react";
+import { Camera, Video as VideoIcon, X } from "lucide-react";
 
 export interface MediaRecord {
   id: string;
@@ -63,21 +63,14 @@ function MediaThumbnail({
       {/* Caption */}
       {caption && (
         <div className="p-2">
-          <p className="w-full text-xs text-muted-foreground truncate">
-            {caption}
-          </p>
+          <p className="w-full text-xs text-muted-foreground truncate">{caption}</p>
         </div>
       )}
     </div>
   );
 }
 
-export function MediaGallery({
-  inspectionId,
-  section,
-  media,
-  onDelete,
-}: MediaGalleryProps) {
+export function MediaGallery({ inspectionId, section, media, onDelete }: MediaGalleryProps) {
   if (media.length === 0) {
     return (
       <div className="flex min-h-[80px] items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25">
@@ -89,11 +82,7 @@ export function MediaGallery({
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
       {media.map((item) => (
-        <MediaThumbnail
-          key={item.id}
-          item={item}
-          onDelete={onDelete}
-        />
+        <MediaThumbnail key={item.id} item={item} onDelete={onDelete} />
       ))}
     </div>
   );

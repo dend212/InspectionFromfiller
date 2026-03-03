@@ -1,8 +1,6 @@
 import { Resend } from "resend";
 
-const resend = process.env.RESEND_API_KEY
-  ? new Resend(process.env.RESEND_API_KEY)
-  : null;
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 /**
  * Send an email notification to the admin when a new inspection is submitted.
@@ -14,12 +12,12 @@ const resend = process.env.RESEND_API_KEY
 export async function sendSubmissionNotification(
   inspectionId: string,
   facilityName: string | null,
-  inspectorName: string | null
+  inspectorName: string | null,
 ) {
   const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL;
   if (!resend || !adminEmail) {
     console.log(
-      "Email notification skipped: RESEND_API_KEY or ADMIN_NOTIFICATION_EMAIL not configured"
+      "Email notification skipped: RESEND_API_KEY or ADMIN_NOTIFICATION_EMAIL not configured",
     );
     return;
   }

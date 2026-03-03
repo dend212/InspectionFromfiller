@@ -1,33 +1,19 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { ArrowLeft, Calendar, Camera, Download, Edit, Loader2, Mail, MapPin } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { SignaturePad } from "@/components/inspection/signature-pad";
-import { PdfPreview } from "@/components/inspection/pdf-preview";
-import { GeneratePdfButton } from "@/components/inspection/generate-pdf-button";
-import { usePdfGeneration } from "@/hooks/use-pdf-generation";
-import { SendEmailDialog } from "@/components/dashboard/send-email-dialog";
-import {
-  ArrowLeft,
-  Download,
-  Edit,
-  Loader2,
-  Mail,
-  MapPin,
-  Calendar,
-  Camera,
-} from "lucide-react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import type { InspectionFormData } from "@/types/inspection";
+import { SendEmailDialog } from "@/components/dashboard/send-email-dialog";
+import { GeneratePdfButton } from "@/components/inspection/generate-pdf-button";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
+import { PdfPreview } from "@/components/inspection/pdf-preview";
+import { SignaturePad } from "@/components/inspection/signature-pad";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { usePdfGeneration } from "@/hooks/use-pdf-generation";
+import type { InspectionFormData } from "@/types/inspection";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -75,8 +61,7 @@ export function InspectionPdfView({
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const [sendEmailDialogOpen, setSendEmailDialogOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const { generatePdf, pdfData, isGenerating, error, clearPdf } =
-    usePdfGeneration();
+  const { generatePdf, pdfData, isGenerating, error, clearPdf } = usePdfGeneration();
 
   const handleGenerate = useCallback(async () => {
     if (!formData) return;
@@ -107,9 +92,7 @@ export function InspectionPdfView({
       const { downloadUrl } = await res.json();
       window.open(downloadUrl, "_blank");
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to download report",
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to download report");
     } finally {
       setIsDownloading(false);
     }
@@ -138,16 +121,12 @@ export function InspectionPdfView({
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1.5">
-              <CardTitle className="text-xl">
-                {facilityName || "Untitled Inspection"}
-              </CardTitle>
+              <CardTitle className="text-xl">{facilityName || "Untitled Inspection"}</CardTitle>
               <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                 {(facilityAddress || facilityCity) && (
                   <span className="flex items-center gap-1">
                     <MapPin className="size-3.5" />
-                    {[facilityAddress, facilityCity, facilityCounty]
-                      .filter(Boolean)
-                      .join(", ")}
+                    {[facilityAddress, facilityCity, facilityCounty].filter(Boolean).join(", ")}
                   </span>
                 )}
                 <span className="flex items-center gap-1">
@@ -165,11 +144,7 @@ export function InspectionPdfView({
             <div className="flex items-center gap-2">
               <Badge
                 variant={STATUS_VARIANTS[status] ?? "secondary"}
-                className={
-                  status === "completed"
-                    ? "bg-emerald-100 text-emerald-800"
-                    : undefined
-                }
+                className={status === "completed" ? "bg-emerald-100 text-emerald-800" : undefined}
               >
                 {STATUS_LABELS[status] ?? status}
               </Badge>
@@ -188,10 +163,7 @@ export function InspectionPdfView({
               )}
               {(status === "completed" || status === "sent") && (
                 <>
-                  <Button
-                    size="sm"
-                    onClick={() => setSendEmailDialogOpen(true)}
-                  >
+                  <Button size="sm" onClick={() => setSendEmailDialogOpen(true)}>
                     <Mail className="size-4" />
                     Send to Customer
                   </Button>
@@ -226,10 +198,7 @@ export function InspectionPdfView({
           {!formData && (
             <p className="text-sm text-muted-foreground">
               No form data available. Please{" "}
-              <Link
-                href={`/inspections/${inspectionId}/edit`}
-                className="underline"
-              >
+              <Link href={`/inspections/${inspectionId}/edit`} className="underline">
                 fill out the inspection form
               </Link>{" "}
               before generating a PDF.
@@ -250,10 +219,7 @@ export function InspectionPdfView({
       {pdfData && (
         <Card>
           <CardContent className="pt-6">
-            <PdfPreview
-              pdfData={pdfData}
-              facilityName={facilityName ?? undefined}
-            />
+            <PdfPreview pdfData={pdfData} facilityName={facilityName ?? undefined} />
           </CardContent>
         </Card>
       )}

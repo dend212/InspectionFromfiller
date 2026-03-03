@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { createUserSchema } from "@/lib/validators/auth";
 
 export async function POST(request: Request) {
@@ -30,10 +30,7 @@ export async function POST(request: Request) {
     );
 
     if (tokenPayload.user_role !== "admin") {
-      return NextResponse.json(
-        { error: "Forbidden: admin access required" },
-        { status: 403 },
-      );
+      return NextResponse.json({ error: "Forbidden: admin access required" }, { status: 403 });
     }
 
     // Parse and validate the request body
@@ -51,31 +48,25 @@ export async function POST(request: Request) {
 
     // Create user with admin client (bypasses RLS, uses service role key)
     const adminClient = createAdminClient();
-    const { data: newUser, error: createError } =
-      await adminClient.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: { full_name: fullName },
-      });
+    const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullName },
+    });
 
     if (createError) {
-      return NextResponse.json(
-        { error: createError.message },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: createError.message }, { status: 400 });
     }
 
     const newUserId = newUser.user.id;
 
     // Insert profile row — clean up auth user on failure
-    const { error: profileError } = await adminClient
-      .from("profiles")
-      .insert({
-        id: newUserId,
-        full_name: fullName,
-        email,
-      });
+    const { error: profileError } = await adminClient.from("profiles").insert({
+      id: newUserId,
+      full_name: fullName,
+      email,
+    });
 
     if (profileError) {
       // Rollback: delete the auth user we just created
@@ -87,12 +78,10 @@ export async function POST(request: Request) {
     }
 
     // Insert role in user_roles table — clean up auth user + profile on failure
-    const { error: roleError } = await adminClient
-      .from("user_roles")
-      .insert({
-        user_id: newUserId,
-        role,
-      });
+    const { error: roleError } = await adminClient.from("user_roles").insert({
+      user_id: newUserId,
+      role,
+    });
 
     if (roleError) {
       // Rollback: delete profile, then auth user
@@ -117,9 +106,6 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error("Admin user creation error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -1,8 +1,8 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
 
 interface PdfPreviewProps {
   /** The generated PDF bytes, or null if not yet generated */
@@ -54,11 +54,7 @@ export function PdfPreview({ pdfData, facilityName }: PdfPreviewProps) {
           </a>
         </Button>
       </div>
-      <iframe
-        src={blobUrl}
-        className="h-[80vh] w-full rounded-lg border"
-        title="PDF Preview"
-      />
+      <iframe src={blobUrl} className="h-[80vh] w-full rounded-lg border" title="PDF Preview" />
     </div>
   );
 }

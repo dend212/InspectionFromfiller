@@ -11,26 +11,28 @@
  * 3. Fill text fields, check checkboxes, select radio options
  * 4. Embed signature image at the signature field positions
  * 5. Flatten the form (makes fields read-only)
- * 6. Generate comments overflow page (if needed)
- * 7. Generate photo appendix pages (if media provided)
- * 8. Merge all PDFs into single output: form -> comments -> photos
+ * 6. Build branded cover page
+ * 7. Generate comments overflow page (if needed)
+ * 8. Generate photo appendix pages (if media provided)
+ * 9. Merge all PDFs into single output: cover -> form -> comments -> photos
  */
 
 import { PDFDocument } from "pdf-lib";
-import { loadPublicFile } from "@/lib/pdf/load-public-file";
-import { mapFormDataToFields } from "@/lib/pdf/field-mapping";
-import { PDF_TEMPLATE_PATH } from "@/lib/pdf/pdf-field-names";
-import { buildCommentsPage } from "@/lib/pdf/comments-page";
-import { buildPhotoPages } from "@/lib/pdf/photo-pages";
-import { mergeGeneratedPdfs } from "@/lib/pdf/merge-pdf";
-import type { InspectionFormData } from "@/types/inspection";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
+import { buildCommentsPage } from "@/lib/pdf/comments-page";
+import { buildCoverPage } from "@/lib/pdf/cover-page";
+import { mapFormDataToFields } from "@/lib/pdf/field-mapping";
+import { loadPublicFile } from "@/lib/pdf/load-public-file";
+import { mergeGeneratedPdfs } from "@/lib/pdf/merge-pdf";
+import { PDF_TEMPLATE_PATH } from "@/lib/pdf/pdf-field-names";
+import { buildPhotoPages } from "@/lib/pdf/photo-pages";
+import type { InspectionFormData } from "@/types/inspection";
 
 /**
  * Generates a complete ADEQ inspection report PDF.
  *
- * Produces the 9-page form with filled fields, plus optional comments
- * overflow page and photo appendix pages merged into a single document.
+ * Produces a 6-page form (pages 7-9 removed: Alternative System + Sketch)
+ * with filled fields, plus optional comments overflow and photo appendix pages.
  *
  * @param formData - The inspection form data (all sections)
  * @param signatureDataUrl - PNG data URL from signature pad, or null if unsigned
@@ -43,8 +45,7 @@ export async function generateReport(
   media?: MediaRecord[],
 ): Promise<Uint8Array> {
   // Step 1: Map form data to typed field maps
-  const { textFields, checkboxFields, radioFields, overflow } =
-    mapFormDataToFields(formData);
+  const { textFields, checkboxFields, radioFields, overflow } = mapFormDataToFields(formData);
 
   // Step 2: Load the PDF template with native AcroForm fields
   const templateBytes = await loadPublicFile(PDF_TEMPLATE_PATH);
@@ -99,7 +100,6 @@ export async function generateReport(
     const dateStr = `${month}/${day}/${year}`;
     try {
       form.getTextField("conventionalSignatureDate").setText(dateStr);
-      form.getTextField("conventionalSignatureDate2").setText(dateStr);
     } catch {
       // Skip if fields don't exist
     }
@@ -108,26 +108,29 @@ export async function generateReport(
   // Step 8: Flatten form to make it read-only
   form.flatten();
 
-  // Step 9: Save the filled form
+  // Step 9: Remove pages 7, 8, 9 (Alternative System + Sketch) — 0-indexed: 6, 7, 8
+  // Remove in reverse order to avoid index shifting
+  doc.removePage(8); // Page 9: Required Sketch
+  doc.removePage(7); // Page 8: Alt System Disposal Works + second signature
+  doc.removePage(6); // Page 7: Alternative System
+
+  // Step 10: Save the filled form (now 6 pages)
   const formPdf = await doc.save();
 
-  // Step 10: Generate comments overflow page (if needed)
+  // Step 11: Build branded cover page
+  const coverPdf = await buildCoverPage();
+
+  // Step 12: Generate comments overflow page (if needed)
   const commentsPdf = overflow.hasOverflow
     ? await buildCommentsPage(overflow.overflowSections)
     : null;
 
-  // Step 11: Generate photo appendix pages (if media provided)
+  // Step 13: Generate photo appendix pages (if media provided)
   const photosPdf =
-    media && media.some((m) => m.type === "photo")
-      ? await buildPhotoPages(media)
-      : null;
+    media && media.some((m) => m.type === "photo") ? await buildPhotoPages(media) : null;
 
-  // Step 12: Merge all PDFs: form -> comments -> photos
-  const finalPdf = await mergeGeneratedPdfs(
-    new Uint8Array(formPdf),
-    commentsPdf,
-    photosPdf,
-  );
+  // Step 14: Merge all PDFs: cover -> form -> comments -> photos
+  const finalPdf = await mergeGeneratedPdfs(coverPdf, new Uint8Array(formPdf), commentsPdf, photosPdf);
 
   return finalPdf;
 }
@@ -161,11 +164,8 @@ async function embedSignature(
     pageRefToIndex.set(pages[i].ref.toString(), i);
   }
 
-  // Draw signature at each signature field location
-  const signatureFieldNames = [
-    "conventionalSignature",
-    "conventionalSignature2",
-  ];
+  // Draw signature at the conventional signature field location (page 6 only)
+  const signatureFieldNames = ["conventionalSignature"];
 
   for (const fieldName of signatureFieldNames) {
     try {

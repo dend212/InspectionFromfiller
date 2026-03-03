@@ -1,11 +1,11 @@
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { db } from "@/lib/db";
-import { inspections, inspectionEmails } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { inspectionEmails, inspections } from "@/lib/db/schema";
 import { buildDownloadFilename } from "@/lib/storage/pdf-storage";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * POST /api/inspections/[id]/send-email
@@ -13,10 +13,7 @@ import { buildDownloadFilename } from "@/lib/storage/pdf-storage";
  * records send history in inspection_emails table, and persists customerEmail.
  * Allowed: admin or office_staff only.
  */
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -44,10 +41,7 @@ export async function POST(
   }
 
   if (userRole !== "admin" && userRole !== "office_staff") {
-    return NextResponse.json(
-      { error: "Forbidden: admin or office staff only" },
-      { status: 403 },
-    );
+    return NextResponse.json({ error: "Forbidden: admin or office staff only" }, { status: 403 });
   }
 
   // Parse request body
@@ -61,31 +55,18 @@ export async function POST(
   const { recipientEmail, subject, personalNote } = body;
 
   if (!recipientEmail || !recipientEmail.includes("@")) {
-    return NextResponse.json(
-      { error: "A valid recipient email is required" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "A valid recipient email is required" }, { status: 400 });
   }
 
   if (!subject) {
-    return NextResponse.json(
-      { error: "Subject is required" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Subject is required" }, { status: 400 });
   }
 
   // Load inspection
-  const [inspection] = await db
-    .select()
-    .from(inspections)
-    .where(eq(inspections.id, id))
-    .limit(1);
+  const [inspection] = await db.select().from(inspections).where(eq(inspections.id, id)).limit(1);
 
   if (!inspection) {
-    return NextResponse.json(
-      { error: "Inspection not found" },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
   }
 
   if (!inspection.finalizedPdfPath) {
@@ -103,10 +84,7 @@ export async function POST(
 
   if (downloadError || !blob) {
     console.error("PDF download failed:", downloadError);
-    return NextResponse.json(
-      { error: "Failed to download PDF from storage" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Failed to download PDF from storage" }, { status: 500 });
   }
 
   const buffer = Buffer.from(await blob.arrayBuffer());
@@ -159,10 +137,7 @@ SewerTime Septic`;
   } catch (err) {
     console.error("Resend email failed:", err);
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { error: `Failed to send email: ${message}` },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: `Failed to send email: ${message}` }, { status: 500 });
   }
 
   // Record send history (only after successful send)

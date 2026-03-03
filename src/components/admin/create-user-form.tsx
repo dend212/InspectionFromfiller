@@ -1,12 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  createUserSchema,
-  type CreateUserFormData,
-} from "@/lib/validators/auth";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -16,10 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { type CreateUserFormData, createUserSchema } from "@/lib/validators/auth";
 
 export function CreateUserForm() {
   const [fullName, setFullName] = useState("");
@@ -67,7 +61,7 @@ export function CreateUserForm() {
       }
 
       setSuccess(
-        `Successfully created ${data.user.fullName} as ${data.user.role.replace("_", " ")}`
+        `Successfully created ${data.user.fullName} as ${data.user.role.replace("_", " ")}`,
       );
 
       // Reset form

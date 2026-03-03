@@ -1,6 +1,8 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -11,10 +13,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
 
 interface ReturnDialogProps {
   inspectionId: string;
@@ -23,12 +23,7 @@ interface ReturnDialogProps {
   onReturned: () => void;
 }
 
-export function ReturnDialog({
-  inspectionId,
-  open,
-  onOpenChange,
-  onReturned,
-}: ReturnDialogProps) {
+export function ReturnDialog({ inspectionId, open, onOpenChange, onReturned }: ReturnDialogProps) {
   const [note, setNote] = useState("");
   const [isReturning, setIsReturning] = useState(false);
 
@@ -54,9 +49,7 @@ export function ReturnDialog({
       onOpenChange(false);
       onReturned();
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to return inspection"
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to return inspection");
     } finally {
       setIsReturning(false);
     }
@@ -68,8 +61,8 @@ export function ReturnDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Return to Field Tech</AlertDialogTitle>
           <AlertDialogDescription>
-            This will send the inspection back to the field tech for corrections.
-            Please explain what needs to be fixed.
+            This will send the inspection back to the field tech for corrections. Please explain
+            what needs to be fixed.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -86,9 +79,7 @@ export function ReturnDialog({
         </div>
 
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={() => setNote("")}>
-            Cancel
-          </AlertDialogCancel>
+          <AlertDialogCancel onClick={() => setNote("")}>Cancel</AlertDialogCancel>
           <Button
             onClick={handleReturn}
             disabled={isReturning || !note.trim()}

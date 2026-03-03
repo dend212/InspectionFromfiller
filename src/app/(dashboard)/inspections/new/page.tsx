@@ -1,8 +1,8 @@
+import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db";
 import { inspections, profiles } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { createClient } from "@/lib/supabase/server";
 import { getDefaultFormValues } from "@/lib/validators/inspection";
 
 /**
@@ -27,8 +27,7 @@ export default async function NewInspectionPage() {
     .where(eq(profiles.id, user.id))
     .limit(1);
 
-  const inspectorName =
-    profile?.fullName ?? user.user_metadata?.full_name ?? "";
+  const inspectorName = profile?.fullName ?? user.user_metadata?.full_name ?? "";
   const defaultFormData = getDefaultFormValues(inspectorName);
 
   // Create the new inspection

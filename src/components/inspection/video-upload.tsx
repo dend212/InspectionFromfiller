@@ -1,7 +1,7 @@
 "use client";
 
+import { Loader2, Video } from "lucide-react";
 import { useRef, useState } from "react";
-import { Video, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { MediaRecord } from "./media-gallery";
@@ -34,16 +34,11 @@ function getVideoDuration(file: File): Promise<number> {
   });
 }
 
-export function VideoUpload({
-  inspectionId,
-  onUploadComplete,
-}: VideoUploadProps) {
+export function VideoUpload({ inspectionId, onUploadComplete }: VideoUploadProps) {
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -71,18 +66,15 @@ export function VideoUpload({
       }
 
       // Save metadata to API
-      const response = await fetch(
-        `/api/inspections/${inspectionId}/media`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            storagePath: data.path,
-            type: "video",
-            label: "video",
-          }),
-        }
-      );
+      const response = await fetch(`/api/inspections/${inspectionId}/media`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storagePath: data.path,
+          type: "video",
+          label: "video",
+        }),
+      });
 
       if (!response.ok) {
         throw new Error("Failed to save video metadata");
@@ -92,8 +84,7 @@ export function VideoUpload({
       onUploadComplete(mediaRecord);
       toast.success("Video uploaded");
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Upload failed";
+      const message = err instanceof Error ? err.message : "Upload failed";
       toast.error(message);
     } finally {
       setUploading(false);

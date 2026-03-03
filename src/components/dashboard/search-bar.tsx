@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Search, X } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 interface SearchBarProps {
   defaultValue?: string;

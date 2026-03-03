@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { jwtDecode } from "jwt-decode";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { AppRole } from "@/types/roles";
 

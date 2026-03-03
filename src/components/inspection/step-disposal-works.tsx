@@ -1,19 +1,20 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
+import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
+import { PhotoCapture } from "@/components/inspection/photo-capture";
+import { VideoUpload } from "@/components/inspection/video-upload";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
+  FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
-  FormControl,
   FormMessage,
-  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -21,14 +22,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import {
   DISPOSAL_TYPES,
   DISTRIBUTION_METHODS,
   SUPPLY_LINE_MATERIALS,
 } from "@/lib/constants/inspection";
-import { PhotoCapture } from "@/components/inspection/photo-capture";
-import { VideoUpload } from "@/components/inspection/video-upload";
-import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
 import type { InspectionFormData } from "@/types/inspection";
 
 /** Disposal works deficiency items matching the schema boolean fields */
@@ -56,7 +56,10 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
   const form = useFormContext<InspectionFormData>();
   const [media, setMedia] = useState<MediaRecord[]>([]);
 
-  const portsPresent = useWatch({ control: form.control, name: "disposalWorks.inspectionPortsPresent" });
+  const portsPresent = useWatch({
+    control: form.control,
+    name: "disposalWorks.inspectionPortsPresent",
+  });
   const numberOfPorts = useWatch({ control: form.control, name: "disposalWorks.numberOfPorts" });
   const portCount = Math.min(Math.max(Number.parseInt(numberOfPorts || "0", 10) || 0, 0), 8);
 
@@ -75,14 +78,17 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
     loadMedia();
   }, [inspectionId]);
 
-  const handleDeleteMedia = useCallback(async (mediaId: string) => {
-    await fetch(`/api/inspections/${inspectionId}/media`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaId }),
-    });
-    setMedia((prev) => prev.filter((m) => m.id !== mediaId));
-  }, [inspectionId]);
+  const handleDeleteMedia = useCallback(
+    async (mediaId: string) => {
+      await fetch(`/api/inspections/${inspectionId}/media`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mediaId }),
+      });
+      setMedia((prev) => prev.filter((m) => m.id !== mediaId));
+    },
+    [inspectionId],
+  );
 
   return (
     <div className="space-y-8">
@@ -119,7 +125,11 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
               <FormItem>
                 <FormLabel className="text-base">If No, Reason</FormLabel>
                 <FormControl>
-                  <Input {...field} className="min-h-[48px]" placeholder="Why location could not be determined" />
+                  <Input
+                    {...field}
+                    className="min-h-[48px]"
+                    placeholder="Why location could not be determined"
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -302,7 +312,6 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
               </FormItem>
             )}
           />
-
         </div>
 
         {/* Port Depth inputs — shown when ports are present and count > 0 */}
@@ -399,10 +408,7 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
                   <label className="flex min-h-[56px] cursor-pointer items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent/50">
                     <span className="text-base font-medium">{item.label}</span>
                     <FormControl>
-                      <Checkbox
-                        checked={field.value as boolean}
-                        onCheckedChange={field.onChange}
-                      />
+                      <Checkbox checked={field.value as boolean} onCheckedChange={field.onChange} />
                     </FormControl>
                   </label>
                 </FormItem>

@@ -1,8 +1,8 @@
 "use client";
 
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface StatusTabsProps {
@@ -52,10 +52,7 @@ export function StatusTabs({ activeStatus, counts }: StatusTabsProps) {
             variant={isActive ? "default" : "ghost"}
             size="sm"
             onClick={() => handleTabClick(tab.value)}
-            className={cn(
-              "gap-1.5",
-              !isActive && "text-muted-foreground"
-            )}
+            className={cn("gap-1.5", !isActive && "text-muted-foreground")}
           >
             {tab.label}
             {count !== undefined && (

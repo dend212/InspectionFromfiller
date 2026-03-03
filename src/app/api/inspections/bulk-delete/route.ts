@@ -1,8 +1,8 @@
+import { and, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db";
 import { inspections } from "@/lib/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * POST /api/inspections/bulk-delete
@@ -24,25 +24,19 @@ export async function POST(request: Request) {
   const ids: unknown = body?.ids;
 
   if (!Array.isArray(ids) || ids.length === 0) {
-    return NextResponse.json(
-      { error: "ids must be a non-empty array" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "ids must be a non-empty array" }, { status: 400 });
   }
 
   // Validate all IDs are strings
   if (!ids.every((id): id is string => typeof id === "string")) {
-    return NextResponse.json(
-      { error: "All ids must be strings" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "All ids must be strings" }, { status: 400 });
   }
 
   // Cap the batch size to prevent abuse
   if (ids.length > 100) {
     return NextResponse.json(
       { error: "Cannot delete more than 100 inspections at once" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -54,7 +48,7 @@ export async function POST(request: Request) {
     } = await supabase.auth.getSession();
     if (session) {
       const payload = JSON.parse(
-        Buffer.from(session.access_token.split(".")[1], "base64").toString()
+        Buffer.from(session.access_token.split(".")[1], "base64").toString(),
       );
       userRole = payload.user_role ?? null;
     }
@@ -96,12 +90,7 @@ export async function POST(request: Request) {
   if (deletableIds.length > 0) {
     await db
       .delete(inspections)
-      .where(
-        and(
-          inArray(inspections.id, deletableIds),
-          eq(inspections.status, "draft")
-        )
-      );
+      .where(and(inArray(inspections.id, deletableIds), eq(inspections.status, "draft")));
 
     deletedCount = deletableIds.length;
   }

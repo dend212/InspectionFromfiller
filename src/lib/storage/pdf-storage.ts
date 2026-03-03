@@ -29,12 +29,10 @@ export async function uploadReport(
   const supabase = createAdminClient();
   const storagePath = `reports/${inspectionId}/${filename}`;
 
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(storagePath, pdfData, {
-      contentType: "application/pdf",
-      upsert: true,
-    });
+  const { error } = await supabase.storage.from(BUCKET).upload(storagePath, pdfData, {
+    contentType: "application/pdf",
+    upsert: true,
+  });
 
   if (error) {
     throw new Error(`PDF upload failed: ${error.message}`);
@@ -59,11 +57,9 @@ export async function getReportDownloadUrl(
 ): Promise<string> {
   const supabase = createAdminClient();
 
-  const { data, error } = await supabase.storage
-    .from(BUCKET)
-    .createSignedUrl(storagePath, 3600, {
-      download: downloadFilename,
-    });
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 3600, {
+    download: downloadFilename,
+  });
 
   if (error) {
     throw new Error(`Signed URL creation failed: ${error.message}`);

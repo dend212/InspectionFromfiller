@@ -1,18 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFormContext } from "react-hook-form";
+import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
+import { PhotoCapture } from "@/components/inspection/photo-capture";
 import {
+  FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
-  FormControl,
   FormMessage,
-  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -20,9 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DESIGN_FLOW_BASIS, ACTUAL_FLOW_EVALUATION } from "@/lib/constants/inspection";
-import { PhotoCapture } from "@/components/inspection/photo-capture";
-import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { ACTUAL_FLOW_EVALUATION, DESIGN_FLOW_BASIS } from "@/lib/constants/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 
 const SECTION_NAME = "design-flow";
@@ -50,14 +50,17 @@ export function StepDesignFlow({ inspectionId }: StepDesignFlowProps) {
     loadMedia();
   }, [inspectionId]);
 
-  const handleDeleteMedia = useCallback(async (mediaId: string) => {
-    await fetch(`/api/inspections/${inspectionId}/media`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaId }),
-    });
-    setMedia((prev) => prev.filter((m) => m.id !== mediaId));
-  }, [inspectionId]);
+  const handleDeleteMedia = useCallback(
+    async (mediaId: string) => {
+      await fetch(`/api/inspections/${inspectionId}/media`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mediaId }),
+      });
+      setMedia((prev) => prev.filter((m) => m.id !== mediaId));
+    },
+    [inspectionId],
+  );
 
   return (
     <div className="space-y-8">
@@ -123,16 +126,9 @@ export function StepDesignFlow({ inspectionId }: StepDesignFlowProps) {
               <FormItem>
                 <FormLabel className="text-base">Number of Bedrooms</FormLabel>
                 <FormControl>
-                  <Input
-                    {...field}
-                    className="min-h-[48px]"
-                    type="number"
-                    min="0"
-                  />
+                  <Input {...field} className="min-h-[48px]" type="number" min="0" />
                 </FormControl>
-                <FormDescription>
-                  Standard: 150 GPD per bedroom
-                </FormDescription>
+                <FormDescription>Standard: 150 GPD per bedroom</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -145,12 +141,7 @@ export function StepDesignFlow({ inspectionId }: StepDesignFlowProps) {
               <FormItem>
                 <FormLabel className="text-base">Fixture Count</FormLabel>
                 <FormControl>
-                  <Input
-                    {...field}
-                    className="min-h-[48px]"
-                    type="number"
-                    min="0"
-                  />
+                  <Input {...field} className="min-h-[48px]" type="number" min="0" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -172,9 +163,7 @@ export function StepDesignFlow({ inspectionId }: StepDesignFlowProps) {
                     placeholder="If applicable"
                   />
                 </FormControl>
-                <FormDescription>
-                  Additional flow from non-dwelling sources
-                </FormDescription>
+                <FormDescription>Additional flow from non-dwelling sources</FormDescription>
                 <FormMessage />
               </FormItem>
             )}

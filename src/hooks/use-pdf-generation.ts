@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
+import type { MediaRecord } from "@/components/inspection/media-gallery";
 import { generateReport } from "@/lib/pdf/generate-report";
 import type { InspectionFormData } from "@/types/inspection";
-import type { MediaRecord } from "@/components/inspection/media-gallery";
 
 interface UsePdfGenerationReturn {
   /** Trigger PDF generation with current form data, optional signature, and optional media */
@@ -46,8 +46,7 @@ export function usePdfGeneration(): UsePdfGenerationReturn {
         const result = await generateReport(formData, signatureDataUrl, media);
         setPdfData(result);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "PDF generation failed";
+        const message = err instanceof Error ? err.message : "PDF generation failed";
         setError(message);
         console.error("PDF generation error:", err);
       } finally {

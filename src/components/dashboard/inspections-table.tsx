@@ -1,19 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { ArrowUpDown, Check, Download, Eye, Trash2, X } from "lucide-react";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useState } from "react";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,7 +14,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export interface InspectionRow {
   id: string;
@@ -69,23 +69,11 @@ function StatusBadge({ status }: { status: string }) {
       return <Badge variant="secondary">Draft</Badge>;
     case "submitted":
     case "in_review":
-      return (
-        <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-200">
-          In Review
-        </Badge>
-      );
+      return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-200">In Review</Badge>;
     case "completed":
-      return (
-        <Badge className="bg-green-100 text-green-800 hover:bg-green-200">
-          Complete
-        </Badge>
-      );
+      return <Badge className="bg-green-100 text-green-800 hover:bg-green-200">Complete</Badge>;
     case "sent":
-      return (
-        <Badge className="bg-green-100 text-green-800 hover:bg-green-200">
-          Sent
-        </Badge>
-      );
+      return <Badge className="bg-green-100 text-green-800 hover:bg-green-200">Sent</Badge>;
     default:
       return <Badge variant="secondary">{status}</Badge>;
   }
@@ -110,18 +98,13 @@ export function InspectionsTable({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  const draftIds = inspections
-    .filter((i) => i.status === "draft")
-    .map((i) => i.id);
+  const draftIds = inspections.filter((i) => i.status === "draft").map((i) => i.id);
 
-  const selectedDraftCount = Array.from(selectedIds).filter((id) =>
-    draftIds.includes(id)
-  ).length;
+  const selectedDraftCount = Array.from(selectedIds).filter((id) => draftIds.includes(id)).length;
 
   const selectedNonDraftCount = selectedIds.size - selectedDraftCount;
 
-  const allSelected =
-    inspections.length > 0 && inspections.every((i) => selectedIds.has(i.id));
+  const allSelected = inspections.length > 0 && inspections.every((i) => selectedIds.has(i.id));
   const someSelected = selectedIds.size > 0 && !allSelected;
 
   const handleSelectAll = useCallback(() => {
@@ -171,10 +154,7 @@ export function InspectionsTable({
     }
   }
 
-  async function handleDownload(
-    e: React.MouseEvent,
-    inspectionId: string
-  ) {
+  async function handleDownload(e: React.MouseEvent, inspectionId: string) {
     e.stopPropagation();
     try {
       const res = await fetch(`/api/inspections/${inspectionId}/download`);
@@ -215,9 +195,7 @@ export function InspectionsTable({
   }
 
   async function handleBulkDelete() {
-    const idsToDelete = Array.from(selectedIds).filter((id) =>
-      draftIds.includes(id)
-    );
+    const idsToDelete = Array.from(selectedIds).filter((id) => draftIds.includes(id));
 
     if (idsToDelete.length === 0) {
       toast.error("No draft inspections selected to delete");
@@ -270,17 +248,9 @@ export function InspectionsTable({
   if (inspections.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-md border py-16">
-        <p className="text-lg font-medium text-muted-foreground">
-          No inspections found
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Try adjusting your search or filters
-        </p>
-        <Button
-          variant="outline"
-          className="mt-4"
-          onClick={handleClearFilters}
-        >
+        <p className="text-lg font-medium text-muted-foreground">No inspections found</p>
+        <p className="mt-1 text-sm text-muted-foreground">Try adjusting your search or filters</p>
+        <Button variant="outline" className="mt-4" onClick={handleClearFilters}>
           Clear Filters
         </Button>
       </div>
@@ -295,21 +265,14 @@ export function InspectionsTable({
       {/* Floating action bar when items are selected */}
       {selectedIds.size > 0 && (
         <div className="sticky top-0 z-20 flex items-center gap-3 rounded-lg border bg-background/95 px-4 py-3 shadow-md backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          <span className="text-sm font-medium">
-            {selectedIds.size} selected
-          </span>
+          <span className="text-sm font-medium">{selectedIds.size} selected</span>
           {selectedNonDraftCount > 0 && (
             <span className="text-xs text-muted-foreground">
-              ({selectedDraftCount} draft{selectedDraftCount !== 1 ? "s" : ""}{" "}
-              can be deleted)
+              ({selectedDraftCount} draft{selectedDraftCount !== 1 ? "s" : ""} can be deleted)
             </span>
           )}
           <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDeselectAll}
-            >
+            <Button variant="outline" size="sm" onClick={handleDeselectAll}>
               <X className="size-3.5" />
               Deselect All
             </Button>
@@ -361,17 +324,13 @@ export function InspectionsTable({
           {inspections.map((inspection) => (
             <TableRow
               key={inspection.id}
-              className={`cursor-pointer ${
-                selectedIds.has(inspection.id) ? "bg-muted/50" : ""
-              }`}
+              className={`cursor-pointer ${selectedIds.has(inspection.id) ? "bg-muted/50" : ""}`}
               onClick={() => handleRowClick(inspection)}
             >
               <TableCell onClick={(e) => e.stopPropagation()}>
                 <Checkbox
                   checked={selectedIds.has(inspection.id)}
-                  onCheckedChange={(checked) =>
-                    handleSelectOne(inspection.id, checked === true)
-                  }
+                  onCheckedChange={(checked) => handleSelectOne(inspection.id, checked === true)}
                   aria-label={`Select inspection at ${
                     inspection.facilityAddress || "unknown address"
                   }`}
@@ -395,17 +354,14 @@ export function InspectionsTable({
                     {inspection.emailSentCount}
                   </span>
                 ) : inspection.finalizedPdfPath ? (
-                  <span className="text-muted-foreground text-sm">
-                    Ready
-                  </span>
+                  <span className="text-muted-foreground text-sm">Ready</span>
                 ) : (
                   "\u2014"
                 )}
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 [tr:hover_&]:opacity-100">
-                  {(inspection.status === "completed" ||
-                    inspection.status === "sent") &&
+                  {(inspection.status === "completed" || inspection.status === "sent") &&
                     inspection.finalizedPdfPath && (
                       <Button
                         variant="ghost"
@@ -477,10 +433,11 @@ export function InspectionsTable({
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {selectedDraftCount} draft inspection{selectedDraftCount !== 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete {selectedDraftCount} draft inspection{selectedDraftCount !== 1 ? "s" : ""}?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. Only draft inspections will be
-              deleted.
+              This action cannot be undone. Only draft inspections will be deleted.
               {selectedNonDraftCount > 0 && (
                 <>
                   {" "}

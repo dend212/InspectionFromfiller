@@ -1,17 +1,14 @@
+import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db";
 import { inspections } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * GET /api/inspections/[id]
  * Load a single inspection with all form data.
  */
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -22,11 +19,7 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [inspection] = await db
-    .select()
-    .from(inspections)
-    .where(eq(inspections.id, id))
-    .limit(1);
+  const [inspection] = await db.select().from(inspections).where(eq(inspections.id, id)).limit(1);
 
   if (!inspection) {
     return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
@@ -36,10 +29,12 @@ export async function GET(
   if (inspection.inspectorId !== user.id) {
     let userRole: string | null = null;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (session) {
         const payload = JSON.parse(
-          Buffer.from(session.access_token.split(".")[1], "base64").toString()
+          Buffer.from(session.access_token.split(".")[1], "base64").toString(),
         );
         userRole = payload.user_role ?? null;
       }
@@ -61,10 +56,7 @@ export async function GET(
  * Auto-save form data. Accepts the complete form data object and updates
  * both the JSONB column and denormalized facility fields.
  */
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -91,10 +83,12 @@ export async function PATCH(
   if (existing.inspectorId !== user.id) {
     let userRole: string | null = null;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (session) {
         const payload = JSON.parse(
-          Buffer.from(session.access_token.split(".")[1], "base64").toString()
+          Buffer.from(session.access_token.split(".")[1], "base64").toString(),
         );
         userRole = payload.user_role ?? null;
       }
@@ -112,7 +106,7 @@ export async function PATCH(
   if (!isPrivileged && existing.status !== "draft") {
     return NextResponse.json(
       { error: "Cannot edit: inspection is no longer a draft" },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -145,10 +139,7 @@ export async function PATCH(
  * Delete a draft inspection. Only the owner or an admin can delete.
  * Only draft inspections can be deleted.
  */
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -174,20 +165,19 @@ export async function DELETE(
 
   // Only drafts can be deleted
   if (existing.status !== "draft") {
-    return NextResponse.json(
-      { error: "Only draft inspections can be deleted" },
-      { status: 403 }
-    );
+    return NextResponse.json({ error: "Only draft inspections can be deleted" }, { status: 403 });
   }
 
   // Check ownership or admin role
   let isAdmin = false;
   if (existing.inspectorId !== user.id) {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (session) {
         const payload = JSON.parse(
-          Buffer.from(session.access_token.split(".")[1], "base64").toString()
+          Buffer.from(session.access_token.split(".")[1], "base64").toString(),
         );
         isAdmin = payload.user_role === "admin";
       }
@@ -200,9 +190,7 @@ export async function DELETE(
     }
   }
 
-  await db
-    .delete(inspections)
-    .where(and(eq(inspections.id, id), eq(inspections.status, "draft")));
+  await db.delete(inspections).where(and(eq(inspections.id, id), eq(inspections.status, "draft")));
 
   return NextResponse.json({ deleted: true });
 }

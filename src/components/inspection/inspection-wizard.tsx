@@ -1,27 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { useForm, type FieldPath } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
+import { type FieldPath, useForm } from "react-hook-form";
 import { toast } from "sonner";
-
-import { Form } from "@/components/ui/form";
-import { WizardProgress } from "@/components/inspection/wizard-progress";
-import { WizardNavigation } from "@/components/inspection/wizard-navigation";
+import { ReviewNoteBanner } from "@/components/inspection/review-note-banner";
+import { StepDesignFlow } from "@/components/inspection/step-design-flow";
+import { StepDisposalWorks } from "@/components/inspection/step-disposal-works";
 import { StepFacilityInfo } from "@/components/inspection/step-facility-info";
 import { StepGeneralTreatment } from "@/components/inspection/step-general-treatment";
-import { StepDesignFlow } from "@/components/inspection/step-design-flow";
 import { StepSepticTank } from "@/components/inspection/step-septic-tank";
-import { StepDisposalWorks } from "@/components/inspection/step-disposal-works";
+import { SubmitForReviewButton } from "@/components/inspection/submit-for-review-button";
+import { WizardNavigation } from "@/components/inspection/wizard-navigation";
+import { WizardProgress } from "@/components/inspection/wizard-progress";
+import { Form } from "@/components/ui/form";
 import { useAutoSave } from "@/hooks/use-auto-save";
+import { STEP_LABELS } from "@/lib/constants/inspection";
 import {
-  inspectionFormSchema,
   getDefaultFormValues,
+  inspectionFormSchema,
   STEP_FIELDS,
 } from "@/lib/validators/inspection";
-import { STEP_LABELS } from "@/lib/constants/inspection";
-import { SubmitForReviewButton } from "@/components/inspection/submit-for-review-button";
-import { ReviewNoteBanner } from "@/components/inspection/review-note-banner";
 import type { InspectionFormData } from "@/types/inspection";
 
 interface InspectionWizardProps {
@@ -47,9 +46,7 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
 
   const handleNext = async () => {
     // Trigger validation for current step fields
-    const isValid = await form.trigger(
-      STEP_FIELDS[currentStep] as FieldPath<InspectionFormData>[]
-    );
+    const isValid = await form.trigger(STEP_FIELDS[currentStep] as FieldPath<InspectionFormData>[]);
     if (!isValid) {
       toast.error("Please fill in all required fields before continuing");
       return;
@@ -87,29 +84,22 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
     () => {
       // Validation failed on submit -- show error
       toast.error("Please complete all required fields before submitting");
-    }
+    },
   );
 
   return (
     <Form {...form}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-6 pb-4">
-        {inspection.reviewNotes && (
-          <ReviewNoteBanner note={inspection.reviewNotes} />
-        )}
+        {inspection.reviewNotes && <ReviewNoteBanner note={inspection.reviewNotes} />}
 
-        <WizardProgress
-          currentStep={currentStep}
-          onStepClick={handleStepClick}
-        />
+        <WizardProgress currentStep={currentStep} onStepClick={handleStepClick} />
 
         <div className="rounded-lg border bg-card p-4 sm:p-6">
           <div className="mb-5 pb-4 border-b">
             <p className="text-xs font-medium text-primary uppercase tracking-wider">
               Step {currentStep + 1} of 5
             </p>
-            <h2 className="text-xl font-semibold mt-1">
-              {STEP_LABELS[currentStep]}
-            </h2>
+            <h2 className="text-xl font-semibold mt-1">{STEP_LABELS[currentStep]}</h2>
           </div>
 
           <div className="min-h-[40vh]">
@@ -131,10 +121,7 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
           lastSaved={lastSaved}
           submitButton={
             inspection.status === "draft" ? (
-              <SubmitForReviewButton
-                inspectionId={inspection.id}
-                formData={form.getValues()}
-              />
+              <SubmitForReviewButton inspectionId={inspection.id} formData={form.getValues()} />
             ) : undefined
           }
         />

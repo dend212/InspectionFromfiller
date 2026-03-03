@@ -14,7 +14,7 @@
  * Returns a Uint8Array PDF or null if no overflow exists.
  */
 
-import type { Template, Schema, Font } from "@pdfme/common";
+import type { Font, Schema, Template } from "@pdfme/common";
 import { generate } from "@pdfme/generator";
 import { text } from "@pdfme/schemas";
 import { loadPublicFile } from "./load-public-file";
