@@ -4,7 +4,7 @@
  * Merges separately-generated PDFs (form, comments, photos) into a single
  * output document using pdf-lib.
  *
- * Page order: form pages (6) -> comments page(s) -> photo pages
+ * Page order: form pages (9) -> comments page(s) -> photo pages
  *
  * Uses standalone pdf-lib since @pdfme/pdf-lib is not exported as a public API.
  */
@@ -14,7 +14,7 @@ import { PDFDocument } from "pdf-lib";
 /**
  * Merges form PDF with optional comments and photo PDFs into a single document.
  *
- * @param formPdf - The main ADEQ form PDF (6 pages)
+ * @param formPdf - The main ADEQ form PDF (9 pages)
  * @param commentsPdf - The comments overflow page PDF, or null if no overflow
  * @param photosPdf - The photo appendix pages PDF, or null if no photos
  * @returns The merged PDF as a Uint8Array

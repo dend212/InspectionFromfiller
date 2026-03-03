@@ -1,59 +1,37 @@
 /**
- * Field Mapping: Transforms InspectionFormData into pdfme inputs
+ * Field Mapping: Transforms InspectionFormData into typed field maps
+ * for pdf-lib native form filling.
  *
- * Converts the structured Zod schema shape to a flat Record<string, string>
- * that pdfme's generate() function expects as inputs.
- *
- * - Boolean checkbox fields -> "X" (checked) or "" (unchecked)
- * - Enum/select fields -> display-friendly labels
- * - String fields -> passed through directly
- * - Per-tank array data -> flattened as tank1_fieldName, tank2_fieldName, etc.
- * - Undefined/null values -> "" (empty string)
+ * Returns separate maps for text fields, checkboxes, and radio groups.
+ * Keys are the renamed PDF field names from septic_system_insp_form_v2.pdf.
  */
 
 import type { InspectionFormData } from "@/types/inspection";
 import {
-  CONDITION_OPTIONS,
-  WATER_SOURCES,
-  WASTEWATER_SOURCES,
-  OCCUPANCY_TYPES,
-  FACILITY_TYPES,
-  TANK_MATERIALS,
-  DISPOSAL_TYPES,
-  DISTRIBUTION_METHODS,
-  SUPPLY_LINE_MATERIALS,
-  BAFFLE_MATERIALS,
-  BAFFLE_CONDITIONS,
-  DESIGN_FLOW_BASIS,
-  ACTUAL_FLOW_EVALUATION,
-  CAPACITY_BASIS_OPTIONS,
-} from "@/lib/constants/inspection";
+  CONDITION_SUMMARY,
+  RECORDS,
+  CESSPOOL,
+  PERFORMANCE_ASSURANCE,
+  TANK_COUNT,
+  PUMPING,
+  ACCESS_OPENINGS,
+  LIDS_RISERS,
+  COMPARTMENTS,
+  COMPROMISED_TANK,
+  DISPOSAL_LOCATION,
+  DISTRIBUTION_INSPECTION,
+  INSPECTION_PORTS,
+  HYDRAULIC_LOAD,
+  DISPOSAL_DEFICIENCY,
+  DISPOSAL_REPAIRS,
+  GP_SYSTEM_TYPES,
+} from "@/lib/pdf/pdf-field-names";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Convert boolean to "X" or "" for checkbox rendering */
-function boolToX(value: boolean | undefined): string {
-  return value ? "X" : "";
-}
-
-/** Convert enum value to "X" if it matches the target, "" otherwise */
-function enumToX(value: string | undefined, target: string): string {
-  return value === target ? "X" : "";
-}
-
-/** Look up the display label for a value in an options array */
-function lookupLabel(
-  options: ReadonlyArray<{ readonly value: string; readonly label: string }>,
-  value: string | undefined,
-): string {
-  if (!value) return "";
-  const found = options.find((o) => o.value === value);
-  return found ? found.label : value;
-}
-
-/** Safe string accessor -- returns "" for undefined/null */
+/** Safe string accessor — returns "" for undefined/null */
 function str(value: string | undefined | null): string {
   return value ?? "";
 }
@@ -67,11 +45,18 @@ function getInitials(name: string): string {
     .join("");
 }
 
+/** Returns true if the baffle condition indicates baffle is present */
+function isBafflePresent(condition: string | undefined): boolean {
+  return (
+    condition === "present_operational" ||
+    condition === "present_not_operational"
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Comment overflow detection
 // ---------------------------------------------------------------------------
 
-/** Maximum character count before a comment is considered overflowing */
 const COMMENT_OVERFLOW_THRESHOLD = 200;
 
 export interface OverflowResult {
@@ -83,10 +68,6 @@ export interface OverflowResult {
   }>;
 }
 
-/**
- * Detects comment fields that exceed the available space on the form.
- * Uses a character count heuristic (~200 chars for typical form fields at 10pt).
- */
 export function detectCommentOverflow(
   data: InspectionFormData,
 ): OverflowResult {
@@ -123,464 +104,147 @@ export function detectCommentOverflow(
 }
 
 // ---------------------------------------------------------------------------
+// Output types
+// ---------------------------------------------------------------------------
+
+export interface FormFieldMapping {
+  textFields: Record<string, string>;
+  checkboxFields: Record<string, boolean>;
+  radioFields: Record<string, string>;
+  overflow: OverflowResult;
+}
+
+// ---------------------------------------------------------------------------
 // Main mapping function
 // ---------------------------------------------------------------------------
 
 /**
- * Transforms InspectionFormData into the flat Record<string, string>
- * that pdfme's inputs array expects.
+ * Transforms InspectionFormData into typed field maps for pdf-lib form filling.
  *
- * Every key in the returned object must match a schema `name` in the
- * ADEQ_TEMPLATE_SCHEMAS defined in template.ts.
+ * Returns separate maps for text fields, checkboxes, and radio groups.
+ * Every key must match a field name in septic_system_insp_form_v2.pdf.
  */
-export function mapFormDataToInputs(
+export function mapFormDataToFields(
   data: InspectionFormData,
-): Record<string, string> {
+): FormFieldMapping {
   const fi = data.facilityInfo;
   const gt = data.generalTreatment;
   const df = data.designFlow;
   const st = data.septicTank;
   const dw = data.disposalWorks;
 
-  // Detect overflow for comment substitution
   const overflow = detectCommentOverflow(data);
   const overflowFields = new Set(
     overflow.overflowSections.map((s) => s.fieldName),
   );
 
-  // Get comment text or "See Comments" if overflow
   function commentText(fieldName: string, text: string): string {
     return overflowFields.has(fieldName) ? "See Comments" : str(text);
   }
 
-  // Inspector initials (repeated on each page header)
   const initials = getInitials(str(fi?.inspectorName));
+  const tank = st?.tanks?.[0];
 
-  // Per-tank data (support up to 3 tanks)
-  const tank1 = st?.tanks?.[0];
-  const tank2 = st?.tanks?.[1];
-  const tank3 = st?.tanks?.[2];
+  // =========================================================================
+  // Text fields
+  // =========================================================================
 
-  const inputs: Record<string, string> = {
-    // ===================================================================
-    // Page 2: Form Page 1 -- Property info, inspector, qualifications
-    // ===================================================================
-
-    // Header repeaters
-    taxParcelNumber: str(fi?.taxParcelNumber),
-    dateOfInspection: str(fi?.dateOfInspection),
+  const textFields: Record<string, string> = {
+    // Header (shared across pages 2-9)
+    taxParcelNo: str(fi?.taxParcelNumber),
+    inspectionDate: str(fi?.dateOfInspection),
     inspectorInitials: initials,
 
     // Property info
-    facilityName: str(fi?.facilityName),
-    facilityAddress: str(fi?.facilityAddress),
-    facilityCity: str(fi?.facilityCity),
-    facilityCounty: str(fi?.facilityCounty),
+    propertyName: str(fi?.facilityName),
+    propertyAddress: str(fi?.facilityAddress),
+    propertyCity: str(fi?.facilityCity),
+    propertyCounty: str(fi?.facilityCounty),
 
-    // Seller/Transferor
+    // Seller
     sellerName: str(fi?.sellerName),
     sellerAddress: str(fi?.sellerAddress),
     sellerCity: str(fi?.sellerCity),
     sellerState: str(fi?.sellerState),
     sellerZip: str(fi?.sellerZip),
 
-    // Inspector info
+    // Inspector
     inspectorName: str(fi?.inspectorName),
-    companyAddress: str(fi?.companyAddress),
-    companyCity: str(fi?.companyCity),
-    companyState: str(fi?.companyState),
-    companyZip: str(fi?.companyZip),
-    company: str(fi?.company),
+    inspectorAddress: str(fi?.companyAddress),
+    inspectorCity: str(fi?.companyCity),
+    inspectorState: str(fi?.companyState),
+    inspectorZip: str(fi?.companyZip),
+    inspectorCompany: str(fi?.company),
 
-    // Qualifications
-    hasAdeqCourse: boolToX(fi?.hasAdeqCourse),
-    adeqCourseDetails: str(fi?.adeqCourseDetails),
+    // Qualifications text
+    adeqCourseDescription: str(fi?.adeqCourseDetails),
     adeqCourseDate: str(fi?.adeqCourseDate),
-
-    isProfessionalEngineer: boolToX(fi?.isProfessionalEngineer),
     peExpirationDate: str(fi?.peExpirationDate),
-    isRegisteredSanitarian: boolToX(fi?.isRegisteredSanitarian),
     rsExpirationDate: str(fi?.rsExpirationDate),
-    isWastewaterOperator: boolToX(fi?.isWastewaterOperator),
     operatorGrade: str(fi?.operatorGrade),
-
-    isLicensedContractor: boolToX(fi?.isLicensedContractor),
     contractorLicenseCategory: str(fi?.contractorLicenseCategory),
-
-    hasPumperTruck: boolToX(fi?.hasPumperTruck),
     pumperTruckRegistration: str(fi?.pumperTruckRegistration),
-
     employeeName: str(fi?.employeeName),
 
-    // Records obtained
-    recordsAvailableYes: enumToX(fi?.recordsAvailable, "yes"),
-    recordsAvailableNo: enumToX(fi?.recordsAvailable, "no"),
-
-    hasDischargeAuth: boolToX(fi?.hasDischargeAuth),
-    dischargeAuthPermitNo: str(fi?.dischargeAuthPermitNo),
-    hasApprovalOfConstruction: boolToX(fi?.hasApprovalOfConstruction),
+    // Records text
+    dischargePermitNo: str(fi?.dischargeAuthPermitNo),
     approvalPermitNo: str(fi?.approvalPermitNo),
-    hasSitePlan: boolToX(fi?.hasSitePlan),
-    hasOperationDocs: boolToX(fi?.hasOperationDocs),
-    hasOtherRecords: boolToX(fi?.hasOtherRecords),
-    otherRecordsDescription: str(fi?.otherRecordsDescription),
+    recordsOtherDescription: str(fi?.otherRecordsDescription),
 
-    // Cesspool
-    isCesspoolYes: enumToX(fi?.isCesspool, "yes"),
-    isCesspoolNo: enumToX(fi?.isCesspool, "no"),
-
-    // ===================================================================
-    // Page 3: Form Page 2 -- Summary of Inspection, Section 1, Section 2 start
-    // ===================================================================
-
-    // Header repeaters (same data, different schema names per page)
-    taxParcelNumber_p3: str(fi?.taxParcelNumber),
-    dateOfInspection_p3: str(fi?.dateOfInspection),
-    inspectorInitials_p3: initials,
-
-    // Facility type -- "Serves" checkboxes
-    facilityTypeResidence: (fi?.facilityType === "single_family" || fi?.facilityType === "multifamily") ? "X" : "",
-    facilityTypeSingleFamily: enumToX(fi?.facilityType, "single_family"),
-    facilityTypeMultiFamily: enumToX(fi?.facilityType, "multifamily"),
-    facilityTypeCommercial: enumToX(fi?.facilityType, "commercial"),
-    facilityTypeOther: fi?.facilityType === "other" ? str(fi?.facilityTypeOther) : "",
-
-    // Type of facility checkboxes (from facilitySystemTypes array)
-    facilitySystemConventional: (fi?.facilitySystemTypes ?? []).includes(
-      "conventional",
-    )
-      ? "X"
-      : "",
-    facilitySystemAlternative: (fi?.facilitySystemTypes ?? []).includes(
-      "alternative",
-    )
-      ? "X"
-      : "",
-    facilitySystemGrayWater: (fi?.facilitySystemTypes ?? []).includes(
-      "gray_water",
-    )
-      ? "X"
-      : "",
-
+    // Facility info
+    facilityServesOtherExplain: str(fi?.facilityTypeOther),
     numberOfSystems: str(fi?.numberOfSystems),
     facilityAge: str(fi?.facilityAge),
-    facilityAgeEstimateExplanation: str(fi?.facilityAgeEstimateExplanation),
+    facilityAgeExplanation: str(fi?.facilityAgeEstimateExplanation),
 
-    // Condition ratings (radio-style checkboxes)
-    septicTankConditionOperational: enumToX(
-      fi?.septicTankCondition,
-      "operational",
-    ),
-    septicTankConditionConcerns: enumToX(
-      fi?.septicTankCondition,
-      "operational_with_concerns",
-    ),
-    septicTankConditionNotOp: enumToX(
-      fi?.septicTankCondition,
-      "not_operational",
-    ),
-
-    disposalWorksConditionOperational: enumToX(
-      fi?.disposalWorksCondition,
-      "operational",
-    ),
-    disposalWorksConditionConcerns: enumToX(
-      fi?.disposalWorksCondition,
-      "operational_with_concerns",
-    ),
-    disposalWorksConditionNotOp: enumToX(
-      fi?.disposalWorksCondition,
-      "not_operational",
-    ),
-
-    altSystemConditionOperational: enumToX(
-      fi?.alternativeSystemCondition,
-      "operational",
-    ),
-    altSystemConditionConcerns: enumToX(
-      fi?.alternativeSystemCondition,
-      "operational_with_concerns",
-    ),
-    altSystemConditionNotOp: enumToX(
-      fi?.alternativeSystemCondition,
-      "not_operational",
-    ),
-
-    altDisposalConditionOperational: enumToX(
-      fi?.alternativeDisposalCondition,
-      "operational",
-    ),
-    altDisposalConditionConcerns: enumToX(
-      fi?.alternativeDisposalCondition,
-      "operational_with_concerns",
-    ),
-    altDisposalConditionNotOp: enumToX(
-      fi?.alternativeDisposalCondition,
-      "not_operational",
-    ),
-
-    // Section 1: Facility Information
-    // A) Water source checkboxes
-    waterSourceHauled: enumToX(fi?.waterSource, "hauled_water"),
-    waterSourceMunicipal: enumToX(fi?.waterSource, "municipal"),
-    waterSourcePrivateCompany: enumToX(fi?.waterSource, "private_company"),
-    waterSourceSharedWell: enumToX(fi?.waterSource, "shared_well"),
-    waterSourcePrivateWell: enumToX(fi?.waterSource, "private_well"),
+    // Water source
     wellDistance: str(fi?.wellDistance),
 
-    // B) Wastewater source
-    wastewaterResidential: enumToX(fi?.wastewaterSource, "residential"),
-    wastewaterCommercial: enumToX(fi?.wastewaterSource, "commercial"),
-    wastewaterOther:
-      fi?.wastewaterSource === "other"
-        ? "Other"
-        : "",
-
-    // C) Occupancy/Use
-    occupancyFullTime: enumToX(fi?.occupancyType, "full_time"),
-    occupancySeasonalPartTime: enumToX(fi?.occupancyType, "seasonal"),
-    occupancyVacant: enumToX(fi?.occupancyType, "vacant"),
-    occupancyUnknown: enumToX(fi?.occupancyType, "unknown"),
-
-    // Section 2: GP system type checkboxes
-    ...mapSystemTypeCheckboxes(gt?.systemTypes ?? []),
-
-    // ===================================================================
-    // Page 4: Form Page 3 -- Section 2 continued, Section 3, Section 4A-4C
-    // ===================================================================
-
-    // Header repeaters
-    taxParcelNumber_p4: str(fi?.taxParcelNumber),
-    dateOfInspection_p4: str(fi?.dateOfInspection),
-    inspectorInitials_p4: initials,
-
-    // Performance Assurance Plan
-    performanceAssurancePlanYes: enumToX(
-      gt?.hasPerformanceAssurancePlan,
-      "yes",
+    // Wastewater source
+    wastewaterOtherText: str(
+      fi?.wastewaterSource === "other" ? "Other" : "",
     ),
-    performanceAssurancePlanNo: enumToX(gt?.hasPerformanceAssurancePlan, "no"),
 
-    // Section 3: Design Flow
+    // Design flow
     estimatedDesignFlow: str(df?.estimatedDesignFlow),
-    designFlowUnknown: df?.designFlowBasis === "unknown" || df?.actualFlowEvaluation === "unknown" ? "X" : "",
-
-    // Design flow basis
-    designFlowBasisPermit: enumToX(df?.designFlowBasis, "permit_documents"),
-    designFlowBasisCalculated: enumToX(df?.designFlowBasis, "calculated"),
     numberOfBedrooms: str(df?.numberOfBedrooms),
     fixtureCount: str(df?.fixtureCount),
     nonDwellingGpd: str(df?.nonDwellingGpd),
-
-    // Actual flow evaluation
-    actualFlowNotExceed: enumToX(df?.actualFlowEvaluation, "not_exceed"),
-    actualFlowMayExceed: enumToX(df?.actualFlowEvaluation, "may_exceed"),
-    actualFlowUnknown: enumToX(df?.actualFlowEvaluation, "unknown"),
-
-    // Design flow comments
     designFlowComments: commentText(
       "designFlowComments",
       str(df?.designFlowComments),
     ),
 
-    // Section 4A: Number of tanks
-    numberOfTanks1: enumToX(st?.numberOfTanks, "1"),
-    numberOfTanks2OrMore: Number.parseInt(str(st?.numberOfTanks), 10) >= 2 ? "X" : "",
+    // Tank liquid levels
+    tankLiquidLevel: str(tank?.liquidLevel),
+    primaryChamberMeasured: str(tank?.primaryScumThickness ? "X" : ""),
+    primaryScumThickness: str(tank?.primaryScumThickness),
+    primarySludgeThickness: str(tank?.primarySludgeThickness),
+    secondaryChamberMeasured: str(tank?.secondaryScumThickness ? "X" : ""),
+    secondaryScumThickness: str(tank?.secondaryScumThickness),
+    secondarySludgeThickness: str(tank?.secondarySludgeThickness),
+    liquidLevelNotDetermined: tank?.liquidLevelNotDetermined ? "X" : "",
 
-    // Section 4B: Tank 1 liquid levels
-    tank1_liquidLevel: str(tank1?.liquidLevel),
-    tank1_primaryScumThickness: str(tank1?.primaryScumThickness),
-    tank1_primarySludgeThickness: str(tank1?.primarySludgeThickness),
-    tank1_secondaryScumThickness: str(tank1?.secondaryScumThickness),
-    tank1_secondarySludgeThickness: str(tank1?.secondarySludgeThickness),
-    tank1_liquidLevelNotDetermined: boolToX(tank1?.liquidLevelNotDetermined),
-
-    // Section 4C: Pumping
-    tanksPumpedYes: enumToX(st?.tanksPumped, "yes"),
-    tanksPumpedNo: enumToX(st?.tanksPumped, "no"),
+    // Pumping
     haulerCompany: str(st?.haulerCompany),
     haulerLicense: str(st?.haulerLicense),
 
-    // Pumping not performed reasons
-    pumpingNotPerformed_dischAuth:
-      str(st?.pumpingNotPerformedReason) === "discharge_auth" ? "X" : "",
-    pumpingNotPerformed_notNecessary:
-      str(st?.pumpingNotPerformedReason) === "not_necessary" ? "X" : "",
-    pumpingNotPerformed_noAccumulation:
-      str(st?.pumpingNotPerformedReason) === "no_accumulation" ? "X" : "",
-
-    // Section 4D: Tank inspection date
+    // Tank inspection date
     tankInspectionDate: str(st?.tankInspectionDate),
 
-    // ===================================================================
-    // Page 5: Form Page 4 -- Section 4E-4M (tank details, deficiencies, baffles)
-    // ===================================================================
+    // Tank capacity
+    tankCapacity: str(tank?.tankCapacity),
+    tankDimensions: str(tank?.tankDimensions),
+    capacityNotDeterminedReason: str(tank?.capacityNotDeterminedReason),
 
-    // Header repeaters
-    taxParcelNumber_p5: str(fi?.taxParcelNumber),
-    dateOfInspection_p5: str(fi?.dateOfInspection),
-    inspectorInitials_p5: initials,
+    // Tank material
+    materialOtherDescription: str(tank?.tankMaterialOther),
 
-    // 4E: Capacity
-    tank1_tankCapacity: str(tank1?.tankCapacity),
-    tank1_tankDimensions: str(tank1?.tankDimensions),
-    tank1_capacityBasisVolumePumped: enumToX(
-      tank1?.capacityBasis,
-      "volume_pumped",
-    ),
-    tank1_capacityBasisEstimate: enumToX(tank1?.capacityBasis, "estimate"),
-    tank1_capacityBasisPermit: enumToX(
-      tank1?.capacityBasis,
-      "permit_document",
-    ),
-    tank1_capacityBasisNotDetermined: enumToX(
-      tank1?.capacityBasis,
-      "not_determined",
-    ),
-    tank1_capacityNotDeterminedReason: str(tank1?.capacityNotDeterminedReason),
+    // Access openings
+    accessOpeningsOtherDescription: str(tank?.accessOpeningsOther),
 
-    // 4F: Tank material
-    tank1_materialPrecastConcrete: enumToX(
-      tank1?.tankMaterial,
-      "precast_concrete",
-    ),
-    tank1_materialFiberglass: enumToX(tank1?.tankMaterial, "fiberglass"),
-    tank1_materialPlastic: enumToX(tank1?.tankMaterial, "plastic"),
-    tank1_materialSteel: enumToX(tank1?.tankMaterial, "steel"),
-    tank1_materialCastInPlace: enumToX(
-      tank1?.tankMaterial,
-      "cast_in_place",
-    ),
-    tank1_materialOther: enumToX(tank1?.tankMaterial, "other"),
-    tank1_tankMaterialOther: str(tank1?.tankMaterialOther),
-
-    // 4G: Access openings
-    tank1_accessOne: enumToX(tank1?.accessOpenings, "one"),
-    tank1_accessTwo: enumToX(tank1?.accessOpenings, "two"),
-    tank1_accessThree: enumToX(tank1?.accessOpenings, "three"),
-    tank1_accessOther: enumToX(tank1?.accessOpenings, "other"),
-    tank1_accessOpeningsOther: str(tank1?.accessOpeningsOther),
-
-    // 4H: Lids & risers
-    tank1_lidsPresent: enumToX(tank1?.lidsRisersPresent, "present"),
-    tank1_lidsNotPresent: enumToX(tank1?.lidsRisersPresent, "not_present"),
-    tank1_lidsSecureYes: enumToX(tank1?.lidsSecurelyFastened, "yes"),
-    tank1_lidsSecureNo: enumToX(tank1?.lidsSecurelyFastened, "no"),
-
-    // 4I: Compartments
-    tank1_compartmentsOne: enumToX(tank1?.numberOfCompartments, "one"),
-    tank1_compartmentsTwo: enumToX(tank1?.numberOfCompartments, "two"),
-    tank1_compartmentsOther: enumToX(tank1?.numberOfCompartments, "other"),
-    tank1_compartmentsOther_text: str(tank1?.compartmentsOther),
-
-    // 4J: Compromised tank
-    tank1_compromisedYes: enumToX(tank1?.compromisedTank, "yes"),
-    tank1_compromisedNo: enumToX(tank1?.compromisedTank, "no"),
-
-    // 4K: Deficiencies
-    tank1_deficiencyRootInvasion: boolToX(tank1?.deficiencyRootInvasion),
-    tank1_deficiencyExposedRebar: boolToX(tank1?.deficiencyExposedRebar),
-    tank1_deficiencyCracks: boolToX(tank1?.deficiencyCracks),
-    tank1_deficiencyDamagedInlet: boolToX(tank1?.deficiencyDamagedInlet),
-    tank1_deficiencyDamagedLids: boolToX(tank1?.deficiencyDamagedLids),
-    tank1_deficiencyDamagedOutlet: boolToX(tank1?.deficiencyDamagedOutlet),
-    tank1_deficiencyDeterioratingConcrete: boolToX(
-      tank1?.deficiencyDeterioratingConcrete,
-    ),
-    tank1_deficiencyOther: boolToX(tank1?.deficiencyOther),
-
-    // 4L: Baffle material
-    tank1_baffleMaterialPrecast: enumToX(
-      tank1?.baffleMaterial,
-      "precast_concrete",
-    ),
-    tank1_baffleMaterialFiberglass: enumToX(
-      tank1?.baffleMaterial,
-      "fiberglass",
-    ),
-    tank1_baffleMaterialPlastic: enumToX(tank1?.baffleMaterial, "plastic"),
-    tank1_baffleMaterialCite: enumToX(tank1?.baffleMaterial, "clay"),
-    tank1_baffleMaterialNotDetermined: enumToX(
-      tank1?.baffleMaterial,
-      "not_determined",
-    ),
-
-    // Baffle conditions -- Inlet
-    tank1_inletBafflePresent: isBafflePresent(tank1?.inletBaffleCondition),
-    tank1_inletBaffleOperational: enumToX(
-      tank1?.inletBaffleCondition,
-      "present_operational",
-    ),
-    tank1_inletBaffleNotOp: enumToX(
-      tank1?.inletBaffleCondition,
-      "present_not_operational",
-    ),
-    tank1_inletBaffleNotPresent: enumToX(
-      tank1?.inletBaffleCondition,
-      "not_present",
-    ),
-    tank1_inletBaffleNotDetermined: enumToX(
-      tank1?.inletBaffleCondition,
-      "not_determined",
-    ),
-
-    // Baffle conditions -- Outlet
-    tank1_outletBafflePresent: isBafflePresent(tank1?.outletBaffleCondition),
-    tank1_outletBaffleOperational: enumToX(
-      tank1?.outletBaffleCondition,
-      "present_operational",
-    ),
-    tank1_outletBaffleNotOp: enumToX(
-      tank1?.outletBaffleCondition,
-      "present_not_operational",
-    ),
-    tank1_outletBaffleNotPresent: enumToX(
-      tank1?.outletBaffleCondition,
-      "not_present",
-    ),
-    tank1_outletBaffleNotDetermined: enumToX(
-      tank1?.outletBaffleCondition,
-      "not_determined",
-    ),
-
-    // Baffle conditions -- Interior
-    tank1_interiorBafflePresent: isBafflePresent(
-      tank1?.interiorBaffleCondition,
-    ),
-    tank1_interiorBaffleOperational: enumToX(
-      tank1?.interiorBaffleCondition,
-      "present_operational",
-    ),
-    tank1_interiorBaffleNotOp: enumToX(
-      tank1?.interiorBaffleCondition,
-      "present_not_operational",
-    ),
-    tank1_interiorBaffleNotPresent: enumToX(
-      tank1?.interiorBaffleCondition,
-      "not_present",
-    ),
-    tank1_interiorBaffleNotDetermined: enumToX(
-      tank1?.interiorBaffleCondition,
-      "not_determined",
-    ),
-
-    // 4M: Effluent filter
-    tank1_effluentFilterPresent: enumToX(
-      tank1?.effluentFilterPresent,
-      "present",
-    ),
-    tank1_effluentFilterNotPresent: enumToX(
-      tank1?.effluentFilterPresent,
-      "not_present",
-    ),
-    tank1_effluentFilterServiced: enumToX(
-      tank1?.effluentFilterServiced,
-      "serviced",
-    ),
-    tank1_effluentFilterNotServiced: enumToX(
-      tank1?.effluentFilterServiced,
-      "not_serviced",
-    ),
+    // Compartments
+    compartmentsOtherDescription: str(tank?.compartmentsOther),
 
     // Septic tank comments
     septicTankComments: commentText(
@@ -588,75 +252,17 @@ export function mapFormDataToInputs(
       str(st?.septicTankComments),
     ),
 
-    // ===================================================================
-    // Page 5 continued: 4.1 Disposal Works (starts on page 5)
-    // ===================================================================
-
-    // Location determined
-    disposalWorksLocationYes: enumToX(
-      dw?.disposalWorksLocationDetermined,
-      "yes",
-    ),
-    disposalWorksLocationNo: enumToX(
-      dw?.disposalWorksLocationDetermined,
-      "no",
-    ),
-    disposalWorksLocationNotDeterminedReason: str(
+    // Disposal works
+    disposalWorksLocationExplanation: str(
       dw?.disposalWorksLocationNotDeterminedReason,
     ),
+    disposalTypeOtherDescription: str(dw?.disposalTypeOther),
 
-    // Disposal type
-    disposalTypeTrench: enumToX(dw?.disposalType, "trench"),
-    disposalTypeBed: enumToX(dw?.disposalType, "bed"),
-    disposalTypeChamber: enumToX(dw?.disposalType, "chamber"),
-    disposalTypeSeepagePit: enumToX(dw?.disposalType, "seepage_pit"),
-    disposalTypeOther: enumToX(dw?.disposalType, "other"),
-    disposalTypeOtherText: str(dw?.disposalTypeOther),
-
-    // Distribution method
-    distributionDiversion: enumToX(dw?.distributionMethod, "diversion_valve"),
-    distributionDropBox: enumToX(dw?.distributionMethod, "drop_box"),
-    distributionBox: enumToX(dw?.distributionMethod, "distribution_box"),
-    distributionManifold: enumToX(dw?.distributionMethod, "manifold"),
-    distributionSerial: enumToX(dw?.distributionMethod, "serial_loading"),
-    distributionPressurized: enumToX(dw?.distributionMethod, "pressurized"),
-    distributionUnknown: enumToX(dw?.distributionMethod, "unknown"),
-
-    // ===================================================================
-    // Page 6: Form Page 5 -- Disposal Works continued + Signature
-    // ===================================================================
-
-    // Header repeaters
-    taxParcelNumber_p6: str(fi?.taxParcelNumber),
-    dateOfInspection_p6: str(fi?.dateOfInspection),
-    inspectorInitials_p6: initials,
-
-    // Distribution component inspected
-    distributionInspectedYes: enumToX(
-      dw?.distributionComponentInspected,
-      "yes",
-    ),
-    distributionInspectedNo: enumToX(
-      dw?.distributionComponentInspected,
-      "no",
-    ),
-
-    // Supply line material
-    supplyLinePVC: enumToX(dw?.supplyLineMaterial, "pvc"),
-    supplyLineOrangeburg: enumToX(dw?.supplyLineMaterial, "orangeburg"),
-    supplyLineTile: enumToX(dw?.supplyLineMaterial, "tile"),
-    supplyLineOther: enumToX(dw?.supplyLineMaterial, "other"),
-    supplyLineMaterialOtherText: str(dw?.supplyLineMaterialOther),
+    // Supply line
+    supplyLineOtherDescription: str(dw?.supplyLineMaterialOther),
 
     // Inspection ports
-    inspectionPortsPresent: enumToX(dw?.inspectionPortsPresent, "present"),
-    inspectionPortsNotPresent: enumToX(
-      dw?.inspectionPortsPresent,
-      "not_present",
-    ),
     numberOfPorts: str(dw?.numberOfPorts),
-
-    // Port depths (up to 8)
     portDepth1: str(dw?.portDepths?.[0]),
     portDepth2: str(dw?.portDepths?.[1]),
     portDepth3: str(dw?.portDepths?.[2]),
@@ -666,111 +272,457 @@ export function mapFormDataToInputs(
     portDepth7: str(dw?.portDepths?.[6]),
     portDepth8: str(dw?.portDepths?.[7]),
 
-    // Hydraulic load test
-    hydraulicLoadTestYes: enumToX(dw?.hydraulicLoadTestPerformed, "yes"),
-    hydraulicLoadTestNo: enumToX(dw?.hydraulicLoadTestPerformed, "no"),
-
-    // Disposal works deficiency
-    hasDisposalDeficiencyYes: enumToX(dw?.hasDisposalDeficiency, "yes"),
-    hasDisposalDeficiencyNo: enumToX(dw?.hasDisposalDeficiency, "no"),
-
-    // Deficiency checkboxes
-    defCrushedOutletPipe: boolToX(dw?.defCrushedOutletPipe),
-    defRootInvasion: boolToX(dw?.defRootInvasion),
-    defHighWaterLines: boolToX(dw?.defHighWaterLines),
-    defDboxNotFunctioning: boolToX(dw?.defDboxNotFunctioning),
-    defSurfacing: boolToX(dw?.defSurfacing),
-    defLushVegetation: boolToX(dw?.defLushVegetation),
-    defErosion: boolToX(dw?.defErosion),
-    defPondingWater: boolToX(dw?.defPondingWater),
-    defAnimalIntrusion: boolToX(dw?.defAnimalIntrusion),
-    defLoadTestFailure: boolToX(dw?.defLoadTestFailure),
-    defCouldNotDetermine: boolToX(dw?.defCouldNotDetermine),
-
-    // Repairs recommended
-    repairsRecommendedYes: enumToX(dw?.repairsRecommended, "yes"),
-    repairsRecommendedNo: enumToX(dw?.repairsRecommended, "no"),
-
-    // Inspector comments (disposal works)
+    // Disposal works comments
     disposalWorksComments: commentText(
       "disposalWorksComments",
       str(dw?.disposalWorksComments),
     ),
 
-    // Signature area
-    // signatureImage is set externally (data URL from signature pad)
-    signatureImage: "",
-    signatureDate: str(dw?.signatureDate),
-    printedName: str(dw?.printedName),
+    // Signature
+    conventionalPrintedName: str(dw?.printedName),
+    conventionalPrintedName2: str(dw?.printedName),
   };
 
-  return inputs;
+  // =========================================================================
+  // Checkbox fields
+  // =========================================================================
+
+  const checkboxFields: Record<string, boolean> = {
+    // Qualifications
+    qualAdeqCourse: !!fi?.hasAdeqCourse,
+    qualProfessionalEngineer: !!fi?.isProfessionalEngineer,
+    qualRegisteredSanitarian: !!fi?.isRegisteredSanitarian,
+    qualWastewaterOperator: !!fi?.isWastewaterOperator,
+    qualLicensedContractor: !!fi?.isLicensedContractor,
+    qualPumperTruck: !!fi?.hasPumperTruck,
+
+    // Records
+    recordsDischargeAuth: !!fi?.hasDischargeAuth,
+    recordsApprovalOfConstruction: !!fi?.hasApprovalOfConstruction,
+    recordsSitePlan: !!fi?.hasSitePlan,
+    recordsOperationDocs: !!fi?.hasOperationDocs,
+    recordsOther: !!fi?.hasOtherRecords,
+
+    // Facility serves
+    facilityServesResidence:
+      fi?.facilityType === "single_family" ||
+      fi?.facilityType === "multifamily",
+    facilityServesSingleFamily: fi?.facilityType === "single_family",
+    facilityServesMultiFamily: fi?.facilityType === "multifamily",
+    facilityServesCommercial: fi?.facilityType === "commercial",
+    facilityServesOther: fi?.facilityType === "other",
+
+    // Facility type
+    facilityTypeConventional: (fi?.facilitySystemTypes ?? []).includes(
+      "conventional",
+    ),
+    facilityTypeAlternative: (fi?.facilitySystemTypes ?? []).includes(
+      "alternative",
+    ),
+    facilityTypeGrayWater: (fi?.facilitySystemTypes ?? []).includes(
+      "gray_water",
+    ),
+
+    // Water source
+    waterSourceHauled: fi?.waterSource === "hauled_water",
+    waterSourceMunicipal: fi?.waterSource === "municipal",
+    waterSourcePrivateCompany: fi?.waterSource === "private_company",
+    waterSourceSharedWell: fi?.waterSource === "shared_well",
+    waterSourcePrivateWell: fi?.waterSource === "private_well",
+
+    // Wastewater source
+    wastewaterResidential: fi?.wastewaterSource === "residential",
+    wastewaterCommercial: fi?.wastewaterSource === "commercial",
+    wastewaterOther: fi?.wastewaterSource === "other",
+
+    // Occupancy
+    occupancyFullTime: fi?.occupancyType === "full_time",
+    occupancySeasonalPartTime: fi?.occupancyType === "seasonal",
+    occupancyVacant: fi?.occupancyType === "vacant",
+    occupancyUnknown: fi?.occupancyType === "unknown",
+
+    // GP system types
+    ...mapSystemTypeCheckboxes(gt?.systemTypes ?? []),
+
+    // Design flow
+    designFlowUnknown:
+      df?.designFlowBasis === "unknown" ||
+      df?.actualFlowEvaluation === "unknown",
+    designFlowBasisPermit: df?.designFlowBasis === "permit_documents",
+    designFlowBasisCalculated: df?.designFlowBasis === "calculated",
+    designFlowBasisBedrooms: !!df?.numberOfBedrooms,
+    designFlowBasisFixtures: !!df?.fixtureCount,
+    designFlowBasisNonDwelling: !!df?.nonDwellingGpd,
+    actualFlowNotExceed: df?.actualFlowEvaluation === "not_exceed",
+    actualFlowMayExceed: df?.actualFlowEvaluation === "may_exceed",
+    actualFlowUnknown: df?.actualFlowEvaluation === "unknown",
+
+    // Pumping not performed reasons
+    pumpingNotPerformedDischargeAuth:
+      st?.pumpingNotPerformedReason === "discharge_auth",
+    pumpingNotPerformedNotNecessary:
+      st?.pumpingNotPerformedReason === "not_necessary",
+    pumpingNotPerformedNoAccumulation:
+      st?.pumpingNotPerformedReason === "no_accumulation",
+
+    // Tank capacity basis
+    capacityBasisMeasurement: tank?.capacityBasis === "measurement",
+    capacityBasisVolumePumped: tank?.capacityBasis === "volume_pumped",
+    capacityBasisEstimate: tank?.capacityBasis === "estimate",
+    capacityBasisPermit: tank?.capacityBasis === "permit_document",
+    capacityBasisNotDetermined: tank?.capacityBasis === "not_determined",
+
+    // Tank material
+    materialPrecastConcrete: tank?.tankMaterial === "precast_concrete",
+    materialFiberglass: tank?.tankMaterial === "fiberglass",
+    materialPlastic: tank?.tankMaterial === "plastic",
+    materialSteel: tank?.tankMaterial === "steel",
+    materialCastInPlace: tank?.tankMaterial === "cast_in_place",
+    materialOther: tank?.tankMaterial === "other",
+
+    // Tank deficiencies
+    defRootInvasion: !!tank?.deficiencyRootInvasion,
+    defExposedRebar: !!tank?.deficiencyExposedRebar,
+    defCracksInTank: !!tank?.deficiencyCracks,
+    defDamagedInletPipe: !!tank?.deficiencyDamagedInlet,
+    defDamagedLidsRisers: !!tank?.deficiencyDamagedLids,
+    defDamagedOutletPipe: !!tank?.deficiencyDamagedOutlet,
+    defDeterioratingConcrete: !!tank?.deficiencyDeterioratingConcrete,
+    defOtherConcerns: !!tank?.deficiencyOther,
+
+    // Baffle material
+    baffleMaterialPrecast: tank?.baffleMaterial === "precast_concrete",
+    baffleMaterialFiberglass: tank?.baffleMaterial === "fiberglass",
+    baffleMaterialPlastic: tank?.baffleMaterial === "plastic",
+    baffleMaterialClay: tank?.baffleMaterial === "clay",
+    baffleMaterialNotDetermined: tank?.baffleMaterial === "not_determined",
+
+    // Inlet baffle
+    inletBafflePresent: isBafflePresent(tank?.inletBaffleCondition),
+    inletBaffleOperational:
+      tank?.inletBaffleCondition === "present_operational",
+    inletBaffleNotOperational:
+      tank?.inletBaffleCondition === "present_not_operational",
+    inletBaffleNotPresent: tank?.inletBaffleCondition === "not_present",
+    inletBaffleNotDetermined:
+      tank?.inletBaffleCondition === "not_determined",
+
+    // Outlet baffle
+    outletBafflePresent: isBafflePresent(tank?.outletBaffleCondition),
+    outletBaffleOperational:
+      tank?.outletBaffleCondition === "present_operational",
+    outletBaffleNotOperational:
+      tank?.outletBaffleCondition === "present_not_operational",
+    outletBaffleNotPresent: tank?.outletBaffleCondition === "not_present",
+    outletBaffleNotDetermined:
+      tank?.outletBaffleCondition === "not_determined",
+
+    // Interior baffle
+    interiorBafflePresent: isBafflePresent(tank?.interiorBaffleCondition),
+    interiorBaffleOperational:
+      tank?.interiorBaffleCondition === "present_operational",
+    interiorBaffleNotOperational:
+      tank?.interiorBaffleCondition === "present_not_operational",
+    interiorBaffleNotPresent:
+      tank?.interiorBaffleCondition === "not_present",
+    interiorBaffleNotDetermined:
+      tank?.interiorBaffleCondition === "not_determined",
+
+    // Effluent filter
+    effluentFilterPresent: tank?.effluentFilterPresent === "present",
+    effluentFilterNotPresent: tank?.effluentFilterPresent === "not_present",
+    effluentFilterServiced: tank?.effluentFilterServiced === "serviced",
+    effluentFilterNotServiced:
+      tank?.effluentFilterServiced === "not_serviced",
+
+    // Disposal type
+    disposalTypeTrench: dw?.disposalType === "trench",
+    disposalTypeBed: dw?.disposalType === "bed",
+    disposalTypeChamber: dw?.disposalType === "chamber",
+    disposalTypeSeepagePit: dw?.disposalType === "seepage_pit",
+    disposalTypeOther: dw?.disposalType === "other",
+
+    // Distribution method
+    distributionDiversionValve: dw?.distributionMethod === "diversion_valve",
+    distributionDropBox: dw?.distributionMethod === "drop_box",
+    distributionBox: dw?.distributionMethod === "distribution_box",
+    distributionManifold: dw?.distributionMethod === "manifold",
+    distributionSerialLoading: dw?.distributionMethod === "serial_loading",
+    distributionPressurized: dw?.distributionMethod === "pressurized",
+    distributionUnknown: dw?.distributionMethod === "unknown",
+
+    // Supply line material
+    supplyLinePVC: dw?.supplyLineMaterial === "pvc",
+    supplyLineOrangeburg: dw?.supplyLineMaterial === "orangeburg",
+    supplyLineTile: dw?.supplyLineMaterial === "tile",
+    supplyLineOther: dw?.supplyLineMaterial === "other",
+
+    // Disposal deficiencies
+    dwDefCrushedOutletPipe: !!dw?.defCrushedOutletPipe,
+    dwDefRootInvasion: !!dw?.defRootInvasion,
+    dwDefHighWaterLines: !!dw?.defHighWaterLines,
+    dwDefDboxNotFunctioning: !!dw?.defDboxNotFunctioning,
+    dwDefSurfacing: !!dw?.defSurfacing,
+    dwDefLushVegetation: !!dw?.defLushVegetation,
+    dwDefErosion: !!dw?.defErosion,
+    dwDefPondingWater: !!dw?.defPondingWater,
+    dwDefAnimalIntrusion: !!dw?.defAnimalIntrusion,
+    dwDefLoadTestFailure: !!dw?.defLoadTestFailure,
+    dwDefCouldNotDetermine: !!dw?.defCouldNotDetermine,
+  };
+
+  // =========================================================================
+  // Radio fields (value = the PDF option to select)
+  // =========================================================================
+
+  const radioFields: Record<string, string> = {};
+
+  // Records available
+  if (fi?.recordsAvailable === "yes") {
+    radioFields[RECORDS.recordsAvailable] =
+      RECORDS.recordsAvailableOptions.yes;
+  } else if (fi?.recordsAvailable === "no") {
+    radioFields[RECORDS.recordsAvailable] =
+      RECORDS.recordsAvailableOptions.no;
+  }
+
+  // Cesspool
+  if (fi?.isCesspool === "yes") {
+    radioFields[CESSPOOL.isCesspool] = CESSPOOL.isCesspoolOptions.yes;
+  } else if (fi?.isCesspool === "no") {
+    radioFields[CESSPOOL.isCesspool] = CESSPOOL.isCesspoolOptions.no;
+  }
+
+  // Condition ratings
+  mapConditionRadio(
+    radioFields,
+    CONDITION_SUMMARY.septicTank,
+    CONDITION_SUMMARY.septicTankOptions,
+    fi?.septicTankCondition,
+  );
+  mapConditionRadio(
+    radioFields,
+    CONDITION_SUMMARY.disposalWorks,
+    CONDITION_SUMMARY.disposalWorksOptions,
+    fi?.disposalWorksCondition,
+  );
+  mapConditionRadio(
+    radioFields,
+    CONDITION_SUMMARY.altSystem,
+    CONDITION_SUMMARY.altSystemOptions,
+    fi?.alternativeSystemCondition,
+  );
+  mapConditionRadio(
+    radioFields,
+    CONDITION_SUMMARY.altDisposal,
+    CONDITION_SUMMARY.altDisposalOptions,
+    fi?.alternativeDisposalCondition,
+  );
+
+  // Performance assurance plan
+  mapYesNoRadio(
+    radioFields,
+    PERFORMANCE_ASSURANCE.plan,
+    PERFORMANCE_ASSURANCE.planOptions,
+    gt?.hasPerformanceAssurancePlan,
+  );
+
+  // Number of tanks
+  if (st?.numberOfTanks === "1") {
+    radioFields[TANK_COUNT.numberOfTanks] =
+      TANK_COUNT.numberOfTanksOptions.one;
+  } else if (
+    st?.numberOfTanks &&
+    Number.parseInt(st.numberOfTanks, 10) >= 2
+  ) {
+    radioFields[TANK_COUNT.numberOfTanks] =
+      TANK_COUNT.numberOfTanksOptions.two;
+  }
+
+  // Tanks pumped
+  mapYesNoRadio(
+    radioFields,
+    PUMPING.tanksPumped,
+    PUMPING.tanksPumpedOptions,
+    st?.tanksPumped,
+  );
+
+  // Access openings
+  if (tank?.accessOpenings === "one") {
+    radioFields[ACCESS_OPENINGS.accessOpenings] =
+      ACCESS_OPENINGS.accessOpeningsOptions.one;
+  } else if (tank?.accessOpenings === "two") {
+    radioFields[ACCESS_OPENINGS.accessOpenings] =
+      ACCESS_OPENINGS.accessOpeningsOptions.two;
+  } else if (tank?.accessOpenings === "three") {
+    radioFields[ACCESS_OPENINGS.accessOpenings] =
+      ACCESS_OPENINGS.accessOpeningsOptions.three;
+  } else if (tank?.accessOpenings === "other") {
+    radioFields[ACCESS_OPENINGS.accessOpenings] =
+      ACCESS_OPENINGS.accessOpeningsOptions.other;
+  }
+
+  // Lids present
+  if (tank?.lidsRisersPresent === "present") {
+    radioFields[LIDS_RISERS.lidsPresent] =
+      LIDS_RISERS.lidsPresentOptions.yes;
+  } else if (tank?.lidsRisersPresent === "not_present") {
+    radioFields[LIDS_RISERS.lidsPresent] =
+      LIDS_RISERS.lidsPresentOptions.no;
+  }
+
+  // Lids securely fastened
+  mapYesNoRadio(
+    radioFields,
+    LIDS_RISERS.lidsSecurelyFastened,
+    LIDS_RISERS.lidsSecurelyFastenedOptions,
+    tank?.lidsSecurelyFastened,
+  );
+
+  // Compartments
+  if (tank?.numberOfCompartments === "one") {
+    radioFields[COMPARTMENTS.compartments] =
+      COMPARTMENTS.compartmentsOptions.one;
+  } else if (tank?.numberOfCompartments === "two") {
+    radioFields[COMPARTMENTS.compartments] =
+      COMPARTMENTS.compartmentsOptions.two;
+  } else if (tank?.numberOfCompartments === "other") {
+    radioFields[COMPARTMENTS.compartments] =
+      COMPARTMENTS.compartmentsOptions.other;
+  }
+
+  // Compromised tank
+  mapYesNoRadio(
+    radioFields,
+    COMPROMISED_TANK.compromisedTank,
+    COMPROMISED_TANK.compromisedTankOptions,
+    tank?.compromisedTank,
+  );
+
+  // Disposal works location
+  mapYesNoRadio(
+    radioFields,
+    DISPOSAL_LOCATION.locationDetermined,
+    DISPOSAL_LOCATION.locationDeterminedOptions,
+    dw?.disposalWorksLocationDetermined,
+  );
+
+  // Distribution inspected
+  mapYesNoRadio(
+    radioFields,
+    DISTRIBUTION_INSPECTION.inspected,
+    DISTRIBUTION_INSPECTION.inspectedOptions,
+    dw?.distributionComponentInspected,
+  );
+
+  // Inspection ports present
+  if (dw?.inspectionPortsPresent === "present") {
+    radioFields[INSPECTION_PORTS.present] =
+      INSPECTION_PORTS.presentOptions.yes;
+  } else if (dw?.inspectionPortsPresent === "not_present") {
+    radioFields[INSPECTION_PORTS.present] =
+      INSPECTION_PORTS.presentOptions.no;
+  }
+
+  // Hydraulic load test
+  mapYesNoRadio(
+    radioFields,
+    HYDRAULIC_LOAD.test,
+    HYDRAULIC_LOAD.testOptions,
+    dw?.hydraulicLoadTestPerformed,
+  );
+
+  // Disposal deficiency
+  mapYesNoRadio(
+    radioFields,
+    DISPOSAL_DEFICIENCY.hasDeficiency,
+    DISPOSAL_DEFICIENCY.hasDeficiencyOptions,
+    dw?.hasDisposalDeficiency,
+  );
+
+  // Repairs recommended
+  mapYesNoRadio(
+    radioFields,
+    DISPOSAL_REPAIRS.recommended,
+    DISPOSAL_REPAIRS.recommendedOptions,
+    dw?.repairsRecommended,
+  );
+
+  return { textFields, checkboxFields, radioFields, overflow };
 }
 
 // ---------------------------------------------------------------------------
-// GP 4.02-4.23 system type checkbox mapping
+// Radio mapping helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Maps the systemTypes array to individual checkbox keys.
- * Each selected type value maps to its corresponding checkbox schema name.
- */
+function mapYesNoRadio(
+  radioFields: Record<string, string>,
+  fieldName: string,
+  options: { yes: string; no: string },
+  value: string | undefined,
+): void {
+  if (value === "yes") {
+    radioFields[fieldName] = options.yes;
+  } else if (value === "no") {
+    radioFields[fieldName] = options.no;
+  }
+}
+
+function mapConditionRadio(
+  radioFields: Record<string, string>,
+  fieldName: string,
+  options: { operational: string; concerns: string; notOperational: string },
+  value: string | undefined,
+): void {
+  if (value === "operational") {
+    radioFields[fieldName] = options.operational;
+  } else if (value === "operational_with_concerns") {
+    radioFields[fieldName] = options.concerns;
+  } else if (value === "not_operational") {
+    radioFields[fieldName] = options.notOperational;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GP system type checkbox mapping
+// ---------------------------------------------------------------------------
+
 function mapSystemTypeCheckboxes(
   systemTypes: string[],
-): Record<string, string> {
+): Record<string, boolean> {
   const typeSet = new Set(systemTypes);
 
   return {
-    checkbox_gp402_conventional: typeSet.has("gp402_conventional") ? "X" : "",
-    checkbox_gp402_septic_tank: typeSet.has("gp402_septic_tank") ? "X" : "",
-    checkbox_gp402_disposal_trench: typeSet.has("gp402_disposal_trench")
-      ? "X"
-      : "",
-    checkbox_gp402_disposal_bed: typeSet.has("gp402_disposal_bed") ? "X" : "",
-    checkbox_gp402_chamber: typeSet.has("gp402_chamber") ? "X" : "",
-    checkbox_gp402_seepage_pit: typeSet.has("gp402_seepage_pit") ? "X" : "",
-    checkbox_gp403_composting: typeSet.has("gp403_composting") ? "X" : "",
-    checkbox_gp404_pressure: typeSet.has("gp404_pressure") ? "X" : "",
-    checkbox_gp405_gravelless: typeSet.has("gp405_gravelless") ? "X" : "",
-    checkbox_gp406_natural_evap: typeSet.has("gp406_natural_evap") ? "X" : "",
-    checkbox_gp407_lined_evap: typeSet.has("gp407_lined_evap") ? "X" : "",
-    checkbox_gp408_mound: typeSet.has("gp408_mound") ? "X" : "",
-    checkbox_gp409_engineered_pad: typeSet.has("gp409_engineered_pad")
-      ? "X"
-      : "",
-    checkbox_gp410_sand_filter: typeSet.has("gp410_sand_filter") ? "X" : "",
-    checkbox_gp411_peat_filter: typeSet.has("gp411_peat_filter") ? "X" : "",
-    checkbox_gp412_textile_filter: typeSet.has("gp412_textile_filter")
-      ? "X"
-      : "",
-    checkbox_gp413_denitrifying: typeSet.has("gp413_denitrifying") ? "X" : "",
-    checkbox_gp414_sewage_vault: typeSet.has("gp414_sewage_vault") ? "X" : "",
-    checkbox_gp415_aerobic: typeSet.has("gp415_aerobic") ? "X" : "",
-    checkbox_gp416_nitrate_filter: typeSet.has("gp416_nitrate_filter")
-      ? "X"
-      : "",
-    checkbox_gp417_cap: typeSet.has("gp417_cap") ? "X" : "",
-    checkbox_gp418_wetland: typeSet.has("gp418_wetland") ? "X" : "",
-    checkbox_gp419_sand_lined: typeSet.has("gp419_sand_lined") ? "X" : "",
-    checkbox_gp420_disinfection: typeSet.has("gp420_disinfection") ? "X" : "",
-    checkbox_gp421_surface: typeSet.has("gp421_surface") ? "X" : "",
-    checkbox_gp422_drip: typeSet.has("gp422_drip") ? "X" : "",
-    checkbox_gp423_large_flow: typeSet.has("gp423_large_flow") ? "X" : "",
+    [GP_SYSTEM_TYPES.gp402Conventional]: typeSet.has("gp402_conventional"),
+    [GP_SYSTEM_TYPES.gp402SepticTank]: typeSet.has("gp402_septic_tank"),
+    [GP_SYSTEM_TYPES.gp402DisposalTrench]: typeSet.has(
+      "gp402_disposal_trench",
+    ),
+    [GP_SYSTEM_TYPES.gp402DisposalBed]: typeSet.has("gp402_disposal_bed"),
+    [GP_SYSTEM_TYPES.gp402Chamber]: typeSet.has("gp402_chamber"),
+    [GP_SYSTEM_TYPES.gp402SeepagePit]: typeSet.has("gp402_seepage_pit"),
+    [GP_SYSTEM_TYPES.gp403Composting]: typeSet.has("gp403_composting"),
+    [GP_SYSTEM_TYPES.gp404PressureDistribution]: typeSet.has(
+      "gp404_pressure",
+    ),
+    [GP_SYSTEM_TYPES.gp405GravellessTrench]: typeSet.has("gp405_gravelless"),
+    [GP_SYSTEM_TYPES.gp406NaturalEvap]: typeSet.has("gp406_natural_evap"),
+    [GP_SYSTEM_TYPES.gp407LinedEvap]: typeSet.has("gp407_lined_evap"),
+    [GP_SYSTEM_TYPES.gp408WisconsinMound]: typeSet.has("gp408_mound"),
+    [GP_SYSTEM_TYPES.gp409EngineeredPad]: typeSet.has("gp409_engineered_pad"),
+    [GP_SYSTEM_TYPES.gp410SandFilter]: typeSet.has("gp410_sand_filter"),
+    [GP_SYSTEM_TYPES.gp411PeatFilter]: typeSet.has("gp411_peat_filter"),
+    [GP_SYSTEM_TYPES.gp412TextileFilter]: typeSet.has("gp412_textile_filter"),
+    [GP_SYSTEM_TYPES.gp413Denitrifying]: typeSet.has("gp413_denitrifying"),
+    [GP_SYSTEM_TYPES.gp414SewageVault]: typeSet.has("gp414_sewage_vault"),
+    [GP_SYSTEM_TYPES.gp415Aerobic]: typeSet.has("gp415_aerobic"),
+    [GP_SYSTEM_TYPES.gp416NitrateFilter]: typeSet.has("gp416_nitrate_filter"),
+    [GP_SYSTEM_TYPES.gp417Cap]: typeSet.has("gp417_cap"),
+    [GP_SYSTEM_TYPES.gp418Wetland]: typeSet.has("gp418_wetland"),
+    [GP_SYSTEM_TYPES.gp419SandLinedTrench]: typeSet.has("gp419_sand_lined"),
+    [GP_SYSTEM_TYPES.gp420Disinfection]: typeSet.has("gp420_disinfection"),
+    [GP_SYSTEM_TYPES.gp421SurfaceDisposal]: typeSet.has("gp421_surface"),
+    [GP_SYSTEM_TYPES.gp422SubsurfaceDrip]: typeSet.has("gp422_drip"),
+    [GP_SYSTEM_TYPES.gp423LargeFlow]: typeSet.has("gp423_large_flow"),
   };
-}
-
-// ---------------------------------------------------------------------------
-// Baffle condition helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Returns "X" if the baffle condition indicates the baffle is present
- * (either operational or not operational).
- */
-function isBafflePresent(condition: string | undefined): string {
-  if (!condition) return "";
-  return condition === "present_operational" ||
-    condition === "present_not_operational"
-    ? "X"
-    : "";
 }
