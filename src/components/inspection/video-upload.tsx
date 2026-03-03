@@ -3,7 +3,6 @@
 import { Loader2, Video } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import type { MediaRecord } from "./media-gallery";
 
 interface VideoUploadProps {
@@ -61,33 +60,44 @@ export function VideoUpload({ inspectionId, onUploadComplete }: VideoUploadProps
         return;
       }
 
-      const supabase = createClient();
-      const filePath = `${inspectionId}/video/${crypto.randomUUID()}-${file.name}`;
-
-      const { data, error: uploadError } = await supabase.storage
-        .from("inspection-media")
-        .upload(filePath, file);
-
-      if (uploadError) {
-        throw new Error(uploadError.message);
-      }
-
-      // Save metadata to API
-      const response = await fetch(`/api/inspections/${inspectionId}/media`, {
+      // Step 1: Get a presigned upload URL from the API
+      const urlRes = await fetch(`/api/inspections/${inspectionId}/media/upload-url`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          storagePath: data.path,
-          type: "video",
-          label: "video",
-        }),
+        body: JSON.stringify({ fileName: file.name, type: "video", label: "video" }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to save video metadata");
+      if (!urlRes.ok) {
+        const err = await urlRes.json();
+        throw new Error(err.error || "Failed to get upload URL");
       }
 
-      const mediaRecord = (await response.json()) as MediaRecord;
+      const { signedUrl, storagePath } = await urlRes.json();
+
+      // Step 2: Upload directly to Supabase Storage
+      const uploadRes = await fetch(signedUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("Storage upload failed");
+      }
+
+      // Step 3: Save metadata via API
+      const metaRes = await fetch(`/api/inspections/${inspectionId}/media`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storagePath, type: "video", label: "video" }),
+      });
+
+      if (!metaRes.ok) {
+        const err = await metaRes.json();
+        throw new Error(err.error || "Failed to save metadata");
+      }
+
+      const mediaRecord = (await metaRes.json()) as MediaRecord;
       onUploadComplete(mediaRecord);
       toast.success("Video uploaded");
     } catch (err) {

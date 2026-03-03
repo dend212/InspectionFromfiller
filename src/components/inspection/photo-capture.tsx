@@ -3,7 +3,6 @@
 import { Camera, Loader2, Upload } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import type { MediaRecord } from "./media-gallery";
 
 interface PhotoCaptureProps {
@@ -27,33 +26,44 @@ export function PhotoCapture({ inspectionId, section, onUploadComplete }: PhotoC
       setUploading(true);
 
       try {
-        const supabase = createClient();
-        const filePath = `${inspectionId}/${section}/${crypto.randomUUID()}-${file.name}`;
-
-        const { data, error: uploadError } = await supabase.storage
-          .from("inspection-media")
-          .upload(filePath, file);
-
-        if (uploadError) {
-          throw new Error(uploadError.message);
-        }
-
-        // Save metadata to API
-        const response = await fetch(`/api/inspections/${inspectionId}/media`, {
+        // Step 1: Get a presigned upload URL from the API
+        const urlRes = await fetch(`/api/inspections/${inspectionId}/media/upload-url`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            storagePath: data.path,
-            type: "photo",
-            label: section,
-          }),
+          body: JSON.stringify({ fileName: file.name, type: "photo", label: section }),
         });
 
-        if (!response.ok) {
-          throw new Error("Failed to save photo metadata");
+        if (!urlRes.ok) {
+          const err = await urlRes.json();
+          throw new Error(err.error || "Failed to get upload URL");
         }
 
-        const mediaRecord = (await response.json()) as MediaRecord;
+        const { signedUrl, storagePath } = await urlRes.json();
+
+        // Step 2: Upload directly to Supabase Storage
+        const uploadRes = await fetch(signedUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error("Storage upload failed");
+        }
+
+        // Step 3: Save metadata via API
+        const metaRes = await fetch(`/api/inspections/${inspectionId}/media`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ storagePath, type: "photo", label: section }),
+        });
+
+        if (!metaRes.ok) {
+          const err = await metaRes.json();
+          throw new Error(err.error || "Failed to save metadata");
+        }
+
+        const mediaRecord = (await metaRes.json()) as MediaRecord;
         onUploadComplete(mediaRecord);
         toast.success("Photo uploaded");
       } catch (err) {

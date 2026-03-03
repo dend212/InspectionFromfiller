@@ -3,11 +3,11 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { inspectionMedia, inspections } from "@/lib/db/schema";
 import { checkInspectionAccess } from "@/lib/supabase/auth-helpers";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 /**
  * Verify user has access to the inspection.
- * Returns the inspection's inspectorId or an error response.
  */
 async function verifyAccess(
   inspectionId: string,
@@ -32,15 +32,10 @@ async function verifyAccess(
   return { inspectorId: inspection.inspectorId };
 }
 
-/**
- * Generate a signed URL for a storage path (1 hour expiry).
- * Returns null if URL generation fails.
- */
-async function getSignedUrl(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  storagePath: string,
-): Promise<string | null> {
-  const { data } = await supabase.storage
+/** Generate a signed download URL (1 hour expiry). */
+async function getSignedUrl(storagePath: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data } = await admin.storage
     .from("inspection-media")
     .createSignedUrl(storagePath, 3600);
   return data?.signedUrl ?? null;
@@ -48,7 +43,10 @@ async function getSignedUrl(
 
 /**
  * POST /api/inspections/[id]/media
- * Record media metadata after a successful Supabase Storage upload.
+ * Save media metadata after the client has uploaded directly to Supabase Storage
+ * via a presigned URL from the /upload-url endpoint.
+ *
+ * Body: { storagePath: string, type: "photo" | "video", label?: string }
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -85,8 +83,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     })
     .returning();
 
-  // Include signed URL so the client can display the photo immediately
-  const signedUrl = type === "photo" ? await getSignedUrl(supabase, storagePath) : null;
+  const signedUrl = type === "photo" ? await getSignedUrl(storagePath) : null;
 
   return NextResponse.json({ ...record, signedUrl }, { status: 201 });
 }
@@ -119,7 +116,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const withUrls = await Promise.all(
     records.map(async (r) => ({
       ...r,
-      signedUrl: r.type === "photo" ? await getSignedUrl(supabase, r.storagePath) : null,
+      signedUrl: r.type === "photo" ? await getSignedUrl(r.storagePath) : null,
     })),
   );
 
@@ -162,8 +159,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return NextResponse.json({ error: "Media not found" }, { status: 404 });
   }
 
-  // Remove from Supabase Storage
-  await supabase.storage.from("inspection-media").remove([record.storagePath]);
+  // Remove from Supabase Storage using admin client
+  const admin = createAdminClient();
+  await admin.storage.from("inspection-media").remove([record.storagePath]);
 
   // Remove from database
   await db.delete(inspectionMedia).where(eq(inspectionMedia.id, mediaId));
