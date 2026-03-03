@@ -11,6 +11,10 @@ import { workizWebhookSchema } from "@/lib/validators/workiz-webhook";
  * Receives job data from Workiz (via n8n), creates a pre-filled draft
  * inspection assigned to the matching tech.
  *
+ * When n8n enriches the payload with Maricopa County Assessor data (via APN lookup),
+ * the assessor's property owner and address override the Workiz client/address fields
+ * for the form. The Workiz customer name is preserved separately for reference.
+ *
  * Auth: Bearer token matching WORKIZ_WEBHOOK_SECRET env var.
  */
 export async function POST(request: Request) {
@@ -51,7 +55,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { client, address, job, tech } = parsed.data;
+  const { client, address, job, tech, apn, assessor } = parsed.data;
 
   // 3. Only create inspections for "ADEQ Inspection" jobs
   const jobType = (job.jobType || job.serviceType || "").trim();
@@ -63,7 +67,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // 5. Idempotency check — if this Workiz job already created an inspection, return it
+  // 4. Idempotency check — if this Workiz job already created an inspection, return it
   if (job.jobId) {
     const [existing] = await db
       .select({ id: inspections.id, status: inspections.status })
@@ -79,7 +83,7 @@ export async function POST(request: Request) {
     }
   }
 
-  // 6. Look up tech — try email first, fall back to name match
+  // 5. Look up tech — try email first, fall back to name match
   let techProfile: { id: string; fullName: string } | undefined;
 
   if (tech.email) {
@@ -107,24 +111,49 @@ export async function POST(request: Request) {
     );
   }
 
-  // 7. Build pre-filled form data using existing defaults
-  const customerName = `${client.firstName} ${client.lastName}`.trim();
+  // 6. Build pre-filled form data using existing defaults
+  const workizCustomerName = `${client.firstName} ${client.lastName}`.trim();
+  const hasAssessor = assessor && assessor.ownerName;
   const formData = getDefaultFormValues(techProfile.fullName);
 
-  // Overwrite customer/address fields from Workiz
-  formData.facilityInfo.facilityName = customerName;
-  formData.facilityInfo.sellerName = customerName;
-  formData.facilityInfo.facilityAddress = address.street;
-  formData.facilityInfo.facilityCity = address.city;
-  formData.facilityInfo.facilityState = address.state || "AZ";
-  formData.facilityInfo.facilityZip = address.zip;
-  formData.facilityInfo.facilityCounty = address.county;
+  if (hasAssessor) {
+    // Assessor data available — use property owner as facility name, Workiz customer as seller
+    formData.facilityInfo.facilityName = assessor.ownerName;
+    formData.facilityInfo.sellerName = assessor.ownerName;
+    formData.facilityInfo.facilityAddress = assessor.physicalAddress || address.street;
+    formData.facilityInfo.facilityCity = assessor.city || address.city;
+    formData.facilityInfo.facilityState = address.state || "AZ";
+    formData.facilityInfo.facilityZip = assessor.zip || address.zip;
+    formData.facilityInfo.facilityCounty = assessor.county || address.county;
+    formData.facilityInfo.taxParcelNumber = assessor.apnFormatted || apn || "";
+  } else {
+    // No assessor data — use Workiz client/address as before
+    formData.facilityInfo.facilityName = workizCustomerName;
+    formData.facilityInfo.sellerName = workizCustomerName;
+    formData.facilityInfo.facilityAddress = address.street;
+    formData.facilityInfo.facilityCity = address.city;
+    formData.facilityInfo.facilityState = address.state || "AZ";
+    formData.facilityInfo.facilityZip = address.zip;
+    formData.facilityInfo.facilityCounty = address.county;
+    if (apn) {
+      formData.facilityInfo.taxParcelNumber = apn;
+    }
+  }
 
   if (job.scheduledDate) {
     formData.facilityInfo.dateOfInspection = job.scheduledDate;
   }
 
-  // 8. Insert inspection assigned to the tech
+  // Use assessor address for denormalized columns when available
+  const displayAddress = hasAssessor
+    ? assessor.physicalAddress || address.street
+    : address.street;
+  const displayCity = hasAssessor ? assessor.city || address.city : address.city;
+  const displayCounty = hasAssessor ? assessor.county || address.county : address.county;
+  const displayZip = hasAssessor ? assessor.zip || address.zip : address.zip;
+  const displayFacilityName = hasAssessor ? assessor.ownerName : workizCustomerName;
+
+  // 7. Insert inspection assigned to the tech
   const [newInspection] = await db
     .insert(inspections)
     .values({
@@ -132,15 +161,16 @@ export async function POST(request: Request) {
       status: "draft",
       formData,
       // Denormalized columns for dashboard display
-      facilityName: customerName,
-      facilityAddress: address.street,
-      facilityCity: address.city,
-      facilityCounty: address.county,
-      facilityZip: address.zip,
+      facilityName: displayFacilityName,
+      facilityAddress: displayAddress,
+      facilityCity: displayCity,
+      facilityCounty: displayCounty,
+      facilityZip: displayZip,
       customerEmail: client.email || null,
-      customerName: customerName,
-      // External integration reference
+      customerName: workizCustomerName,
+      // External integration references
       workizJobId: job.jobId || null,
+      apn: apn || null,
     })
     .returning({ id: inspections.id, status: inspections.status });
 

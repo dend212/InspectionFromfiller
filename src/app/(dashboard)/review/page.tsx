@@ -74,6 +74,9 @@ export default async function ReviewQueuePage() {
       facilityAddress: inspections.facilityAddress,
       facilityCity: inspections.facilityCity,
       facilityCounty: inspections.facilityCounty,
+      facilityZip: inspections.facilityZip,
+      customerName: inspections.customerName,
+      workizJobId: inspections.workizJobId,
       submittedAt: inspections.submittedAt,
       inspectorId: inspections.inspectorId,
     })
@@ -86,8 +89,12 @@ export default async function ReviewQueuePage() {
     .select({
       id: inspections.id,
       facilityName: inspections.facilityName,
+      facilityAddress: inspections.facilityAddress,
       facilityCity: inspections.facilityCity,
       facilityCounty: inspections.facilityCounty,
+      facilityZip: inspections.facilityZip,
+      customerName: inspections.customerName,
+      workizJobId: inspections.workizJobId,
       completedAt: inspections.completedAt,
     })
     .from(inspections)
@@ -122,36 +129,60 @@ export default async function ReviewQueuePage() {
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {reviewQueue.map((inspection) => (
-            <Link key={inspection.id} href={`/review/${inspection.id}`}>
-              <Card className="transition-colors hover:bg-accent/50">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base truncate">
-                      {inspection.facilityName || "Untitled Inspection"}
-                    </CardTitle>
-                    <Badge className={STATUS_COLORS.in_review} variant="secondary">
-                      {STATUS_LABELS.in_review}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="space-y-1">
-                    {inspection.facilityCity && (
-                      <span className="block">
-                        {inspection.facilityCity}
-                        {inspection.facilityCounty ? `, ${inspection.facilityCounty} County` : ""}
+          {reviewQueue.map((inspection) => {
+            const addressParts = [
+              inspection.facilityAddress,
+              inspection.facilityCity,
+              inspection.facilityCounty ? `${inspection.facilityCounty} County` : null,
+              inspection.facilityZip,
+            ].filter(Boolean);
+            const fullAddress = addressParts.join(", ");
+            const isWorkiz = !!inspection.workizJobId;
+            const showWorkizCustomer =
+              isWorkiz &&
+              inspection.customerName &&
+              inspection.customerName !== inspection.facilityName;
+
+            return (
+              <Link key={inspection.id} href={`/review/${inspection.id}`}>
+                <Card className="transition-colors hover:bg-accent/50">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle className="text-base truncate">
+                        {inspection.facilityName || "Untitled Inspection"}
+                      </CardTitle>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isWorkiz && (
+                          <Badge className="bg-yellow-100 text-yellow-800 text-[10px] px-1.5 py-0">
+                            Workiz
+                          </Badge>
+                        )}
+                        <Badge className={STATUS_COLORS.in_review} variant="secondary">
+                          {STATUS_LABELS.in_review}
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <CardDescription className="space-y-1">
+                      {fullAddress && (
+                        <span className="block text-sm">{fullAddress}</span>
+                      )}
+                      {showWorkizCustomer && (
+                        <span className="block text-xs text-yellow-700">
+                          Workiz customer: {inspection.customerName}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1 text-xs">
+                        <Clock className="size-3" />
+                        Submitted {formatDate(inspection.submittedAt)}
                       </span>
-                    )}
-                    <span className="flex items-center gap-1 text-xs">
-                      <Clock className="size-3" />
-                      Submitted {formatDate(inspection.submittedAt)}
-                    </span>
-                  </CardDescription>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+                    </CardDescription>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       )}
 
@@ -160,35 +191,59 @@ export default async function ReviewQueuePage() {
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-muted-foreground">Recently Completed</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {recentlyCompleted.map((inspection) => (
-              <Link key={inspection.id} href={`/review/${inspection.id}`}>
-                <Card className="transition-colors hover:bg-accent/50">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base truncate">
-                        {inspection.facilityName || "Untitled Inspection"}
-                      </CardTitle>
-                      <Badge className={STATUS_COLORS.completed} variant="secondary">
-                        {STATUS_LABELS.completed}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription className="space-y-1">
-                      {inspection.facilityCity && (
-                        <span className="block">
-                          {inspection.facilityCity}
-                          {inspection.facilityCounty ? `, ${inspection.facilityCounty} County` : ""}
+            {recentlyCompleted.map((inspection) => {
+              const addressParts = [
+                inspection.facilityAddress,
+                inspection.facilityCity,
+                inspection.facilityCounty ? `${inspection.facilityCounty} County` : null,
+                inspection.facilityZip,
+              ].filter(Boolean);
+              const fullAddress = addressParts.join(", ");
+              const isWorkiz = !!inspection.workizJobId;
+              const showWorkizCustomer =
+                isWorkiz &&
+                inspection.customerName &&
+                inspection.customerName !== inspection.facilityName;
+
+              return (
+                <Link key={inspection.id} href={`/review/${inspection.id}`}>
+                  <Card className="transition-colors hover:bg-accent/50">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <CardTitle className="text-base truncate">
+                          {inspection.facilityName || "Untitled Inspection"}
+                        </CardTitle>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isWorkiz && (
+                            <Badge className="bg-yellow-100 text-yellow-800 text-[10px] px-1.5 py-0">
+                              Workiz
+                            </Badge>
+                          )}
+                          <Badge className={STATUS_COLORS.completed} variant="secondary">
+                            {STATUS_LABELS.completed}
+                          </Badge>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <CardDescription className="space-y-1">
+                        {fullAddress && (
+                          <span className="block text-sm">{fullAddress}</span>
+                        )}
+                        {showWorkizCustomer && (
+                          <span className="block text-xs text-yellow-700">
+                            Workiz customer: {inspection.customerName}
+                          </span>
+                        )}
+                        <span className="block text-xs">
+                          Completed {formatDate(inspection.completedAt)}
                         </span>
-                      )}
-                      <span className="block text-xs">
-                        Completed {formatDate(inspection.completedAt)}
-                      </span>
-                    </CardDescription>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
+                      </CardDescription>
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })}
           </div>
         </div>
       )}
