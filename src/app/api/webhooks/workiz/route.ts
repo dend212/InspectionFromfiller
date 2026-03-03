@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { eq } from "drizzle-orm";
+import { eq, ilike } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { inspections, profiles } from "@/lib/db/schema";
@@ -79,16 +79,30 @@ export async function POST(request: Request) {
     }
   }
 
-  // 6. Look up tech by email
-  const [techProfile] = await db
-    .select({ id: profiles.id, fullName: profiles.fullName })
-    .from(profiles)
-    .where(eq(profiles.email, tech.email.toLowerCase()))
-    .limit(1);
+  // 6. Look up tech — try email first, fall back to name match
+  let techProfile: { id: string; fullName: string } | undefined;
+
+  if (tech.email) {
+    const [byEmail] = await db
+      .select({ id: profiles.id, fullName: profiles.fullName })
+      .from(profiles)
+      .where(eq(profiles.email, tech.email.toLowerCase()))
+      .limit(1);
+    techProfile = byEmail;
+  }
+
+  if (!techProfile && tech.name) {
+    const [byName] = await db
+      .select({ id: profiles.id, fullName: profiles.fullName })
+      .from(profiles)
+      .where(ilike(profiles.fullName, tech.name.trim()))
+      .limit(1);
+    techProfile = byName;
+  }
 
   if (!techProfile) {
     return NextResponse.json(
-      { error: `No user found with email: ${tech.email}` },
+      { error: `No user found matching tech: ${tech.email || tech.name}` },
       { status: 404 },
     );
   }

@@ -4,7 +4,7 @@ export const workizWebhookSchema = z.object({
   client: z.object({
     firstName: z.string().min(1, "Client first name is required"),
     lastName: z.string().min(1, "Client last name is required"),
-    email: z.string().email().optional().default(""),
+    email: z.string().optional().default(""),
     phone: z.string().optional().default(""),
   }),
   address: z.object({
@@ -29,8 +29,12 @@ export const workizWebhookSchema = z.object({
       scheduledDate: "",
     }),
   tech: z.object({
-    email: z.string().email("Tech email is required for assignment"),
+    // At least one of email or name must be provided for tech lookup.
+    // Workiz only provides name, so email is optional.
+    email: z.string().optional().default(""),
     name: z.string().optional().default(""),
+  }).refine((t) => t.email || t.name, {
+    message: "Either tech email or tech name is required for assignment",
   }),
 });
 
