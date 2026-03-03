@@ -77,6 +77,7 @@ export const inspections = pgTable("inspections", {
   reviewedBy: uuid("reviewed_by").references(() => profiles.id),
   // External integration (Workiz via n8n)
   workizJobId: text("workiz_job_id").unique(),
+  apn: text("apn"),
 });
 
 // Inspection media (photos and videos)

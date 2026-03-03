@@ -32,6 +32,23 @@ export const workizWebhookSchema = z.object({
     email: z.string().email("Tech email is required for assignment"),
     name: z.string().optional().default(""),
   }),
+  // APN from Workiz custom field — triggers Maricopa County Assessor lookup in n8n
+  apn: z.string().optional().default(""),
+  // Assessor data enriched by n8n from ArcGIS API (only present when APN lookup succeeds)
+  assessor: z
+    .object({
+      ownerName: z.string().optional().default(""),
+      physicalAddress: z.string().optional().default(""),
+      city: z.string().optional().default(""),
+      zip: z.string().optional().default(""),
+      county: z.string().optional().default(""),
+      mailingAddress: z.string().optional().default(""),
+      legalDescription: z.string().optional().default(""),
+      lotSize: z.string().optional().default(""),
+      yearBuilt: z.string().optional().default(""),
+      apnFormatted: z.string().optional().default(""),
+    })
+    .optional(),
 });
 
 export type WorkizWebhookPayload = z.infer<typeof workizWebhookSchema>;
