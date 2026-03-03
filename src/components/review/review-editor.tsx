@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, ChevronDown, ChevronRight, Loader2, RefreshCw, Save } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
@@ -60,13 +60,6 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
   const { generatePdf, pdfData, isGenerating, error, clearPdf } = usePdfGeneration();
 
   const isDirty = form.formState.isDirty;
-
-  // Clear PDF when form is dirty so user knows to regenerate
-  useEffect(() => {
-    if (isDirty && pdfData) {
-      clearPdf();
-    }
-  }, [isDirty, pdfData, clearPdf]);
 
   const handleRegenerate = useCallback(async () => {
     clearPdf();
