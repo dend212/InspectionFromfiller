@@ -69,9 +69,9 @@ export async function getReportDownloadUrl(
 }
 
 /**
- * Build a download filename from the facility address and completion date.
+ * Build a download filename from the facility address and generation date.
  *
- * Format: "123-Main-St_2026-02-26.pdf"
+ * Format: "123-Main-St_ADEQ_2026-02-26.pdf"
  * - Spaces replaced with hyphens
  * - Special characters removed (only alphanumeric, hyphens, underscores)
  * - Falls back to "inspection-report" if no address
@@ -99,5 +99,5 @@ export function buildDownloadFilename(
   const day = String(date.getDate()).padStart(2, "0");
   const datePart = `${year}-${month}-${day}`;
 
-  return `${addressPart}_${datePart}.pdf`;
+  return `${addressPart}_ADEQ_${datePart}.pdf`;
 }

@@ -36,6 +36,7 @@ export interface InspectionRow {
   completedAt: string | null;
   finalizedPdfPath: string | null;
   emailSentCount: number;
+  isFromWorkiz: boolean;
 }
 
 interface InspectionsTableProps {
@@ -339,7 +340,14 @@ export function InspectionsTable({
                 {inspection.customerName || "\u2014"}
               </TableCell>
               <TableCell>
-                <StatusBadge status={inspection.status} />
+                <div className="flex items-center gap-1.5">
+                  <StatusBadge status={inspection.status} />
+                  {inspection.isFromWorkiz && (
+                    <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200 text-[10px] px-1.5 py-0">
+                      Workiz
+                    </Badge>
+                  )}
+                </div>
               </TableCell>
               <TableCell>{inspection.inspectorName}</TableCell>
               <TableCell>
