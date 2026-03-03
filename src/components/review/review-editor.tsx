@@ -14,6 +14,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { usePdfGeneration } from "@/hooks/use-pdf-generation";
 import { STEP_LABELS } from "@/lib/constants/inspection";
@@ -63,7 +70,9 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
 
   const handleRegenerate = useCallback(async () => {
     clearPdf();
-    await generatePdf(form.getValues(), null, media);
+    const formData = form.getValues();
+    const signatureDataUrl = formData.disposalWorks?.signatureDataUrl ?? null;
+    await generatePdf(formData, signatureDataUrl, media);
   }, [form, media, generatePdf, clearPdf]);
 
   const handleSave = async () => {
@@ -150,6 +159,51 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
       )}
     />
   );
+
+  // Helper to render a select field (for yes/no and similar option fields)
+  const renderSelectField = (
+    name: string,
+    label: string,
+    options: readonly { value: string; label: string }[],
+  ) => (
+    <FormField
+      control={form.control}
+      name={name as any}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel className="text-xs font-medium text-muted-foreground">{label}</FormLabel>
+          <Select
+            onValueChange={field.onChange}
+            value={(field.value as string) ?? ""}
+            disabled={isReadOnly}
+          >
+            <FormControl>
+              <SelectTrigger className="text-sm">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              {options.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FormItem>
+      )}
+    />
+  );
+
+  const YES_NO_OPTIONS = [
+    { value: "yes", label: "Yes" },
+    { value: "no", label: "No" },
+  ] as const;
+
+  const PRESENT_OPTIONS = [
+    { value: "present", label: "Present" },
+    { value: "not_present", label: "Not Present" },
+  ] as const;
 
   // Helper to render a read-only display value
   const renderReadOnly = (label: string, value: string | undefined | null) => (
@@ -326,9 +380,10 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                   (form.getValues("generalTreatment.systemTypes") ?? []).join(", ") ||
                     "None selected",
                 )}
-                {renderTextField(
+                {renderSelectField(
                   "generalTreatment.hasPerformanceAssurancePlan",
                   "Performance Assurance Plan",
+                  YES_NO_OPTIONS,
                 )}
                 {renderCheckbox("generalTreatment.alternativeSystem", "Alternative System")}
 
@@ -381,7 +436,7 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {renderTextField("septicTank.numberOfTanks", "Number of Tanks")}
-                  {renderTextField("septicTank.tanksPumped", "Tanks Pumped")}
+                  {renderSelectField("septicTank.tanksPumped", "Tanks Pumped", YES_NO_OPTIONS)}
                   {renderTextField("septicTank.haulerCompany", "Hauler Company")}
                   {renderTextField("septicTank.haulerLicense", "Hauler License")}
                   {renderTextField("septicTank.tankInspectionDate", "Tank Inspection Date")}
@@ -534,28 +589,40 @@ export function ReviewEditor({ inspection, media }: ReviewEditorProps) {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {renderTextField(
+                  {renderSelectField(
                     "disposalWorks.disposalWorksLocationDetermined",
                     "Location Determined",
+                    YES_NO_OPTIONS,
                   )}
                   {renderTextField("disposalWorks.disposalType", "Disposal Type")}
                   {renderTextField("disposalWorks.distributionMethod", "Distribution Method")}
                   {renderTextField("disposalWorks.supplyLineMaterial", "Supply Line Material")}
-                  {renderTextField(
+                  {renderSelectField(
                     "disposalWorks.distributionComponentInspected",
                     "Distribution Component Inspected",
+                    YES_NO_OPTIONS,
                   )}
-                  {renderTextField(
+                  {renderSelectField(
                     "disposalWorks.inspectionPortsPresent",
                     "Inspection Ports Present",
+                    PRESENT_OPTIONS,
                   )}
                   {renderTextField("disposalWorks.numberOfPorts", "Number of Ports")}
-                  {renderTextField(
+                  {renderSelectField(
                     "disposalWorks.hydraulicLoadTestPerformed",
                     "Hydraulic Load Test",
+                    YES_NO_OPTIONS,
                   )}
-                  {renderTextField("disposalWorks.hasDisposalDeficiency", "Has Deficiency")}
-                  {renderTextField("disposalWorks.repairsRecommended", "Repairs Recommended")}
+                  {renderSelectField(
+                    "disposalWorks.hasDisposalDeficiency",
+                    "Has Deficiency",
+                    YES_NO_OPTIONS,
+                  )}
+                  {renderSelectField(
+                    "disposalWorks.repairsRecommended",
+                    "Repairs Recommended",
+                    YES_NO_OPTIONS,
+                  )}
                 </div>
 
                 {/* Disposal Works Deficiencies */}

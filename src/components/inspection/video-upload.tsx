@@ -22,12 +22,19 @@ function getVideoDuration(file: File): Promise<number> {
     const url = URL.createObjectURL(file);
     video.src = url;
 
+    const timeout = setTimeout(() => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Timed out reading video metadata"));
+    }, 10_000);
+
     video.onloadedmetadata = () => {
+      clearTimeout(timeout);
       URL.revokeObjectURL(url);
       resolve(video.duration);
     };
 
     video.onerror = () => {
+      clearTimeout(timeout);
       URL.revokeObjectURL(url);
       reject(new Error("Failed to read video file"));
     };

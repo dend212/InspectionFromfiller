@@ -1,7 +1,7 @@
 "use client";
 
-import { Camera, Loader2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { Camera, Loader2, Upload } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { MediaRecord } from "./media-gallery";
@@ -14,83 +14,145 @@ interface PhotoCaptureProps {
 
 export function PhotoCapture({ inspectionId, section, onUploadComplete }: PhotoCaptureProps) {
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const uploadFile = useCallback(
+    async (file: File) => {
+      if (!file.type.startsWith("image/")) {
+        toast.error("Only image files are accepted");
+        return;
+      }
+
+      setUploading(true);
+
+      try {
+        const supabase = createClient();
+        const filePath = `${inspectionId}/${section}/${crypto.randomUUID()}-${file.name}`;
+
+        const { data, error: uploadError } = await supabase.storage
+          .from("inspection-media")
+          .upload(filePath, file);
+
+        if (uploadError) {
+          throw new Error(uploadError.message);
+        }
+
+        // Save metadata to API
+        const response = await fetch(`/api/inspections/${inspectionId}/media`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            storagePath: data.path,
+            type: "photo",
+            label: section,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to save photo metadata");
+        }
+
+        const mediaRecord = (await response.json()) as MediaRecord;
+        onUploadComplete(mediaRecord);
+        toast.success("Photo uploaded");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Upload failed";
+        toast.error(message);
+      } finally {
+        setUploading(false);
+        if (inputRef.current) {
+          inputRef.current.value = "";
+        }
+      }
+    },
+    [inspectionId, section, onUploadComplete],
+  );
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-
-    try {
-      const supabase = createClient();
-      const filePath = `${inspectionId}/${section}/${crypto.randomUUID()}-${file.name}`;
-
-      const { data, error: uploadError } = await supabase.storage
-        .from("inspection-media")
-        .upload(filePath, file);
-
-      if (uploadError) {
-        throw new Error(uploadError.message);
-      }
-
-      // Save metadata to API
-      const response = await fetch(`/api/inspections/${inspectionId}/media`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          storagePath: data.path,
-          type: "photo",
-          label: section,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to save photo metadata");
-      }
-
-      const mediaRecord = (await response.json()) as MediaRecord;
-      onUploadComplete(mediaRecord);
-      toast.success("Photo uploaded");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Upload failed";
-      toast.error(message);
-    } finally {
-      setUploading(false);
-      // Reset file input so the same file can be re-selected
-      if (inputRef.current) {
-        inputRef.current.value = "";
-      }
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    for (const file of Array.from(files)) {
+      await uploadFile(file);
     }
   };
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragOver(false);
+
+      if (uploading) return;
+
+      const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+      if (files.length === 0) {
+        toast.error("No image files found in drop");
+        return;
+      }
+
+      // Upload files sequentially to avoid overwhelming the server
+      for (const file of files) {
+        await uploadFile(file);
+      }
+    },
+    [uploading, uploadFile],
+  );
+
   return (
-    <div>
-      <label
-        className="inline-flex min-h-[48px] cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-        aria-label={`Add photo for ${section}`}
-      >
+    <div
+      className={`rounded-lg border-2 border-dashed p-4 transition-colors ${
+        dragOver
+          ? "border-primary bg-primary/5"
+          : "border-muted-foreground/25 hover:border-muted-foreground/40"
+      }`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <div className="flex flex-col items-center gap-2">
         {uploading ? (
-          <>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
             Uploading...
-          </>
+          </div>
         ) : (
           <>
-            <Camera className="h-5 w-5" />
-            Add Photo
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Upload className="h-4 w-4" />
+              Drag &amp; drop photos here, or
+            </div>
+            <label
+              className="inline-flex min-h-[40px] cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              aria-label={`Add photo for ${section}`}
+            >
+              <Camera className="h-4 w-4" />
+              Browse Files
+              <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleFileSelect}
+                disabled={uploading}
+              />
+            </label>
           </>
         )}
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={handleFileSelect}
-          disabled={uploading}
-        />
-      </label>
+      </div>
     </div>
   );
 }

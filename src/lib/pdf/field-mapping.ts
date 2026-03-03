@@ -215,8 +215,8 @@ export function mapFormDataToFields(data: InspectionFormData): FormFieldMapping 
     haulerCompany: str(st?.haulerCompany),
     haulerLicense: str(st?.haulerLicense),
 
-    // Tank inspection date
-    tankInspectionDate: str(st?.tankInspectionDate),
+    // Tank inspection date — fall back to overall inspection date if not set
+    tankInspectionDate: str(st?.tankInspectionDate) || str(fi?.dateOfInspection),
 
     // Tank capacity
     tankCapacity: str(tank?.tankCapacity),
