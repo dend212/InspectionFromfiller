@@ -6,8 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 
 /**
  * POST /api/inspections/bulk-delete
- * Bulk delete draft inspections.
- * Only the owner or an admin can delete. Only draft inspections can be deleted.
+ * Bulk delete inspections.
+ * Admins can delete any inspection. Field techs can only delete their own drafts.
  * Accepts { ids: string[] } in the request body.
  */
 export async function POST(request: Request) {
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 
   const isAdmin = userRole === "admin";
 
-  // Fetch all targeted inspections to validate ownership and status
+  // Fetch all targeted inspections to validate ownership
   const targets = await db
     .select({
       id: inspections.id,
@@ -72,12 +72,19 @@ export async function POST(request: Request) {
   const deletableIds: string[] = [];
 
   for (const target of targets) {
+    // Admins can delete any inspection
+    if (isAdmin) {
+      deletableIds.push(target.id);
+      continue;
+    }
+
+    // Non-admins can only delete their own drafts
     if (target.status !== "draft") {
       errors.push(`${target.id}: only draft inspections can be deleted`);
       continue;
     }
 
-    if (target.inspectorId !== user.id && !isAdmin) {
+    if (target.inspectorId !== user.id) {
       errors.push(`${target.id}: forbidden`);
       continue;
     }
@@ -88,9 +95,13 @@ export async function POST(request: Request) {
   let deletedCount = 0;
 
   if (deletableIds.length > 0) {
-    await db
-      .delete(inspections)
-      .where(and(inArray(inspections.id, deletableIds), eq(inspections.status, "draft")));
+    // Admins: delete any matching inspection
+    // Non-admins: double-check draft status
+    const deleteCondition = isAdmin
+      ? inArray(inspections.id, deletableIds)
+      : and(inArray(inspections.id, deletableIds), eq(inspections.status, "draft"));
+
+    await db.delete(inspections).where(deleteCondition);
 
     deletedCount = deletableIds.length;
   }

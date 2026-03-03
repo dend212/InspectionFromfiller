@@ -2,7 +2,7 @@
 
 import { ArrowUpDown, Check, Download, Eye, Trash2, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -98,11 +98,14 @@ export function InspectionsTable({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  const draftIds = inspections.filter((i) => i.status === "draft").map((i) => i.id);
-
-  const selectedDraftCount = Array.from(selectedIds).filter((id) => draftIds.includes(id)).length;
-
-  const selectedNonDraftCount = selectedIds.size - selectedDraftCount;
+  // Prune stale IDs when inspections list changes (e.g. after delete + refresh)
+  useEffect(() => {
+    const currentIds = new Set(inspections.map((i) => i.id));
+    setSelectedIds((prev) => {
+      const pruned = new Set([...prev].filter((id) => currentIds.has(id)));
+      return pruned.size === prev.size ? prev : pruned;
+    });
+  }, [inspections]);
 
   const allSelected = inspections.length > 0 && inspections.every((i) => selectedIds.has(i.id));
   const someSelected = selectedIds.size > 0 && !allSelected;
@@ -170,7 +173,7 @@ export function InspectionsTable({
 
   async function handleDelete(e: React.MouseEvent, inspectionId: string) {
     e.stopPropagation();
-    if (!window.confirm("Delete this draft inspection? This cannot be undone.")) {
+    if (!window.confirm("Delete this inspection? This cannot be undone.")) {
       return;
     }
     try {
@@ -182,7 +185,7 @@ export function InspectionsTable({
         toast.error(data.error || "Failed to delete inspection");
         return;
       }
-      toast.success("Draft inspection deleted");
+      toast.success("Inspection deleted");
       setSelectedIds((prev) => {
         const next = new Set(prev);
         next.delete(inspectionId);
@@ -195,10 +198,10 @@ export function InspectionsTable({
   }
 
   async function handleBulkDelete() {
-    const idsToDelete = Array.from(selectedIds).filter((id) => draftIds.includes(id));
+    const idsToDelete = Array.from(selectedIds);
 
     if (idsToDelete.length === 0) {
-      toast.error("No draft inspections selected to delete");
+      toast.error("No inspections selected to delete");
       setShowDeleteDialog(false);
       return;
     }
@@ -266,11 +269,6 @@ export function InspectionsTable({
       {selectedIds.size > 0 && (
         <div className="sticky top-0 z-20 flex items-center gap-3 rounded-lg border bg-background/95 px-4 py-3 shadow-md backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <span className="text-sm font-medium">{selectedIds.size} selected</span>
-          {selectedNonDraftCount > 0 && (
-            <span className="text-xs text-muted-foreground">
-              ({selectedDraftCount} draft{selectedDraftCount !== 1 ? "s" : ""} can be deleted)
-            </span>
-          )}
           <div className="ml-auto flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleDeselectAll}>
               <X className="size-3.5" />
@@ -279,12 +277,10 @@ export function InspectionsTable({
             <Button
               variant="destructive"
               size="sm"
-              disabled={selectedDraftCount === 0}
               onClick={() => setShowDeleteDialog(true)}
             >
               <Trash2 className="size-3.5" />
-              Delete Selected
-              {selectedDraftCount > 0 && ` (${selectedDraftCount})`}
+              Delete Selected ({selectedIds.size})
             </Button>
           </div>
         </div>
@@ -295,8 +291,7 @@ export function InspectionsTable({
           <TableRow>
             <TableHead className="w-[40px]">
               <Checkbox
-                checked={allSelected}
-                {...(someSelected ? { "data-state": "indeterminate" } : {})}
+                checked={someSelected ? "indeterminate" : allSelected}
                 onCheckedChange={handleSelectAll}
                 aria-label="Select all inspections"
               />
@@ -385,18 +380,16 @@ export function InspectionsTable({
                     <Eye className="size-3.5" />
                     <span className="sr-only">View</span>
                   </Button>
-                  {inspection.status === "draft" && (
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={(e) => handleDelete(e, inspection.id)}
-                      title="Delete draft"
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="size-3.5" />
-                      <span className="sr-only">Delete</span>
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={(e) => handleDelete(e, inspection.id)}
+                    title="Delete inspection"
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="size-3.5" />
+                    <span className="sr-only">Delete</span>
+                  </Button>
                 </div>
               </TableCell>
             </TableRow>
@@ -434,24 +427,21 @@ export function InspectionsTable({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Delete {selectedDraftCount} draft inspection{selectedDraftCount !== 1 ? "s" : ""}?
+              Delete {selectedIds.size} inspection{selectedIds.size !== 1 ? "s" : ""}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. Only draft inspections will be deleted.
-              {selectedNonDraftCount > 0 && (
-                <>
-                  {" "}
-                  {selectedNonDraftCount} non-draft inspection
-                  {selectedNonDraftCount !== 1 ? "s" : ""} will be skipped.
-                </>
-              )}
+              This action cannot be undone. Selected inspections and their associated
+              reports will be permanently deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              onClick={handleBulkDelete}
+              onClick={(e) => {
+                e.preventDefault();
+                handleBulkDelete();
+              }}
               disabled={isDeleting}
             >
               {isDeleting ? "Deleting..." : "Delete"}

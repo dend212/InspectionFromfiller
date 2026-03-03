@@ -136,8 +136,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 /**
  * DELETE /api/inspections/[id]
- * Delete a draft inspection. Only the owner or an admin can delete.
- * Only draft inspections can be deleted.
+ * Delete an inspection. Admins can delete any inspection.
+ * Field techs can only delete their own drafts.
  */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -163,31 +163,35 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
   }
 
-  // Only drafts can be deleted
-  if (existing.status !== "draft") {
-    return NextResponse.json({ error: "Only draft inspections can be deleted" }, { status: 403 });
+  // Decode user role
+  let isAdmin = false;
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session) {
+      const payload = JSON.parse(
+        Buffer.from(session.access_token.split(".")[1], "base64").toString(),
+      );
+      isAdmin = payload.user_role === "admin";
+    }
+  } catch {
+    // Role decode failed
   }
 
-  // Check ownership or admin role
-  let isAdmin = false;
-  if (existing.inspectorId !== user.id) {
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session) {
-        const payload = JSON.parse(
-          Buffer.from(session.access_token.split(".")[1], "base64").toString(),
-        );
-        isAdmin = payload.user_role === "admin";
-      }
-    } catch {
-      // Role decode failed
-    }
+  // Admins can delete any inspection
+  if (isAdmin) {
+    await db.delete(inspections).where(eq(inspections.id, id));
+    return NextResponse.json({ deleted: true });
+  }
 
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  // Non-admins: must own the inspection and it must be a draft
+  if (existing.inspectorId !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  if (existing.status !== "draft") {
+    return NextResponse.json({ error: "Only draft inspections can be deleted" }, { status: 403 });
   }
 
   await db.delete(inspections).where(and(eq(inspections.id, id), eq(inspections.status, "draft")));
