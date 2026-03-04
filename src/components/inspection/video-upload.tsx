@@ -69,13 +69,12 @@ export function VideoUpload({ inspectionId, onUploadComplete }: VideoUploadProps
       });
 
       if (!urlRes.ok) {
-        const text = await urlRes.text();
-        try {
-          const err = JSON.parse(text);
+        const contentType = urlRes.headers.get("content-type") ?? "";
+        if (contentType.includes("application/json")) {
+          const err = await urlRes.json();
           throw new Error(err.error || "Failed to get upload URL");
-        } catch {
-          throw new Error(urlRes.status === 401 ? "Session expired — please log in again" : "Failed to get upload URL");
         }
+        throw new Error(urlRes.status === 401 ? "Session expired — please log in again" : "Failed to get upload URL");
       }
 
       const { token, storagePath } = await urlRes.json();
@@ -98,13 +97,12 @@ export function VideoUpload({ inspectionId, onUploadComplete }: VideoUploadProps
       });
 
       if (!metaRes.ok) {
-        const text = await metaRes.text();
-        try {
-          const err = JSON.parse(text);
+        const contentType = metaRes.headers.get("content-type") ?? "";
+        if (contentType.includes("application/json")) {
+          const err = await metaRes.json();
           throw new Error(err.error || "Failed to save metadata");
-        } catch {
-          throw new Error(metaRes.status === 401 ? "Session expired — please log in again" : "Failed to save metadata");
         }
+        throw new Error(metaRes.status === 401 ? "Session expired — please log in again" : "Failed to save metadata");
       }
 
       const mediaRecord = (await metaRes.json()) as MediaRecord;
