@@ -705,8 +705,8 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {renderTextField("disposalWorks.signatureDate", "Signature Date")}
                   {renderTextField("disposalWorks.printedName", "Printed Name")}
+                  <p className="text-sm text-muted-foreground flex items-center">Date auto-filled at finalization</p>
                 </div>
               </div>
             </ReviewSection>

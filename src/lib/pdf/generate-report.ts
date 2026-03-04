@@ -90,18 +90,17 @@ export async function generateReport(
     await embedSignature(doc, form, signatureDataUrl);
   }
 
-  // Step 7: Auto-fill signature date if not provided
-  const sigDateField = textFields.conventionalSignatureDate;
-  if (!sigDateField) {
-    const today = new Date();
-    const month = String(today.getMonth() + 1).padStart(2, "0");
-    const day = String(today.getDate()).padStart(2, "0");
-    const year = today.getFullYear();
-    const dateStr = `${month}/${day}/${year}`;
+  // Step 7: Auto-fill signature dates with current date
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  const year = today.getFullYear();
+  const dateStr = `${month}/${day}/${year}`;
+  for (const dateFieldName of ["conventionalSignatureDate", "cesspoolSignatureDate"]) {
     try {
-      form.getTextField("conventionalSignatureDate").setText(dateStr);
+      form.getTextField(dateFieldName).setText(dateStr);
     } catch {
-      // Skip if fields don't exist
+      // Skip if field doesn't exist
     }
   }
 
@@ -145,8 +144,7 @@ export async function generateReport(
 // ---------------------------------------------------------------------------
 
 /**
- * Embeds a signature image at the conventional signature field positions.
- * Draws the image on pages 6 and 8 where the signature fields are located.
+ * Embeds a signature image at both signature field positions (pages 2 and 6).
  */
 async function embedSignature(
   doc: PDFDocument,
@@ -174,10 +172,11 @@ async function embedSignature(
   // Known page indices for signature fields in the ADEQ template (0-indexed)
   const SIGNATURE_PAGE_FALLBACK: Record<string, number> = {
     conventionalSignature: 5, // Page 6 of the 9-page template
+    cesspoolSignature: 1,     // Page 2 of the 9-page template
   };
 
-  // Draw signature at the conventional signature field location (page 6 only)
-  const signatureFieldNames = ["conventionalSignature"];
+  // Draw signature at both signature field locations (pages 2 and 6)
+  const signatureFieldNames = ["conventionalSignature", "cesspoolSignature"];
 
   for (const fieldName of signatureFieldNames) {
     try {

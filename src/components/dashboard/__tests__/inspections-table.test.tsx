@@ -45,6 +45,7 @@ function makeInspection(overrides: Partial<InspectionRow> = {}): InspectionRow {
     finalizedPdfPath: null,
     emailSentCount: 0,
     isFromWorkiz: false,
+    reviewNotes: null,
     ...overrides,
   };
 }

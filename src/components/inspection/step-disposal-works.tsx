@@ -544,20 +544,9 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
               </FormItem>
             )}
           />
-
-          <FormField
-            control={form.control}
-            name="disposalWorks.signatureDate"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">Date</FormLabel>
-                <FormControl>
-                  <Input {...field} type="date" className="min-h-[48px]" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <FormDescription className="flex items-center text-sm text-muted-foreground sm:col-span-1">
+            Date will be auto-filled when the report is finalized.
+          </FormDescription>
         </div>
       </section>
 

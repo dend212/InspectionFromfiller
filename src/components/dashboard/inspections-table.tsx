@@ -38,6 +38,7 @@ export interface InspectionRow {
   finalizedPdfPath: string | null;
   emailSentCount: number;
   isFromWorkiz: boolean;
+  reviewNotes: string | null;
 }
 
 interface InspectionsTableProps {
@@ -65,7 +66,10 @@ function formatDate(isoString: string): string {
   }).format(new Date(isoString));
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, hasReviewNotes }: { status: string; hasReviewNotes?: boolean }) {
+  if (status === "draft" && hasReviewNotes) {
+    return <Badge className="bg-status-warning text-status-warning-foreground">Returned</Badge>;
+  }
   const config = getStatusConfig(status);
   return <Badge className={config.className}>{config.label}</Badge>;
 }
@@ -331,7 +335,7 @@ export function InspectionsTable({
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-1.5">
-                  <StatusBadge status={inspection.status} />
+                  <StatusBadge status={inspection.status} hasReviewNotes={!!inspection.reviewNotes} />
                   {inspection.isFromWorkiz && (
                     <Badge className={`${WORKIZ_BADGE_CLASS} text-[10px] px-1.5 py-0`}>
                       Workiz

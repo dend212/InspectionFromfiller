@@ -115,6 +115,7 @@ export default async function InspectionsPage({
       finalizedPdfPath: inspections.finalizedPdfPath,
       inspectorName: profiles.fullName,
       workizJobId: inspections.workizJobId,
+      reviewNotes: inspections.reviewNotes,
     })
     .from(inspections)
     .leftJoin(profiles, eq(inspections.inspectorId, profiles.id))
@@ -198,6 +199,7 @@ export default async function InspectionsPage({
     finalizedPdfPath: r.finalizedPdfPath,
     emailSentCount: emailCountMap[r.id] ?? 0,
     isFromWorkiz: !!r.workizJobId,
+    reviewNotes: r.reviewNotes,
   }));
 
   return (
