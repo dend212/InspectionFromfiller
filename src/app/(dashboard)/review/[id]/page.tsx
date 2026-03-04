@@ -77,6 +77,7 @@ export default async function ReviewDetailPage({ params }: { params: Promise<{ i
         type: m.type as "photo" | "video",
         storagePath: m.storagePath,
         label: m.label,
+        description: m.description,
         sortOrder: m.sortOrder,
         createdAt: m.createdAt.toISOString(),
         signedUrl,

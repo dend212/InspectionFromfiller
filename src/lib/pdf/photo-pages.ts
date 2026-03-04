@@ -318,7 +318,7 @@ function drawMetadata(
   page: PDFPage,
   fonts: Fonts,
   cTop: number,
-  sectionLabel: string,
+  description: string | null | undefined,
   createdAt: string,
   photoNum: number,
   totalPhotos: number,
@@ -327,14 +327,17 @@ function drawMetadata(
   const mid = cTop - CARD_H / 2;
   const lineH = 18;
 
-  // Section label (bold)
-  page.drawText(sectionLabel, {
-    x: metaX,
-    y: mid + lineH + 4,
-    size: 11,
-    font: fonts.bold,
-    color: C.dark,
-  });
+  // Description (bold) — only shown if user provided one
+  if (description) {
+    page.drawText(description, {
+      x: metaX,
+      y: mid + lineH + 4,
+      size: 11,
+      font: fonts.bold,
+      color: C.dark,
+      maxWidth: CONTENT_W - META_X - CARD_PAD,
+    });
+  }
 
   // Date
   page.drawText(`Date:  ${fmtDate(createdAt)}`, {
@@ -448,7 +451,7 @@ export async function buildPhotoPages(
         drawPhotoImage(page, img, cTop);
       }
 
-      drawMetadata(page, fonts, cTop, sectionLabel, photo.createdAt, globalIdx + 1, totalPhotos);
+      drawMetadata(page, fonts, cTop, photo.description, photo.createdAt, globalIdx + 1, totalPhotos);
     }
   }
 

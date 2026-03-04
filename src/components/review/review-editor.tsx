@@ -84,30 +84,30 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
     setSelectedMediaIds(new Set());
   }, []);
 
-  const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
-  const [labelDraft, setLabelDraft] = useState("");
+  const [editingDescId, setEditingDescId] = useState<string | null>(null);
+  const [descDraft, setDescDraft] = useState("");
 
-  const saveLabel = useCallback(
-    async (mediaId: string, newLabel: string) => {
-      const trimmed = newLabel.trim();
+  const saveDescription = useCallback(
+    async (mediaId: string, newDesc: string) => {
+      const trimmed = newDesc.trim();
       const item = mediaItems.find((m) => m.id === mediaId);
-      if (trimmed === (item?.label ?? "")) {
-        setEditingLabelId(null);
+      if (trimmed === (item?.description ?? "")) {
+        setEditingDescId(null);
         return;
       }
       try {
         const res = await fetch(`/api/inspections/${inspection.id}/media`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mediaId, label: trimmed }),
+          body: JSON.stringify({ mediaId, description: trimmed }),
         });
         if (res.ok) {
           setMediaItems((prev) =>
-            prev.map((m) => (m.id === mediaId ? { ...m, label: trimmed } : m)),
+            prev.map((m) => (m.id === mediaId ? { ...m, description: trimmed } : m)),
           );
         }
       } finally {
-        setEditingLabelId(null);
+        setEditingDescId(null);
       }
     },
     [inspection.id, mediaItems],
@@ -750,7 +750,7 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
                       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                         {photos.map((photo, idx) => {
                           const isSelected = selectedMediaIds.has(photo.id);
-                          const isEditingThis = editingLabelId === photo.id;
+                          const isEditingThis = editingDescId === photo.id;
                           return (
                             <div
                               key={photo.id}
@@ -794,19 +794,19 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
                                 <input
                                   type="text"
                                   autoFocus
-                                  value={labelDraft}
-                                  onChange={(e) => setLabelDraft(e.target.value)}
-                                  onBlur={() => saveLabel(photo.id, labelDraft)}
+                                  value={descDraft}
+                                  onChange={(e) => setDescDraft(e.target.value)}
+                                  onBlur={() => saveDescription(photo.id, descDraft)}
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter") {
                                       e.preventDefault();
-                                      saveLabel(photo.id, labelDraft);
+                                      saveDescription(photo.id, descDraft);
                                     } else if (e.key === "Escape") {
-                                      setEditingLabelId(null);
+                                      setEditingDescId(null);
                                     }
                                   }}
                                   className="w-full border-t bg-background px-1.5 py-1 text-[10px] outline-none focus:ring-1 focus:ring-ring"
-                                  placeholder="Add caption…"
+                                  placeholder="Add description…"
                                 />
                               ) : (
                                 <button
@@ -815,11 +815,11 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
                                   className="w-full truncate px-1.5 py-1 text-left text-[10px] text-muted-foreground hover:text-foreground"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setLabelDraft(photo.label ?? "");
-                                    setEditingLabelId(photo.id);
+                                    setDescDraft(photo.description ?? "");
+                                    setEditingDescId(photo.id);
                                   }}
                                 >
-                                  {photo.label ?? "Photo"}
+                                  {photo.description || "Add description…"}
                                 </button>
                               )}
                             </div>

@@ -29,6 +29,7 @@ export const profiles = pgTable("profiles", {
   fullName: text("full_name").notNull(),
   email: text("email").notNull(),
   phone: varchar("phone", { length: 20 }),
+  signatureDataUrl: text("signature_data_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   notificationSettings: jsonb("notification_settings").default({ emailOnSubmission: false }),
@@ -88,7 +89,8 @@ export const inspectionMedia = pgTable("inspection_media", {
     .notNull(),
   type: text("type").notNull(), // 'photo' or 'video'
   storagePath: text("storage_path").notNull(),
-  label: text("label"), // e.g., 'Septic Tank Lid', 'Distribution Box'
+  label: text("label"), // section key, e.g., 'septic-tank', 'facility-info'
+  description: text("description"), // user-provided caption shown in PDF
   sortOrder: integer("sort_order").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

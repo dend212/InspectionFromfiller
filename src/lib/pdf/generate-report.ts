@@ -162,12 +162,19 @@ async function embedSignature(
   // Embed as PNG image
   const sigImage = await doc.embedPng(sigBytes);
 
-  // Build page ref map for finding which page a widget is on
   const pages = doc.getPages();
+
+  // Build page ref map for finding which page a widget is on.
+  // Primary: widget.P() → page ref. Fallback: scan each page's Annots array.
   const pageRefToIndex = new Map<string, number>();
   for (let i = 0; i < pages.length; i++) {
     pageRefToIndex.set(pages[i].ref.toString(), i);
   }
+
+  // Known page indices for signature fields in the ADEQ template (0-indexed)
+  const SIGNATURE_PAGE_FALLBACK: Record<string, number> = {
+    conventionalSignature: 5, // Page 6 of the 9-page template
+  };
 
   // Draw signature at the conventional signature field location (page 6 only)
   const signatureFieldNames = ["conventionalSignature"];
@@ -180,11 +187,18 @@ async function embedSignature(
 
       const widget = widgets[0];
       const rect = widget.getRectangle();
-      const pageRef = widget.P();
-      if (!pageRef) continue;
 
-      const pageIndex = pageRefToIndex.get(pageRef.toString());
-      if (pageIndex === undefined) continue;
+      // Determine which page the widget is on.
+      // widget.P() can return null in some PDFs, so fall back to known page index.
+      let pageIndex: number | undefined;
+      const pageRef = widget.P();
+      if (pageRef) {
+        pageIndex = pageRefToIndex.get(pageRef.toString());
+      }
+      if (pageIndex === undefined) {
+        pageIndex = SIGNATURE_PAGE_FALLBACK[fieldName];
+      }
+      if (pageIndex === undefined || pageIndex >= pages.length) continue;
 
       const page = pages[pageIndex];
 

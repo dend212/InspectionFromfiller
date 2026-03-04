@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useFormContext } from "react-hook-form";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useFormContext, useWatch } from "react-hook-form";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { cn } from "@/lib/utils";
 import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
 import { PhotoCapture } from "@/components/inspection/photo-capture";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -29,6 +31,8 @@ import {
   CAPACITY_BASIS_OPTIONS,
   TANK_MATERIALS,
 } from "@/lib/constants/inspection";
+import { AiCommentButton, CharacterCount } from "@/components/inspection/ai-comment-button";
+import type { SepticTankContext } from "@/lib/ai/rewrite-comments";
 import type { InspectionFormData } from "@/types/inspection";
 
 /** Deficiency labels matching the schema boolean fields */
@@ -82,6 +86,10 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
 
   const handleLabelUpdate = useCallback((mediaId: string, newLabel: string) => {
     setMedia((prev) => prev.map((m) => (m.id === mediaId ? { ...m, label: newLabel } : m)));
+  }, []);
+
+  const handleDescriptionUpdate = useCallback((mediaId: string, newDescription: string) => {
+    setMedia((prev) => prev.map((m) => (m.id === mediaId ? { ...m, description: newDescription } : m)));
   }, []);
 
   const numberOfTanksValue = form.watch("septicTank.numberOfTanks");
@@ -142,6 +150,46 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
       form.setValue("septicTank.tanks", currentTanks.slice(0, numberOfTanks));
     }
   }, [numberOfTanks, form]);
+
+  const buildTankContext = useCallback((): SepticTankContext => {
+    const st = form.getValues("septicTank");
+    const fi = form.getValues("facilityInfo");
+    const tanks = (st.tanks ?? []).map((tank) => {
+      const deficiencies: string[] = [];
+      for (const item of TANK_DEFICIENCY_ITEMS) {
+        if (tank[item.field]) deficiencies.push(item.label);
+      }
+      return {
+        tankMaterial: tank.tankMaterial || "",
+        tankCapacity: tank.tankCapacity || "",
+        liquidLevel: tank.liquidLevel || "",
+        primaryScumThickness: tank.primaryScumThickness || "",
+        primarySludgeThickness: tank.primarySludgeThickness || "",
+        secondaryScumThickness: tank.secondaryScumThickness || "",
+        secondarySludgeThickness: tank.secondarySludgeThickness || "",
+        compromisedTank: tank.compromisedTank || "",
+        numberOfCompartments: tank.numberOfCompartments || "",
+        accessOpenings: tank.accessOpenings || "",
+        lidsRisersPresent: tank.lidsRisersPresent || "",
+        lidsSecurelyFastened: tank.lidsSecurelyFastened || "",
+        baffleMaterial: tank.baffleMaterial || "",
+        inletBaffleCondition: tank.inletBaffleCondition || "",
+        outletBaffleCondition: tank.outletBaffleCondition || "",
+        interiorBaffleCondition: tank.interiorBaffleCondition || "",
+        effluentFilterPresent: tank.effluentFilterPresent || "",
+        effluentFilterServiced: tank.effluentFilterServiced || "",
+        deficiencies,
+      };
+    });
+
+    return {
+      numberOfTanks: st.numberOfTanks || "",
+      tanksPumped: st.tanksPumped || "",
+      haulerCompany: st.haulerCompany || "",
+      tanks,
+      overallCondition: fi?.septicTankCondition || "",
+    };
+  }, [form]);
 
   return (
     <div className="space-y-8">
@@ -370,6 +418,75 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
           {/* 4D-E: Capacity */}
           <div className="space-y-4">
             <h4 className="text-base font-medium">Dimensions & Capacity</h4>
+            <FormField
+              control={form.control}
+              name={`septicTank.tanks.${tankIndex}.tankCapacity`}
+              render={({ field }) => {
+                const TANK_CAPACITY_PRESETS = ["1000", "1250", "1500", "2000", "2500", "3000"];
+                const isPreset = TANK_CAPACITY_PRESETS.includes(field.value);
+                const isOther = !!field.value && !isPreset;
+                return (
+                  <FormItem>
+                    <FormLabel className="text-base">Tank Capacity (gal)</FormLabel>
+                    <FormControl>
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                          {TANK_CAPACITY_PRESETS.map((size) => (
+                            <button
+                              key={size}
+                              type="button"
+                              aria-pressed={field.value === size}
+                              className={cn(
+                                "min-h-[48px] rounded-lg px-3 py-2.5 text-base font-medium transition-all",
+                                "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                                field.value === size
+                                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25"
+                                  : "border border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground hover:border-primary/30"
+                              )}
+                              onClick={() => field.onChange(field.value === size ? "" : size)}
+                            >
+                              {Number(size).toLocaleString()}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            aria-pressed={!!isOther}
+                            className={cn(
+                              "min-h-[48px] rounded-lg px-3 py-2.5 text-base font-medium transition-all",
+                              "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                              isOther
+                                ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25"
+                                : "border border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground hover:border-primary/30"
+                            )}
+                            onClick={() => {
+                              if (isOther) {
+                                field.onChange("");
+                              } else {
+                                field.onChange("other");
+                              }
+                            }}
+                          >
+                            Other
+                          </button>
+                        </div>
+                        {isOther && (
+                          <Input
+                            className="min-h-[48px]"
+                            type="number"
+                            min="0"
+                            placeholder="Enter custom capacity"
+                            value={field.value === "other" ? "" : field.value}
+                            onChange={(e) => field.onChange(e.target.value || "other")}
+                          />
+                        )}
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
+            />
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
@@ -383,20 +500,6 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                         className="min-h-[48px]"
                         placeholder="e.g. 8'L x 4'W x 5'D"
                       />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name={`septicTank.tanks.${tankIndex}.tankCapacity`}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-base">Tank Capacity (gal)</FormLabel>
-                    <FormControl>
-                      <Input {...field} className="min-h-[48px]" type="number" min="0" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -854,7 +957,15 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
           name="septicTank.septicTankComments"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-base">Comments</FormLabel>
+              <div className="flex items-center justify-between">
+                <FormLabel className="text-base">Comments</FormLabel>
+                <AiCommentButton
+                  inspectionId={inspectionId}
+                  section="septicTank"
+                  fieldPath="septicTank.septicTankComments"
+                  buildContext={buildTankContext}
+                />
+              </div>
               <FormControl>
                 <Textarea
                   {...field}
@@ -863,6 +974,7 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                   placeholder="Additional comments about the septic tank inspection"
                 />
               </FormControl>
+              <CharacterCount value={field.value} />
               <FormMessage />
             </FormItem>
           )}
@@ -880,6 +992,7 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
           media={media.filter((m) => m.label === SECTION_NAME && m.type === "photo")}
           onDelete={handleDeleteMedia}
           onLabelUpdate={handleLabelUpdate}
+          onDescriptionUpdate={handleDescriptionUpdate}
         />
         <PhotoCapture
           inspectionId={inspectionId}

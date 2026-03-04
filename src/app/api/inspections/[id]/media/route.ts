@@ -125,9 +125,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
 /**
  * PATCH /api/inspections/[id]/media
- * Update a media record's label (caption).
+ * Update a media record's label or description.
  *
- * Body: { mediaId: string, label: string }
+ * Body: { mediaId: string, label?: string, description?: string }
  */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -144,15 +144,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if ("error" in access) return access.error;
 
   const body = await request.json();
-  const { mediaId, label } = body as { mediaId: string; label: string };
+  const { mediaId, label, description } = body as {
+    mediaId: string;
+    label?: string;
+    description?: string;
+  };
 
-  if (!mediaId || typeof label !== "string") {
-    return NextResponse.json({ error: "mediaId and label are required" }, { status: 400 });
+  if (!mediaId) {
+    return NextResponse.json({ error: "mediaId is required" }, { status: 400 });
+  }
+
+  const updates: Record<string, string> = {};
+  if (typeof label === "string") updates.label = label;
+  if (typeof description === "string") updates.description = description;
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "label or description is required" }, { status: 400 });
   }
 
   const [updated] = await db
     .update(inspectionMedia)
-    .set({ label })
+    .set(updates)
     .where(and(eq(inspectionMedia.id, mediaId), eq(inspectionMedia.inspectionId, id)))
     .returning();
 

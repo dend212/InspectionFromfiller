@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
 import { db } from "@/lib/db";
-import { inspectionMedia, inspections } from "@/lib/db/schema";
+import { inspectionMedia, inspections, profiles } from "@/lib/db/schema";
 import { generateReport } from "@/lib/pdf/generate-report";
 import { buildDownloadFilename, uploadReport } from "@/lib/storage/pdf-storage";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -97,6 +97,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         type: m.type as "photo" | "video",
         storagePath: m.storagePath,
         label: m.label,
+        description: m.description,
         sortOrder: m.sortOrder,
         createdAt: m.createdAt.toISOString(),
         signedUrl,
@@ -104,8 +105,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }),
   );
 
-  // Extract signature data URL from form data (if present)
-  const signatureDataUrl = formData.disposalWorks?.signatureDataUrl ?? null;
+  // Extract signature: form data first, then inspector's profile signature as fallback
+  let signatureDataUrl: string | null = formData.disposalWorks?.signatureDataUrl ?? null;
+
+  if (!signatureDataUrl) {
+    const [inspectorProfile] = await db
+      .select({ signatureDataUrl: profiles.signatureDataUrl })
+      .from(profiles)
+      .where(eq(profiles.id, inspection.inspectorId))
+      .limit(1);
+    signatureDataUrl = inspectorProfile?.signatureDataUrl ?? null;
+  }
 
   // Generate PDF server-side
   let pdfData: Uint8Array;

@@ -29,6 +29,8 @@ import {
   DISTRIBUTION_METHODS,
   SUPPLY_LINE_MATERIALS,
 } from "@/lib/constants/inspection";
+import { AiCommentButton, CharacterCount } from "@/components/inspection/ai-comment-button";
+import type { DisposalWorksContext } from "@/lib/ai/rewrite-comments";
 import type { InspectionFormData } from "@/types/inspection";
 
 /** Disposal works deficiency items matching the schema boolean fields */
@@ -93,6 +95,45 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
   const handleLabelUpdate = useCallback((mediaId: string, newLabel: string) => {
     setMedia((prev) => prev.map((m) => (m.id === mediaId ? { ...m, label: newLabel } : m)));
   }, []);
+
+  const handleDescriptionUpdate = useCallback((mediaId: string, newDescription: string) => {
+    setMedia((prev) => prev.map((m) => (m.id === mediaId ? { ...m, description: newDescription } : m)));
+  }, []);
+
+  const buildDisposalContext = useCallback((): DisposalWorksContext => {
+    const dw = form.getValues("disposalWorks");
+    const fi = form.getValues("facilityInfo");
+
+    const deficiencies: string[] = [];
+    for (const item of DISPOSAL_DEFICIENCY_ITEMS) {
+      // biome-ignore lint/suspicious/noExplicitAny: dynamic field access on form data
+      if ((dw as any)?.[item.field]) deficiencies.push(item.label);
+    }
+
+    // Gather port depths
+    const portDepths: string[] = [];
+    for (let i = 0; i < portCount; i++) {
+      // biome-ignore lint/suspicious/noExplicitAny: dynamic port depth field access
+      const depth = (dw as any)?.[`portDepth${i + 1}`] || "";
+      if (depth) portDepths.push(depth);
+    }
+
+    return {
+      disposalType: dw?.disposalType || "",
+      distributionMethod: dw?.distributionMethod || "",
+      supplyLineMaterial: dw?.supplyLineMaterial || "",
+      locationDetermined: dw?.disposalWorksLocationDetermined || "",
+      distributionComponentInspected: dw?.distributionComponentInspected || "",
+      inspectionPortsPresent: dw?.inspectionPortsPresent || "",
+      numberOfPorts: dw?.numberOfPorts || "",
+      portDepths,
+      hydraulicLoadTestPerformed: dw?.hydraulicLoadTestPerformed || "",
+      hasDisposalDeficiency: dw?.hasDisposalDeficiency || "",
+      repairsRecommended: dw?.repairsRecommended || "",
+      deficiencies,
+      overallCondition: fi?.disposalWorksCondition || "",
+    };
+  }, [form, portCount]);
 
   return (
     <div className="space-y-8">
@@ -460,7 +501,15 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
           name="disposalWorks.disposalWorksComments"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-base">Comments & Findings</FormLabel>
+              <div className="flex items-center justify-between">
+                <FormLabel className="text-base">Comments & Findings</FormLabel>
+                <AiCommentButton
+                  inspectionId={inspectionId}
+                  section="disposalWorks"
+                  fieldPath="disposalWorks.disposalWorksComments"
+                  buildContext={buildDisposalContext}
+                />
+              </div>
               <FormControl>
                 <Textarea
                   {...field}
@@ -469,6 +518,7 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
                   placeholder="Detailed findings, observations, and recommendations for the disposal works inspection"
                 />
               </FormControl>
+              <CharacterCount value={field.value} />
               <FormMessage />
             </FormItem>
           )}
@@ -522,6 +572,7 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
           media={media.filter((m) => m.label === SECTION_NAME && m.type === "photo")}
           onDelete={handleDeleteMedia}
           onLabelUpdate={handleLabelUpdate}
+          onDescriptionUpdate={handleDescriptionUpdate}
         />
         <PhotoCapture
           inspectionId={inspectionId}
@@ -544,6 +595,7 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
           media={media.filter((m) => m.type === "video")}
           onDelete={handleDeleteMedia}
           onLabelUpdate={handleLabelUpdate}
+          onDescriptionUpdate={handleDescriptionUpdate}
         />
       </div>
     </div>

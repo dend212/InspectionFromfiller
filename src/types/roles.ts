@@ -44,6 +44,12 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "Users",
     roles: ["admin"],
   },
+  {
+    label: "Settings",
+    href: "/settings",
+    icon: "Settings",
+    roles: ["admin", "field_tech", "office_staff"],
+  },
 ];
 
 export const ROLE_LABELS: Record<AppRole, string> = {

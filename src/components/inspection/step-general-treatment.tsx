@@ -76,6 +76,10 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
     setMedia((prev) => prev.map((m) => (m.id === mediaId ? { ...m, label: newLabel } : m)));
   }, []);
 
+  const handleDescriptionUpdate = useCallback((mediaId: string, newDescription: string) => {
+    setMedia((prev) => prev.map((m) => (m.id === mediaId ? { ...m, description: newDescription } : m)));
+  }, []);
+
   return (
     <div className="space-y-8">
       {/* GP 4.02+ System Type Checkboxes */}
@@ -320,6 +324,7 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
           media={media.filter((m) => m.label === SECTION_NAME && m.type === "photo")}
           onDelete={handleDeleteMedia}
           onLabelUpdate={handleLabelUpdate}
+          onDescriptionUpdate={handleDescriptionUpdate}
         />
         <PhotoCapture
           inspectionId={inspectionId}

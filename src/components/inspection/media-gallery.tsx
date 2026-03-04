@@ -8,6 +8,7 @@ export interface MediaRecord {
   type: "photo" | "video";
   storagePath: string;
   label: string | null;
+  description: string | null;
   sortOrder: number | null;
   createdAt: string;
   signedUrl?: string | null;
@@ -19,30 +20,31 @@ interface MediaGalleryProps {
   media: MediaRecord[];
   onDelete: (mediaId: string) => void;
   onLabelUpdate?: (mediaId: string, newLabel: string) => void;
+  onDescriptionUpdate?: (mediaId: string, newDescription: string) => void;
 }
 
 function MediaThumbnail({
   item,
   inspectionId,
   onDelete,
-  onLabelUpdate,
+  onDescriptionUpdate,
 }: {
   item: MediaRecord;
   inspectionId: string;
   onDelete: (mediaId: string) => void;
-  onLabelUpdate?: (mediaId: string, newLabel: string) => void;
+  onDescriptionUpdate?: (mediaId: string, newDescription: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(item.label ?? "");
+  const [draft, setDraft] = useState(item.description ?? "");
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const caption = item.label ?? "";
+  const caption = item.description ?? "";
 
-  const saveLabel = useCallback(
-    async (newLabel: string) => {
-      const trimmed = newLabel.trim();
-      if (trimmed === (item.label ?? "")) {
+  const saveDescription = useCallback(
+    async (newDescription: string) => {
+      const trimmed = newDescription.trim();
+      if (trimmed === (item.description ?? "")) {
         setEditing(false);
         return;
       }
@@ -51,24 +53,24 @@ function MediaThumbnail({
         const res = await fetch(`/api/inspections/${inspectionId}/media`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mediaId: item.id, label: trimmed }),
+          body: JSON.stringify({ mediaId: item.id, description: trimmed }),
         });
         if (res.ok) {
-          onLabelUpdate?.(item.id, trimmed);
+          onDescriptionUpdate?.(item.id, trimmed);
         }
       } finally {
         setSaving(false);
         setEditing(false);
       }
     },
-    [inspectionId, item.id, item.label, onLabelUpdate],
+    [inspectionId, item.id, item.description, onDescriptionUpdate],
   );
 
   const startEditing = useCallback(() => {
-    setDraft(item.label ?? "");
+    setDraft(item.description ?? "");
     setEditing(true);
     setTimeout(() => inputRef.current?.focus(), 0);
-  }, [item.label]);
+  }, [item.description]);
 
   return (
     <div className="group relative rounded-lg border bg-card overflow-hidden">
@@ -110,19 +112,19 @@ function MediaThumbnail({
             type="text"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => saveLabel(draft)}
+            onBlur={() => saveDescription(draft)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                saveLabel(draft);
+                saveDescription(draft);
               } else if (e.key === "Escape") {
                 setEditing(false);
-                setDraft(item.label ?? "");
+                setDraft(item.description ?? "");
               }
             }}
             disabled={saving}
             className="w-full rounded border border-input bg-background px-1.5 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
-            placeholder="Add caption…"
+            placeholder="Add description…"
           />
         ) : (
           <button
@@ -131,7 +133,7 @@ function MediaThumbnail({
             className="group/caption flex w-full items-center gap-1 text-left"
           >
             <p className="flex-1 truncate text-xs text-muted-foreground">
-              {caption || "Add caption…"}
+              {caption || "Add description…"}
             </p>
             <Pencil className="h-3 w-3 shrink-0 text-muted-foreground/50 opacity-0 transition-opacity group-hover/caption:opacity-100" />
           </button>
@@ -147,6 +149,7 @@ export function MediaGallery({
   media,
   onDelete,
   onLabelUpdate,
+  onDescriptionUpdate,
 }: MediaGalleryProps) {
   if (media.length === 0) {
     return (
@@ -164,7 +167,7 @@ export function MediaGallery({
           item={item}
           inspectionId={inspectionId}
           onDelete={onDelete}
-          onLabelUpdate={onLabelUpdate}
+          onDescriptionUpdate={onDescriptionUpdate}
         />
       ))}
     </div>

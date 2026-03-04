@@ -75,12 +75,12 @@ export function detectCommentOverflow(data: InspectionFormData): OverflowResult 
       text: str(data.designFlow?.designFlowComments),
     },
     {
-      section: "Septic Tank",
+      section: "Tank",
       fieldName: "septicTankComments",
       text: str(data.septicTank?.septicTankComments),
     },
     {
-      section: "Disposal Works",
+      section: "Drainfield",
       fieldName: "disposalWorksComments",
       text: str(data.disposalWorks?.disposalWorksComments),
     },

@@ -1238,7 +1238,7 @@ describe("detectCommentOverflow", () => {
 
     expect(result.hasOverflow).toBe(true);
     expect(result.overflowSections).toHaveLength(1);
-    expect(result.overflowSections[0].section).toBe("Septic Tank");
+    expect(result.overflowSections[0].section).toBe("Tank");
   });
 
   it("detects overflow for disposal works comments", () => {
@@ -1248,7 +1248,7 @@ describe("detectCommentOverflow", () => {
 
     expect(result.hasOverflow).toBe(true);
     expect(result.overflowSections).toHaveLength(1);
-    expect(result.overflowSections[0].section).toBe("Disposal Works");
+    expect(result.overflowSections[0].section).toBe("Drainfield");
   });
 
   it("detects multiple overflowing sections", () => {

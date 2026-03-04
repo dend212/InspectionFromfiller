@@ -82,6 +82,7 @@ export default async function InspectionDetailPage({
           type: m.type as "photo" | "video",
           storagePath: m.storagePath,
           label: m.label,
+          description: m.description,
           sortOrder: m.sortOrder,
           createdAt: m.createdAt.toISOString(),
         }))}
