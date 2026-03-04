@@ -33,12 +33,23 @@ async function verifyAccess(
 }
 
 /** Generate a signed download URL (1 hour expiry). */
-async function getSignedUrl(storagePath: string): Promise<string | null> {
-  const admin = createAdminClient();
-  const { data } = await admin.storage
-    .from("inspection-media")
-    .createSignedUrl(storagePath, 3600);
-  return data?.signedUrl ?? null;
+async function getSignedUrl(
+  admin: ReturnType<typeof createAdminClient>,
+  storagePath: string,
+): Promise<string | null> {
+  try {
+    const { data, error } = await admin.storage
+      .from("inspection-media")
+      .createSignedUrl(storagePath, 3600);
+    if (error) {
+      console.error("Signed URL error:", error.message, "path:", storagePath);
+      return null;
+    }
+    return data?.signedUrl ?? null;
+  } catch (err) {
+    console.error("Signed URL exception:", err, "path:", storagePath);
+    return null;
+  }
 }
 
 /**
@@ -83,7 +94,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     })
     .returning();
 
-  const signedUrl = type === "photo" ? await getSignedUrl(storagePath) : null;
+  const admin = createAdminClient();
+  const signedUrl = type === "photo" ? await getSignedUrl(admin, storagePath) : null;
 
   return NextResponse.json({ ...record, signedUrl }, { status: 201 });
 }
@@ -106,21 +118,31 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const access = await verifyAccess(id, supabase, user.id);
   if ("error" in access) return access.error;
 
-  const records = await db
-    .select()
-    .from(inspectionMedia)
-    .where(eq(inspectionMedia.inspectionId, id))
-    .orderBy(asc(inspectionMedia.sortOrder), asc(inspectionMedia.createdAt));
+  try {
+    const records = await db
+      .select()
+      .from(inspectionMedia)
+      .where(eq(inspectionMedia.inspectionId, id))
+      .orderBy(asc(inspectionMedia.sortOrder), asc(inspectionMedia.createdAt));
 
-  // Attach signed URLs for photos so the client can display them immediately
-  const withUrls = await Promise.all(
-    records.map(async (r) => ({
-      ...r,
-      signedUrl: r.type === "photo" ? await getSignedUrl(r.storagePath) : null,
-    })),
-  );
+    // Attach signed URLs for photos so the client can display them immediately
+    const admin = createAdminClient();
+    const withUrls = await Promise.all(
+      records.map(async (r) => ({
+        ...r,
+        signedUrl: r.type === "photo" ? await getSignedUrl(admin, r.storagePath) : null,
+      })),
+    );
 
-  return NextResponse.json(withUrls);
+    return NextResponse.json(withUrls);
+  } catch (err) {
+    console.error("[media GET] Failed to retrieve media:", err);
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json(
+      { error: `Failed to retrieve media: ${message}` },
+      { status: 500 },
+    );
+  }
 }
 
 /**

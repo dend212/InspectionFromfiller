@@ -19,36 +19,45 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [inspection] = await db.select().from(inspections).where(eq(inspections.id, id)).limit(1);
+  try {
+    const [inspection] = await db.select().from(inspections).where(eq(inspections.id, id)).limit(1);
 
-  if (!inspection) {
-    return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
-  }
+    if (!inspection) {
+      return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
+    }
 
-  // Check ownership or privileged role
-  if (inspection.inspectorId !== user.id) {
-    let userRole: string | null = null;
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session) {
-        const payload = JSON.parse(
-          Buffer.from(session.access_token.split(".")[1], "base64").toString(),
-        );
-        userRole = payload.user_role ?? null;
+    // Check ownership or privileged role
+    if (inspection.inspectorId !== user.id) {
+      let userRole: string | null = null;
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session) {
+          const payload = JSON.parse(
+            Buffer.from(session.access_token.split(".")[1], "base64").toString(),
+          );
+          userRole = payload.user_role ?? null;
+        }
+      } catch {
+        // Role decode failed
       }
-    } catch {
-      // Role decode failed
+
+      const isPrivileged = userRole === "admin" || userRole === "office_staff";
+      if (!isPrivileged) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
 
-    const isPrivileged = userRole === "admin" || userRole === "office_staff";
-    if (!isPrivileged) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    return NextResponse.json(inspection);
+  } catch (err) {
+    console.error("[inspection GET] Failed to load inspection:", err);
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json(
+      { error: `Failed to load inspection: ${message}` },
+      { status: 500 },
+    );
   }
-
-  return NextResponse.json(inspection);
 }
 
 /**

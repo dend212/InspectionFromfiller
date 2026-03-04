@@ -73,34 +73,43 @@ export async function GET() {
 
   const isPrivileged = userRole === "admin" || userRole === "office_staff";
 
-  const results = isPrivileged
-    ? await db
-        .select({
-          id: inspections.id,
-          status: inspections.status,
-          facilityName: inspections.facilityName,
-          facilityAddress: inspections.facilityAddress,
-          facilityCity: inspections.facilityCity,
-          facilityCounty: inspections.facilityCounty,
-          createdAt: inspections.createdAt,
-          updatedAt: inspections.updatedAt,
-        })
-        .from(inspections)
-        .orderBy(desc(inspections.updatedAt))
-    : await db
-        .select({
-          id: inspections.id,
-          status: inspections.status,
-          facilityName: inspections.facilityName,
-          facilityAddress: inspections.facilityAddress,
-          facilityCity: inspections.facilityCity,
-          facilityCounty: inspections.facilityCounty,
-          createdAt: inspections.createdAt,
-          updatedAt: inspections.updatedAt,
-        })
-        .from(inspections)
-        .where(eq(inspections.inspectorId, user.id))
-        .orderBy(desc(inspections.updatedAt));
+  try {
+    const results = isPrivileged
+      ? await db
+          .select({
+            id: inspections.id,
+            status: inspections.status,
+            facilityName: inspections.facilityName,
+            facilityAddress: inspections.facilityAddress,
+            facilityCity: inspections.facilityCity,
+            facilityCounty: inspections.facilityCounty,
+            createdAt: inspections.createdAt,
+            updatedAt: inspections.updatedAt,
+          })
+          .from(inspections)
+          .orderBy(desc(inspections.updatedAt))
+      : await db
+          .select({
+            id: inspections.id,
+            status: inspections.status,
+            facilityName: inspections.facilityName,
+            facilityAddress: inspections.facilityAddress,
+            facilityCity: inspections.facilityCity,
+            facilityCounty: inspections.facilityCounty,
+            createdAt: inspections.createdAt,
+            updatedAt: inspections.updatedAt,
+          })
+          .from(inspections)
+          .where(eq(inspections.inspectorId, user.id))
+          .orderBy(desc(inspections.updatedAt));
 
-  return NextResponse.json(results);
+    return NextResponse.json(results);
+  } catch (err) {
+    console.error("[inspections GET] Failed to list inspections:", err);
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json(
+      { error: `Failed to list inspections: ${message}` },
+      { status: 500 },
+    );
+  }
 }

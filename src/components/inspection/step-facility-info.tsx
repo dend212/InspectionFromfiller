@@ -7,6 +7,11 @@ import { PhotoCapture } from "@/components/inspection/photo-capture";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   FormControl,
   FormDescription,
   FormField,
@@ -15,6 +20,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { ChevronDown } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -598,162 +604,176 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
 
       {/* Inspector Credentials */}
       <section className="space-y-4">
-        <h3 className="text-lg font-medium">Inspector Credentials</h3>
-        <FormDescription>Pre-filled from company defaults. Edit if needed.</FormDescription>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="facilityInfo.inspectorName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">Inspector / Certifier</FormLabel>
-                <FormControl>
-                  <Input {...field} className="min-h-[48px] bg-muted" readOnly tabIndex={-1} />
-                </FormControl>
-                <FormDescription>Company certifier — not editable</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <Collapsible>
+          <CollapsibleTrigger className="group flex w-full items-center justify-between">
+            <div className="text-left">
+              <h3 className="text-lg font-medium">Inspector Credentials</h3>
+              <p className="text-sm text-muted-foreground">Pre-filled from company defaults. Edit if needed.</p>
+            </div>
+            <ChevronDown className="h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="facilityInfo.inspectorName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">Inspector / Certifier</FormLabel>
+                    <FormControl>
+                      <Input {...field} className="min-h-[48px] bg-muted" readOnly tabIndex={-1} />
+                    </FormControl>
+                    <FormDescription>Company certifier — not editable</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <FormField
-            control={form.control}
-            name="facilityInfo.employeeName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">Field Technician</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    className="min-h-[48px]"
-                    placeholder="Tech performing inspection"
-                  />
-                </FormControl>
-                <FormDescription>Will be auto-filled from Workiz</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="facilityInfo.employeeName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">Field Technician</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="min-h-[48px]"
+                        placeholder="Tech performing inspection"
+                      />
+                    </FormControl>
+                    <FormDescription>Will be auto-filled from Workiz</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <FormField
-            control={form.control}
-            name="facilityInfo.company"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">Company</FormLabel>
-                <FormControl>
-                  <Input {...field} className="min-h-[48px]" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="facilityInfo.company"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">Company</FormLabel>
+                    <FormControl>
+                      <Input {...field} className="min-h-[48px]" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <FormField
-            control={form.control}
-            name="facilityInfo.companyAddress"
-            render={({ field }) => (
-              <FormItem className="sm:col-span-2">
-                <FormLabel className="text-base">Company Address</FormLabel>
-                <FormControl>
-                  <Input {...field} className="min-h-[48px]" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="facilityInfo.companyAddress"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2">
+                    <FormLabel className="text-base">Company Address</FormLabel>
+                    <FormControl>
+                      <Input {...field} className="min-h-[48px]" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <FormField
-            control={form.control}
-            name="facilityInfo.companyCity"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">Company City</FormLabel>
-                <FormControl>
-                  <Input {...field} className="min-h-[48px]" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="facilityInfo.companyCity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">Company City</FormLabel>
+                    <FormControl>
+                      <Input {...field} className="min-h-[48px]" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <FormField
-            control={form.control}
-            name="facilityInfo.companyState"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">Company State</FormLabel>
-                <FormControl>
-                  <Input {...field} className="min-h-[48px]" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="facilityInfo.companyState"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">Company State</FormLabel>
+                    <FormControl>
+                      <Input {...field} className="min-h-[48px]" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <FormField
-            control={form.control}
-            name="facilityInfo.companyZip"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">Company ZIP</FormLabel>
-                <FormControl>
-                  <Input {...field} className="min-h-[48px]" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="facilityInfo.companyZip"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">Company ZIP</FormLabel>
+                    <FormControl>
+                      <Input {...field} className="min-h-[48px]" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <FormField
-            control={form.control}
-            name="facilityInfo.certificationNumber"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">Certification #</FormLabel>
-                <FormControl>
-                  <Input {...field} className="min-h-[48px]" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="facilityInfo.certificationNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">Certification #</FormLabel>
+                    <FormControl>
+                      <Input {...field} className="min-h-[48px]" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <FormField
-            control={form.control}
-            name="facilityInfo.registrationNumber"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">Registration #</FormLabel>
-                <FormControl>
-                  <Input {...field} className="min-h-[48px]" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="facilityInfo.registrationNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">Registration #</FormLabel>
+                    <FormControl>
+                      <Input {...field} className="min-h-[48px]" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <FormField
-            control={form.control}
-            name="facilityInfo.truckNumber"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">Truck #</FormLabel>
-                <FormControl>
-                  <Input {...field} className="min-h-[48px]" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+              <FormField
+                control={form.control}
+                name="facilityInfo.truckNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">Truck #</FormLabel>
+                    <FormControl>
+                      <Input {...field} className="min-h-[48px]" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </section>
 
       <Separator />
 
       {/* Inspector Qualifications */}
       <section className="space-y-4">
-        <h3 className="text-lg font-medium">Inspector Qualifications</h3>
+        <Collapsible>
+          <CollapsibleTrigger className="group flex w-full items-center justify-between">
+            <h3 className="text-lg font-medium">Inspector Qualifications</h3>
+            <ChevronDown className="h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-4">
         <div className="space-y-3">
           {/* ADEQ Course */}
           <FormField
@@ -972,6 +992,8 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             </div>
           )}
         </div>
+          </CollapsibleContent>
+        </Collapsible>
       </section>
 
       <Separator />

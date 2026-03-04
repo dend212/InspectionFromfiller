@@ -386,7 +386,7 @@ export function getDefaultFormValues(inspectorName: string) {
       employeeName: inspectorName,
       hasAdeqCourse: true,
       adeqCourseDetails: "NAWT 15805 ITC",
-      adeqCourseDate: "",
+      adeqCourseDate: "2021-01-01",
       isProfessionalEngineer: false,
       peExpirationDate: "",
       isRegisteredSanitarian: false,

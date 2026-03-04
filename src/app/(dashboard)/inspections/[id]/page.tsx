@@ -62,7 +62,35 @@ export default async function InspectionDetailPage({
   }
 
   // Load media records for this inspection
-  const media = await db.select().from(inspectionMedia).where(eq(inspectionMedia.inspectionId, id));
+  let media: {
+    id: string;
+    type: "photo" | "video";
+    storagePath: string;
+    label: string | null;
+    description: string | null;
+    sortOrder: number | null;
+    createdAt: string;
+  }[] = [];
+
+  try {
+    const mediaRows = await db
+      .select()
+      .from(inspectionMedia)
+      .where(eq(inspectionMedia.inspectionId, id));
+
+    media = mediaRows.map((m) => ({
+      id: m.id,
+      type: m.type as "photo" | "video",
+      storagePath: m.storagePath,
+      label: m.label,
+      description: m.description,
+      sortOrder: m.sortOrder,
+      createdAt: m.createdAt.toISOString(),
+    }));
+  } catch (err) {
+    console.error("[inspection detail] Failed to load media:", err);
+    // Continue rendering without media rather than crashing the page
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -77,15 +105,7 @@ export default async function InspectionDetailPage({
         customerEmail={inspection.customerEmail ?? null}
         createdAt={inspection.createdAt.toISOString()}
         mediaCount={media.length}
-        media={media.map((m) => ({
-          id: m.id,
-          type: m.type as "photo" | "video",
-          storagePath: m.storagePath,
-          label: m.label,
-          description: m.description,
-          sortOrder: m.sortOrder,
-          createdAt: m.createdAt.toISOString(),
-        }))}
+        media={media}
       />
     </div>
   );

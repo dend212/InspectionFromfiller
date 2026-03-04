@@ -229,7 +229,7 @@ describe("PATCH /api/inspections/[id]/media", () => {
   it("returns 400 when mediaId is missing", async () => {
     const res = await PATCH(makeRequest({ label: "New Label" }), makeParams("insp-1"));
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toContain("mediaId and label are required");
+    expect((await res.json()).error).toContain("mediaId is required");
   });
 
   it("returns 400 when label is not a string", async () => {

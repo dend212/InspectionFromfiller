@@ -57,33 +57,57 @@ export default async function ReviewDetailPage({ params }: { params: Promise<{ i
   }
 
   // Load media records and generate signed URLs for photos
-  const mediaRows = await db
-    .select()
-    .from(inspectionMedia)
-    .where(eq(inspectionMedia.inspectionId, id));
+  let mediaWithUrls: {
+    id: string;
+    type: "photo" | "video";
+    storagePath: string;
+    label: string | null;
+    description: string | null;
+    sortOrder: number | null;
+    createdAt: string;
+    signedUrl: string | null;
+  }[] = [];
 
-  const admin = createAdminClient();
-  const mediaWithUrls = await Promise.all(
-    mediaRows.map(async (m) => {
-      let signedUrl: string | null = null;
-      if (m.type === "photo") {
-        const { data } = await admin.storage
-          .from("inspection-media")
-          .createSignedUrl(m.storagePath, 3600);
-        signedUrl = data?.signedUrl ?? null;
-      }
-      return {
-        id: m.id,
-        type: m.type as "photo" | "video",
-        storagePath: m.storagePath,
-        label: m.label,
-        description: m.description,
-        sortOrder: m.sortOrder,
-        createdAt: m.createdAt.toISOString(),
-        signedUrl,
-      };
-    }),
-  );
+  try {
+    const mediaRows = await db
+      .select()
+      .from(inspectionMedia)
+      .where(eq(inspectionMedia.inspectionId, id));
+
+    const admin = createAdminClient();
+    mediaWithUrls = await Promise.all(
+      mediaRows.map(async (m) => {
+        let signedUrl: string | null = null;
+        if (m.type === "photo") {
+          try {
+            const { data, error } = await admin.storage
+              .from("inspection-media")
+              .createSignedUrl(m.storagePath, 3600);
+            if (!error) {
+              signedUrl = data?.signedUrl ?? null;
+            } else {
+              console.error("[review] Signed URL error:", error.message, "path:", m.storagePath);
+            }
+          } catch (urlErr) {
+            console.error("[review] Signed URL exception:", urlErr, "path:", m.storagePath);
+          }
+        }
+        return {
+          id: m.id,
+          type: m.type as "photo" | "video",
+          storagePath: m.storagePath,
+          label: m.label,
+          description: m.description,
+          sortOrder: m.sortOrder,
+          createdAt: m.createdAt.toISOString(),
+          signedUrl,
+        };
+      }),
+    );
+  } catch (err) {
+    console.error("[review] Failed to load media:", err);
+    // Continue rendering without media rather than crashing the page
+  }
 
   return (
     <div className="mx-auto max-w-7xl">
