@@ -3,6 +3,7 @@
 import { Camera, Loader2, Upload, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 
 interface UploadedImage {
@@ -62,17 +63,16 @@ export function ScanUploadZone({
           throw new Error(err.error || "Failed to get upload URL");
         }
 
-        const { signedUrl, storagePath } = await urlRes.json();
+        const { token, storagePath } = await urlRes.json();
 
-        // Step 2: Upload directly to Supabase Storage
-        const uploadRes = await fetch(signedUrl, {
-          method: "PUT",
-          headers: { "Content-Type": file.type },
-          body: file,
-        });
+        // Step 2: Upload directly to Supabase Storage via SDK
+        const supabase = createClient();
+        const { error: uploadError } = await supabase.storage
+          .from("inspection-media")
+          .uploadToSignedUrl(storagePath, token, file);
 
-        if (!uploadRes.ok) {
-          throw new Error("Storage upload failed");
+        if (uploadError) {
+          throw new Error(uploadError.message || "Storage upload failed");
         }
 
         // Create a local preview URL
