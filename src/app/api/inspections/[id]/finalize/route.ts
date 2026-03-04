@@ -70,51 +70,69 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { selectedMediaIds } = body as { selectedMediaIds?: string[] };
 
   // Load media records for this inspection
-  const mediaRows = await db
-    .select()
-    .from(inspectionMedia)
-    .where(eq(inspectionMedia.inspectionId, id));
+  let mediaRecords: MediaRecord[] = [];
+  try {
+    const mediaRows = await db
+      .select()
+      .from(inspectionMedia)
+      .where(eq(inspectionMedia.inspectionId, id));
 
-  // Filter to selected photos if IDs provided, otherwise include all
-  const selectedSet = selectedMediaIds ? new Set(selectedMediaIds) : null;
-  const filteredRows = selectedSet
-    ? mediaRows.filter((m) => selectedSet.has(m.id))
-    : mediaRows;
+    // Filter to selected photos if IDs provided, otherwise include all
+    const selectedSet = selectedMediaIds ? new Set(selectedMediaIds) : null;
+    const filteredRows = selectedSet
+      ? mediaRows.filter((m) => selectedSet.has(m.id))
+      : mediaRows;
 
-  // Generate signed URLs for photos so buildPhotoPages can fetch them
-  const storageAdmin = createAdminClient();
-  const mediaRecords: MediaRecord[] = await Promise.all(
-    filteredRows.map(async (m) => {
-      let signedUrl: string | null = null;
-      if (m.type === "photo") {
-        const { data } = await storageAdmin.storage
-          .from("inspection-media")
-          .createSignedUrl(m.storagePath, 3600);
-        signedUrl = data?.signedUrl ?? null;
-      }
-      return {
-        id: m.id,
-        type: m.type as "photo" | "video",
-        storagePath: m.storagePath,
-        label: m.label,
-        description: m.description,
-        sortOrder: m.sortOrder,
-        createdAt: m.createdAt.toISOString(),
-        signedUrl,
-      };
-    }),
-  );
+    // Generate signed URLs for photos so buildPhotoPages can fetch them
+    const storageAdmin = createAdminClient();
+    mediaRecords = await Promise.all(
+      filteredRows.map(async (m) => {
+        let signedUrl: string | null = null;
+        if (m.type === "photo") {
+          try {
+            const { data, error } = await storageAdmin.storage
+              .from("inspection-media")
+              .createSignedUrl(m.storagePath, 3600);
+            if (!error) {
+              signedUrl = data?.signedUrl ?? null;
+            } else {
+              console.error("[finalize] Signed URL error:", error.message, "path:", m.storagePath);
+            }
+          } catch (urlErr) {
+            console.error("[finalize] Signed URL exception:", urlErr, "path:", m.storagePath);
+          }
+        }
+        return {
+          id: m.id,
+          type: m.type as "photo" | "video",
+          storagePath: m.storagePath,
+          label: m.label,
+          description: m.description,
+          sortOrder: m.sortOrder,
+          createdAt: m.createdAt.toISOString(),
+          signedUrl,
+        };
+      }),
+    );
+  } catch (err) {
+    console.error("[finalize] Failed to load media:", err);
+    // Continue without media — PDF will be generated without photos
+  }
 
   // Extract signature: form data first, then inspector's profile signature as fallback
   let signatureDataUrl: string | null = formData.disposalWorks?.signatureDataUrl ?? null;
 
   if (!signatureDataUrl) {
-    const [inspectorProfile] = await db
-      .select({ signatureDataUrl: profiles.signatureDataUrl })
-      .from(profiles)
-      .where(eq(profiles.id, inspection.inspectorId))
-      .limit(1);
-    signatureDataUrl = inspectorProfile?.signatureDataUrl ?? null;
+    try {
+      const [inspectorProfile] = await db
+        .select({ signatureDataUrl: profiles.signatureDataUrl })
+        .from(profiles)
+        .where(eq(profiles.id, inspection.inspectorId))
+        .limit(1);
+      signatureDataUrl = inspectorProfile?.signatureDataUrl ?? null;
+    } catch (err) {
+      console.error("[finalize] Failed to load inspector signature:", err);
+    }
   }
 
   // Generate PDF server-side
