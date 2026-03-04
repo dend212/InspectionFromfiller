@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getStatusConfig, WORKIZ_BADGE_CLASS } from "@/lib/constants/status";
 
 export interface InspectionRow {
   id: string;
@@ -65,19 +66,8 @@ function formatDate(isoString: string): string {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  switch (status) {
-    case "draft":
-      return <Badge variant="secondary">Draft</Badge>;
-    case "submitted":
-    case "in_review":
-      return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-200">In Review</Badge>;
-    case "completed":
-      return <Badge className="bg-green-100 text-green-800 hover:bg-green-200">Complete</Badge>;
-    case "sent":
-      return <Badge className="bg-green-100 text-green-800 hover:bg-green-200">Sent</Badge>;
-    default:
-      return <Badge variant="secondary">{status}</Badge>;
-  }
+  const config = getStatusConfig(status);
+  return <Badge className={config.className}>{config.label}</Badge>;
 }
 
 const PAGE_SIZE = 20;
@@ -251,10 +241,10 @@ export function InspectionsTable({
 
   if (inspections.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-md border py-16">
+      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16">
         <p className="text-lg font-medium text-muted-foreground">No inspections found</p>
         <p className="mt-1 text-sm text-muted-foreground">Try adjusting your search or filters</p>
-        <Button variant="outline" className="mt-4" onClick={handleClearFilters}>
+        <Button variant="outline" className="mt-4 cursor-pointer" onClick={handleClearFilters}>
           Clear Filters
         </Button>
       </div>
@@ -343,7 +333,7 @@ export function InspectionsTable({
                 <div className="flex items-center gap-1.5">
                   <StatusBadge status={inspection.status} />
                   {inspection.isFromWorkiz && (
-                    <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200 text-[10px] px-1.5 py-0">
+                    <Badge className={`${WORKIZ_BADGE_CLASS} text-[10px] px-1.5 py-0`}>
                       Workiz
                     </Badge>
                   )}
@@ -352,7 +342,7 @@ export function InspectionsTable({
               <TableCell>{inspection.inspectorName}</TableCell>
               <TableCell>
                 {inspection.emailSentCount > 0 ? (
-                  <span className="inline-flex items-center gap-1 text-green-600">
+                  <span className="inline-flex items-center gap-1 text-status-complete-foreground">
                     <Check className="size-4" />
                     {inspection.emailSentCount}
                   </span>

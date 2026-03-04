@@ -83,7 +83,7 @@ export default async function AdminUsersPage() {
       {/* Users List Section */}
       <div>
         <h2 className="text-lg font-semibold mb-4">Existing Users ({users.length})</h2>
-        <div className="rounded-md border">
+        <div className="rounded-xl border">
           <Table>
             <TableHeader>
               <TableRow>

@@ -12,24 +12,9 @@ import { SignaturePad } from "@/components/inspection/signature-pad";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getStatusConfig } from "@/lib/constants/status";
 import { usePdfGeneration } from "@/hooks/use-pdf-generation";
 import type { InspectionFormData } from "@/types/inspection";
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Draft",
-  submitted: "Submitted",
-  in_review: "In Review",
-  completed: "Completed",
-  sent: "Sent",
-};
-
-const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline"> = {
-  draft: "secondary",
-  submitted: "default",
-  in_review: "default",
-  completed: "default",
-  sent: "default",
-};
 
 interface InspectionPdfViewProps {
   inspectionId: string;
@@ -143,10 +128,9 @@ export function InspectionPdfView({
             </div>
             <div className="flex items-center gap-2">
               <Badge
-                variant={STATUS_VARIANTS[status] ?? "secondary"}
-                className={status === "completed" ? "bg-emerald-100 text-emerald-800" : undefined}
+                className={getStatusConfig(status).className}
               >
-                {STATUS_LABELS[status] ?? status}
+                {getStatusConfig(status).label}
               </Badge>
               {status === "draft" && (
                 <Button variant="outline" size="sm" asChild>

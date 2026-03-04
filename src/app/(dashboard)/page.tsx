@@ -38,7 +38,7 @@ export default async function DashboardPage() {
   const displayName = user.user_metadata?.full_name || user.email || "User";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
@@ -129,10 +129,12 @@ function QuickLinkCard({
   href: string;
 }) {
   return (
-    <Link href={href}>
-      <Card className="transition-all hover:shadow-md hover:border-primary/30 hover:bg-accent/50">
+    <Link href={href} className="group">
+      <Card className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary/25 hover:-translate-y-0.5">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">{title}</CardTitle>
+          <CardTitle className="text-base group-hover:text-primary transition-colors duration-200">
+            {title}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <CardDescription>{description}</CardDescription>

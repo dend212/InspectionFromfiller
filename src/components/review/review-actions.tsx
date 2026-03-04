@@ -18,20 +18,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getStatusConfig } from "@/lib/constants/status";
 import { ReturnDialog } from "./return-dialog";
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Draft",
-  submitted: "Submitted",
-  in_review: "In Review",
-  completed: "Completed",
-  sent: "Sent",
-};
-
 const STATUS_BADGE_STYLES: Record<string, string> = {
-  in_review: "bg-blue-100 text-blue-800 text-sm px-3 py-1",
-  completed: "bg-emerald-100 text-emerald-800 text-sm px-3 py-1",
-  draft: "bg-gray-100 text-gray-800 text-sm px-3 py-1",
+  in_review: "text-sm px-3 py-1",
+  completed: "text-sm px-3 py-1",
+  draft: "text-sm px-3 py-1",
 };
 
 interface ReviewActionsProps {
@@ -108,8 +101,8 @@ export function ReviewActions({
   return (
     <div className="flex flex-wrap items-center gap-3">
       {/* Status badge */}
-      <Badge variant="secondary" className={STATUS_BADGE_STYLES[status] ?? "text-sm px-3 py-1"}>
-        {STATUS_LABELS[status] ?? status}
+      <Badge className={`${getStatusConfig(status).className} ${STATUS_BADGE_STYLES[status] ?? "text-sm px-3 py-1"}`}>
+        {getStatusConfig(status).label}
       </Badge>
 
       {/* In Review: Finalize and Return buttons */}

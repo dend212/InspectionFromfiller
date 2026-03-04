@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { CheckSquare, ClipboardList, FilePlus, LayoutDashboard, Users } from "lucide-react";
+import { CheckSquare, ClipboardList, FilePlus, LayoutDashboard, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -15,6 +15,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   ClipboardList,
   CheckSquare,
   Users,
+  Settings,
 };
 
 interface MobileNavProps {
@@ -34,13 +35,18 @@ export function MobileNav({ open, onOpenChange }: MobileNavProps) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="left" className="w-64 p-0">
-        <SheetHeader className="border-b px-4 py-3">
+      <SheetContent side="left" className="w-72 p-0">
+        <SheetHeader className="border-b border-border/60 px-5 py-4">
           <SheetTitle className="flex items-center">
-            <img src="/sewertime-logo.png" alt="SewerTime" className="h-7 w-auto" />
+            <img src="/sewertime-logo.png" alt="SewerTime" className="h-8 w-auto" />
           </SheetTitle>
         </SheetHeader>
-        <nav className="flex flex-col gap-1 p-3">
+        <nav className="flex flex-col gap-1 p-4">
+          <div className="mb-2 px-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+              Navigation
+            </p>
+          </div>
           {visibleItems.map((item) => {
             const Icon = item.icon ? ICON_MAP[item.icon] : null;
             const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -51,13 +57,13 @@ export function MobileNav({ open, onOpenChange }: MobileNavProps) {
                 href={item.href}
                 onClick={() => onOpenChange(false)}
                 className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                   isActive
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                 )}
               >
-                {Icon && <Icon className="size-4 shrink-0" />}
+                {Icon && <Icon className="size-[18px] shrink-0" />}
                 {item.label}
               </Link>
             );

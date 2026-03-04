@@ -141,14 +141,14 @@ describe("InspectionsTable", () => {
       expect(screen.getByText("In Review")).toBeInTheDocument();
     });
 
-    it("renders Complete badge for completed status", () => {
+    it("renders Completed badge for completed status", () => {
       render(
         <InspectionsTable
           {...defaultProps}
           inspections={[makeInspection({ status: "completed" })]}
         />,
       );
-      expect(screen.getByText("Complete")).toBeInTheDocument();
+      expect(screen.getByText("Completed")).toBeInTheDocument();
     });
 
     it("renders Sent badge for sent status", () => {

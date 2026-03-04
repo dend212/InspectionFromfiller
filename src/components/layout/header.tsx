@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import type { AppRole } from "@/types/roles";
 
 export function Header() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -39,12 +38,12 @@ export function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-50 flex h-14 items-center border-b bg-card shadow-sm px-4 lg:px-6">
+    <header className="sticky top-0 z-50 flex h-16 items-center border-b border-border/60 bg-card/80 backdrop-blur-sm shadow-xs px-4 lg:px-8">
       {/* Mobile hamburger */}
       <Button
         variant="ghost"
         size="icon"
-        className="lg:hidden mr-2"
+        className="lg:hidden mr-2 cursor-pointer"
         onClick={() => setMobileOpen(true)}
         aria-label="Open navigation menu"
       >
@@ -53,23 +52,25 @@ export function Header() {
 
       {/* Branding */}
       <div className="flex items-center">
-        <img src="/sewertime-logo.png" alt="SewerTime" className="h-8 w-auto" />
+        <img src="/sewertime-logo.png" alt="SewerTime" className="h-9 w-auto" />
       </div>
 
       {/* Spacer */}
       <div className="flex-1" />
 
       {/* User info + Logout */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         {userEmail && (
-          <span className="text-sm text-muted-foreground hidden sm:inline">{userEmail}</span>
+          <span className="text-sm font-medium text-muted-foreground hidden sm:inline">
+            {userEmail}
+          </span>
         )}
         <Button
           variant="ghost"
           size="sm"
           onClick={handleLogout}
           disabled={loggingOut}
-          className="gap-1.5"
+          className="gap-2 cursor-pointer text-muted-foreground hover:text-foreground"
         >
           <LogOut className="size-4" />
           <span className="hidden sm:inline">{loggingOut ? "Signing out..." : "Sign Out"}</span>

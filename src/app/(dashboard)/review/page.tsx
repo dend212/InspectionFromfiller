@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getStatusConfig, WORKIZ_BADGE_CLASS } from "@/lib/constants/status";
 import { db } from "@/lib/db";
 import { inspections, profiles } from "@/lib/db/schema";
 import { createClient } from "@/lib/supabase/server";
@@ -27,18 +28,8 @@ async function getUserRole(
   }
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Draft",
-  submitted: "Submitted",
-  in_review: "In Review",
-  completed: "Completed",
-  sent: "Sent",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  in_review: "bg-blue-100 text-blue-800",
-  completed: "bg-emerald-100 text-emerald-800",
-};
+const reviewStatusConfig = getStatusConfig("in_review");
+const completedStatusConfig = getStatusConfig("completed");
 
 function formatDate(date: Date | null): string {
   if (!date) return "N/A";
@@ -144,21 +135,21 @@ export default async function ReviewQueuePage() {
               inspection.customerName !== inspection.facilityName;
 
             return (
-              <Link key={inspection.id} href={`/review/${inspection.id}`}>
-                <Card className="transition-colors hover:bg-accent/50">
+              <Link key={inspection.id} href={`/review/${inspection.id}`} className="group">
+                <Card className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary/25 hover:-translate-y-0.5">
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between gap-2">
-                      <CardTitle className="text-base truncate">
+                      <CardTitle className="text-base truncate group-hover:text-primary transition-colors duration-200" title={inspection.facilityName || undefined}>
                         {inspection.facilityName || "Untitled Inspection"}
                       </CardTitle>
                       <div className="flex items-center gap-1.5 shrink-0">
                         {isWorkiz && (
-                          <Badge className="bg-yellow-100 text-yellow-800 text-[10px] px-1.5 py-0">
+                          <Badge className={`${WORKIZ_BADGE_CLASS} text-[10px] px-1.5 py-0`}>
                             Workiz
                           </Badge>
                         )}
-                        <Badge className={STATUS_COLORS.in_review} variant="secondary">
-                          {STATUS_LABELS.in_review}
+                        <Badge className={reviewStatusConfig.className}>
+                          {reviewStatusConfig.label}
                         </Badge>
                       </div>
                     </div>
@@ -169,7 +160,7 @@ export default async function ReviewQueuePage() {
                         <span className="block text-sm">{fullAddress}</span>
                       )}
                       {showWorkizCustomer && (
-                        <span className="block text-xs text-yellow-700">
+                        <span className="block text-xs text-status-warning-foreground">
                           Workiz customer: {inspection.customerName}
                         </span>
                       )}
@@ -206,21 +197,21 @@ export default async function ReviewQueuePage() {
                 inspection.customerName !== inspection.facilityName;
 
               return (
-                <Link key={inspection.id} href={`/review/${inspection.id}`}>
-                  <Card className="transition-colors hover:bg-accent/50">
+                <Link key={inspection.id} href={`/review/${inspection.id}`} className="group">
+                  <Card className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary/25 hover:-translate-y-0.5">
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base truncate">
+                        <CardTitle className="text-base truncate group-hover:text-primary transition-colors duration-200" title={inspection.facilityName || undefined}>
                           {inspection.facilityName || "Untitled Inspection"}
                         </CardTitle>
                         <div className="flex items-center gap-1.5 shrink-0">
                           {isWorkiz && (
-                            <Badge className="bg-yellow-100 text-yellow-800 text-[10px] px-1.5 py-0">
+                            <Badge className={`${WORKIZ_BADGE_CLASS} text-[10px] px-1.5 py-0`}>
                               Workiz
                             </Badge>
                           )}
-                          <Badge className={STATUS_COLORS.completed} variant="secondary">
-                            {STATUS_LABELS.completed}
+                          <Badge className={completedStatusConfig.className}>
+                            {completedStatusConfig.label}
                           </Badge>
                         </div>
                       </div>
@@ -231,7 +222,7 @@ export default async function ReviewQueuePage() {
                           <span className="block text-sm">{fullAddress}</span>
                         )}
                         {showWorkizCustomer && (
-                          <span className="block text-xs text-yellow-700">
+                          <span className="block text-xs text-status-warning-foreground">
                             Workiz customer: {inspection.customerName}
                           </span>
                         )}

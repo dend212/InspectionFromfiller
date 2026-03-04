@@ -54,12 +54,12 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader className="text-center">
-        <div className="mb-3 flex items-center justify-center">
-          <img src="/sewertime-logo.png" alt="SewerTime Septic" className="h-14 w-auto" />
+    <Card className="w-full max-w-sm shadow-lg border-border/60">
+      <CardHeader className="text-center pb-2">
+        <div className="mb-4 flex items-center justify-center">
+          <img src="/sewertime-logo.png" alt="SewerTime Septic" className="h-16 w-auto" />
         </div>
-        <CardDescription>Inspection Management System</CardDescription>
+        <CardDescription className="text-sm">Inspection Management System</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleLogin} className="space-y-4">
@@ -94,7 +94,7 @@ export function LoginForm() {
               {error}
             </p>
           )}
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full cursor-pointer" disabled={loading}>
             {loading ? "Signing in..." : "Sign In"}
           </Button>
         </form>

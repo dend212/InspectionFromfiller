@@ -18,7 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <Header />
       <div className="flex flex-1">
         <Nav />
-        <main className="flex-1 p-4 lg:p-6">{children}</main>
+        <main className="flex-1 p-4 lg:p-8">{children}</main>
       </div>
     </div>
   );
