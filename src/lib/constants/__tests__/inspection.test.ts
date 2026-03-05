@@ -409,11 +409,11 @@ describe("INSPECTOR_DEFAULTS", () => {
   });
 
   it("has correct company address", () => {
-    expect(INSPECTOR_DEFAULTS.companyAddress).toBe("2375 E Camelback Rd");
+    expect(INSPECTOR_DEFAULTS.companyAddress).toBe("33645 N Cave Creek Rd");
   });
 
   it("has correct company city", () => {
-    expect(INSPECTOR_DEFAULTS.companyCity).toBe("Phoenix");
+    expect(INSPECTOR_DEFAULTS.companyCity).toBe("Cave Creek");
   });
 
   it("has correct company state", () => {
@@ -421,7 +421,7 @@ describe("INSPECTOR_DEFAULTS", () => {
   });
 
   it("has correct company zip", () => {
-    expect(INSPECTOR_DEFAULTS.companyZip).toBe("85016");
+    expect(INSPECTOR_DEFAULTS.companyZip).toBe("85331");
   });
 
   it("has correct certification number", () => {

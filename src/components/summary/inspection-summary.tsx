@@ -6,6 +6,7 @@ import { useState } from "react";
 
 interface SummaryData {
   token: string;
+  expiresAt: string;
   facilityName: string | null;
   facilityAddress: string | null;
   facilityCity: string | null;
@@ -98,6 +99,12 @@ export function InspectionSummary({ data }: { data: SummaryData }) {
         year: "numeric",
       })
     : null;
+
+  const formattedExpiry = new Date(data.expiresAt).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 
   const mailtoSubject = encodeURIComponent(
     `Re: Inspection Report - ${data.facilityAddress || "Property Inspection"}`,
@@ -387,6 +394,9 @@ export function InspectionSummary({ data }: { data: SummaryData }) {
         <p>{data.company.company}</p>
         <p className="mt-0.5">
           {data.company.certificationNumber} | {data.company.registrationNumber}
+        </p>
+        <p className="mt-2 text-stone-300">
+          This link expires {formattedExpiry}. Please download your report before then.
         </p>
       </footer>
     </div>

@@ -175,10 +175,10 @@ function makeFullFormData(): InspectionFormData {
       sellerZip: "85281",
       inspectorName: "Daniel Endres",
       company: "SewerTime Septic",
-      companyAddress: "2375 E Camelback Rd",
-      companyCity: "Phoenix",
+      companyAddress: "33645 N Cave Creek Rd",
+      companyCity: "Cave Creek",
       companyState: "AZ",
-      companyZip: "85016",
+      companyZip: "85331",
       certificationNumber: "NAWT #15805",
       registrationNumber: "CR-37",
       truckNumber: "ADEQ Truck #2833",
@@ -396,10 +396,10 @@ describe("mapFormDataToFields", () => {
 
     it("maps inspector fields", () => {
       expect(result.textFields.inspectorName).toBe("Daniel Endres");
-      expect(result.textFields.inspectorAddress).toBe("2375 E Camelback Rd");
-      expect(result.textFields.inspectorCity).toBe("Phoenix");
+      expect(result.textFields.inspectorAddress).toBe("33645 N Cave Creek Rd");
+      expect(result.textFields.inspectorCity).toBe("Cave Creek");
       expect(result.textFields.inspectorState).toBe("AZ");
-      expect(result.textFields.inspectorZip).toBe("85016");
+      expect(result.textFields.inspectorZip).toBe("85331");
       expect(result.textFields.inspectorCompany).toBe("SewerTime Septic");
     });
 

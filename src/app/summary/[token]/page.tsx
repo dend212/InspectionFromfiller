@@ -74,6 +74,7 @@ export default async function SummaryPage({ params }: SummaryPageProps) {
 
   const summaryData = {
     token,
+    expiresAt: summary.expiresAt.toISOString(),
     facilityName: inspection.facilityName,
     facilityAddress: inspection.facilityAddress,
     facilityCity: inspection.facilityCity,
