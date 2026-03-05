@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronRight,
+  Download,
   ImageIcon,
   Loader2,
   RefreshCw,
@@ -12,7 +13,7 @@ import {
   Video,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
@@ -122,6 +123,32 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
 
   const { generatePdf, pdfData, isGenerating, error, clearPdf } = usePdfGeneration();
 
+  // Finalized PDF state — for showing the exact server-generated PDF
+  const [finalizedPdfUrl, setFinalizedPdfUrl] = useState<string | null>(null);
+  const [loadingFinalizedPdf, setLoadingFinalizedPdf] = useState(false);
+
+  const fetchFinalizedPdf = useCallback(async () => {
+    setLoadingFinalizedPdf(true);
+    try {
+      const res = await fetch(`/api/inspections/${inspection.id}/download`);
+      if (res.ok) {
+        const data = await res.json();
+        setFinalizedPdfUrl(data.downloadUrl);
+      }
+    } catch (err) {
+      console.error("Failed to fetch finalized PDF:", err);
+    } finally {
+      setLoadingFinalizedPdf(false);
+    }
+  }, [inspection.id]);
+
+  // Auto-fetch finalized PDF on mount if already completed/sent
+  useEffect(() => {
+    if ((status === "completed" || status === "sent") && !finalizedPdfUrl) {
+      fetchFinalizedPdf();
+    }
+  }, [status, finalizedPdfUrl, fetchFinalizedPdf]);
+
   const isDirty = form.formState.isDirty;
 
   const handleRegenerate = useCallback(async () => {
@@ -157,6 +184,11 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
 
   const handleStatusChange = (newStatus: string) => {
     setStatus(newStatus);
+    if (newStatus === "completed") {
+      fetchFinalizedPdf();
+    } else {
+      setFinalizedPdfUrl(null);
+    }
   };
 
   const toggleShowAll = (section: number) => {
@@ -887,17 +919,39 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
                   </p>
                 )}
 
-                {pdfData ? (
+                {isReadOnly && finalizedPdfUrl ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium">Finalized Report</h3>
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={finalizedPdfUrl} target="_blank" rel="noopener noreferrer">
+                          <Download className="size-4" />
+                          Download PDF
+                        </a>
+                      </Button>
+                    </div>
+                    <iframe
+                      src={finalizedPdfUrl}
+                      className="h-[80vh] w-full rounded-lg border"
+                      title="Finalized PDF"
+                    />
+                  </div>
+                ) : isReadOnly && loadingFinalizedPdf ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <Loader2 className="size-8 mb-2 animate-spin opacity-30" />
+                    <p className="text-sm">Loading finalized report...</p>
+                  </div>
+                ) : pdfData ? (
                   <PdfPreview
                     pdfData={pdfData}
                     facilityName={form.watch("facilityInfo.facilityName") || undefined}
                   />
-                ) : (
+                ) : !isReadOnly ? (
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                     <RefreshCw className="size-8 mb-2 opacity-30" />
                     <p className="text-sm">Click &quot;Regenerate PDF&quot; to preview</p>
                   </div>
-                )}
+                ) : null}
               </CardContent>
             </Card>
           </div>

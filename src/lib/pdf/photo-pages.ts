@@ -109,7 +109,7 @@ function cardTopY(index: number): number {
 // Data helpers
 // ---------------------------------------------------------------------------
 
-/** Fetch image bytes from a signed URL */
+/** Fetch image bytes from a signed URL, resize & compress for PDF embedding (server-side only) */
 async function fetchImageBytes(
   url: string,
 ): Promise<{ bytes: Uint8Array; isPng: boolean } | null> {
@@ -117,14 +117,32 @@ async function fetchImageBytes(
     const res = await fetch(url);
     if (!res.ok) return null;
     const buf = await res.arrayBuffer();
-    const bytes = new Uint8Array(buf);
+    const rawBytes = new Uint8Array(buf);
+
+    // Server-side: resize to max 800px wide and convert to JPEG at quality 80.
+    // 800px is ~3.2x the 248pt display area — crisp on retina/zoom.
+    // Client-side: skip compression (sharp is Node.js only).
+    if (typeof window === "undefined") {
+      try {
+        const sharp = (await import("sharp")).default;
+        const compressed = await sharp(Buffer.from(buf))
+          .resize(800, undefined, { withoutEnlargement: true, fit: "inside" })
+          .jpeg({ quality: 80, mozjpeg: true })
+          .toBuffer();
+        return { bytes: new Uint8Array(compressed), isPng: false };
+      } catch {
+        // Fall through to raw bytes if sharp fails
+      }
+    }
+
+    // Client-side fallback or sharp failure: use raw bytes
     const isPng =
-      bytes.length > 4 &&
-      bytes[0] === 0x89 &&
-      bytes[1] === 0x50 &&
-      bytes[2] === 0x4e &&
-      bytes[3] === 0x47;
-    return { bytes, isPng };
+      rawBytes.length > 4 &&
+      rawBytes[0] === 0x89 &&
+      rawBytes[1] === 0x50 &&
+      rawBytes[2] === 0x4e &&
+      rawBytes[3] === 0x47;
+    return { bytes: rawBytes, isPng };
   } catch {
     return null;
   }

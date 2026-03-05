@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["pdf-lib", "@pdfme/generator", "@pdfme/common", "@pdfme/schemas"],
+  serverExternalPackages: ["pdf-lib", "@pdfme/generator", "@pdfme/common", "@pdfme/schemas", "sharp"],
 };
 
 export default nextConfig;

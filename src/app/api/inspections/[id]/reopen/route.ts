@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { inspections } from "@/lib/db/schema";
@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 
 /**
  * POST /api/inspections/[id]/reopen
- * Transition: completed -> in_review
+ * Transition: completed|sent -> in_review
  * Allowed: admin only
  */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -40,7 +40,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Forbidden: admin only" }, { status: 403 });
   }
 
-  // Atomic status transition: only update if current status is "completed"
+  // Atomic status transition: only update if current status is "completed" or "sent"
   const result = await db
     .update(inspections)
     .set({
@@ -50,12 +50,17 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       reviewedBy: null,
       updatedAt: new Date(),
     })
-    .where(and(eq(inspections.id, id), eq(inspections.status, "completed")))
+    .where(
+      and(
+        eq(inspections.id, id),
+        or(eq(inspections.status, "completed"), eq(inspections.status, "sent")),
+      ),
+    )
     .returning({ id: inspections.id });
 
   if (result.length === 0) {
     return NextResponse.json(
-      { error: "Cannot reopen: inspection is not completed" },
+      { error: "Cannot reopen: inspection is not completed or sent" },
       { status: 409 },
     );
   }

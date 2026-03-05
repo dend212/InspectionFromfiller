@@ -88,6 +88,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const buffer = Buffer.from(await blob.arrayBuffer());
+  console.log(`[send-email] PDF size: ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
 
   // Check buffer size: base64 encoding increases size by ~33%
   const base64Size = buffer.length * (4 / 3);

@@ -59,8 +59,14 @@ export function ReviewActions({
         body: JSON.stringify({ selectedMediaIds }),
       });
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to finalize");
+        let errorMessage = "Failed to finalize";
+        try {
+          const data = await res.json();
+          errorMessage = data.error || errorMessage;
+        } catch {
+          errorMessage = `Server error (${res.status}): ${res.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
       toast.success("Inspection finalized successfully");
       onStatusChange("completed");
@@ -80,8 +86,14 @@ export function ReviewActions({
         headers: { "Content-Type": "application/json" },
       });
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to reopen");
+        let errorMessage = "Failed to reopen";
+        try {
+          const data = await res.json();
+          errorMessage = data.error || errorMessage;
+        } catch {
+          errorMessage = `Server error (${res.status}): ${res.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
       toast.success("Inspection reopened for editing");
       onStatusChange("in_review");
