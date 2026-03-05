@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Download, FileText, Loader2, Mail, Phone } from "lucide-react";
+import { Camera, ChevronDown, Download, FileText, Loader2, Mail, Phone, X } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
 
@@ -33,6 +33,12 @@ interface SummaryData {
     email: string;
   };
   hasPdf: boolean;
+  media: {
+    signedUrl: string | null;
+    type: "photo" | "video";
+    label: string | null;
+    description: string | null;
+  }[];
 }
 
 const CONDITION_MAP: Record<string, { label: string; color: string; bgColor: string }> = {
@@ -76,6 +82,10 @@ function ConditionIndicator({ condition }: { condition: string | null }) {
 export function InspectionSummary({ data }: { data: SummaryData }) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const photos = data.media.filter((m) => m.type === "photo" && m.signedUrl);
+  const videos = data.media.filter((m) => m.type === "video" && m.signedUrl);
 
   const fullAddress = [data.facilityAddress, data.facilityCity, data.facilityState, data.facilityZip]
     .filter(Boolean)
@@ -271,6 +281,106 @@ export function InspectionSummary({ data }: { data: SummaryData }) {
           )}
         </div>
       </div>
+
+      {/* Photo & Video Gallery */}
+      {(photos.length > 0 || videos.length > 0) && (
+        <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-stone-500">
+            <Camera className="size-4" />
+            Inspection Photos
+            <span className="ml-1 text-xs font-normal normal-case text-stone-400">
+              ({photos.length + videos.length})
+            </span>
+          </h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {photos.map((photo, i) => (
+              <button
+                key={i}
+                onClick={() => setLightboxIndex(i)}
+                className="group relative aspect-square overflow-hidden rounded-lg border border-stone-200 bg-stone-100"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photo.signedUrl!}
+                  alt={photo.description || `Inspection photo ${i + 1}`}
+                  className="size-full object-cover transition-transform group-hover:scale-105"
+                  loading="lazy"
+                />
+                {photo.description && (
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2 pb-2 pt-6">
+                    <p className="text-xs text-white line-clamp-2">{photo.description}</p>
+                  </div>
+                )}
+              </button>
+            ))}
+            {videos.map((video, i) => (
+              <div
+                key={`video-${i}`}
+                className="relative aspect-square overflow-hidden rounded-lg border border-stone-200 bg-stone-900"
+              >
+                <video
+                  src={video.signedUrl!}
+                  className="size-full object-cover"
+                  controls
+                  preload="metadata"
+                />
+                {video.description && (
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2 pb-2 pt-6">
+                    <p className="text-xs text-white line-clamp-2">{video.description}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxIndex !== null && photos[lightboxIndex] && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightboxIndex(null)}
+        >
+          <button
+            onClick={() => setLightboxIndex(null)}
+            className="absolute top-4 right-4 rounded-full bg-white/20 p-2 text-white transition-colors hover:bg-white/30"
+          >
+            <X className="size-5" />
+          </button>
+          <div className="relative max-h-[90vh] max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photos[lightboxIndex].signedUrl!}
+              alt={photos[lightboxIndex].description || "Inspection photo"}
+              className="max-h-[85vh] max-w-full rounded-lg object-contain"
+            />
+            {photos[lightboxIndex].description && (
+              <p className="mt-2 text-center text-sm text-white/80">
+                {photos[lightboxIndex].description}
+              </p>
+            )}
+            {photos.length > 1 && (
+              <div className="mt-3 flex justify-center gap-3">
+                <button
+                  onClick={() => setLightboxIndex((lightboxIndex - 1 + photos.length) % photos.length)}
+                  className="rounded-full bg-white/20 px-4 py-1.5 text-sm text-white hover:bg-white/30"
+                >
+                  Prev
+                </button>
+                <span className="py-1.5 text-sm text-white/60">
+                  {lightboxIndex + 1} / {photos.length}
+                </span>
+                <button
+                  onClick={() => setLightboxIndex((lightboxIndex + 1) % photos.length)}
+                  className="rounded-full bg-white/20 px-4 py-1.5 text-sm text-white hover:bg-white/30"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="mt-10 border-t border-stone-200 pt-6 text-center text-xs text-stone-400">

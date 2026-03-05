@@ -1,7 +1,8 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { inspections, inspectionSummaries, profiles } from "@/lib/db/schema";
+import { inspections, inspectionMedia, inspectionSummaries, profiles } from "@/lib/db/schema";
 import { COMPANY_CONTACT, INSPECTOR_DEFAULTS } from "@/lib/constants/inspection";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { InspectionSummary } from "@/components/summary/inspection-summary";
 import { SummaryExpired } from "@/components/summary/summary-expired";
 import type { InspectionFormData } from "@/types/inspection";
@@ -47,6 +48,28 @@ export default async function SummaryPage({ params }: SummaryPageProps) {
     .where(eq(profiles.id, inspection.inspectorId))
     .limit(1);
 
+  // Load media (photos & videos) with signed URLs
+  const mediaRecords = await db
+    .select()
+    .from(inspectionMedia)
+    .where(eq(inspectionMedia.inspectionId, summary.inspectionId))
+    .orderBy(asc(inspectionMedia.sortOrder), asc(inspectionMedia.createdAt));
+
+  const admin = createAdminClient();
+  const mediaWithUrls = await Promise.all(
+    mediaRecords.map(async (m) => {
+      const { data } = await admin.storage
+        .from("inspection-media")
+        .createSignedUrl(m.storagePath, 3600);
+      return {
+        signedUrl: data?.signedUrl ?? null,
+        type: m.type as "photo" | "video",
+        label: m.label,
+        description: m.description,
+      };
+    }),
+  );
+
   const formData = inspection.formData as InspectionFormData | null;
 
   const summaryData = {
@@ -66,6 +89,7 @@ export default async function SummaryPage({ params }: SummaryPageProps) {
     company: INSPECTOR_DEFAULTS,
     contact: COMPANY_CONTACT,
     hasPdf: !!inspection.finalizedPdfPath,
+    media: mediaWithUrls.filter((m) => m.signedUrl),
   };
 
   return <InspectionSummary data={summaryData} />;
