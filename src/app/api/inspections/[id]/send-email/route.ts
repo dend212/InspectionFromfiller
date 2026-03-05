@@ -45,14 +45,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   // Parse request body
-  let body: { recipientEmail?: string; subject?: string; personalNote?: string };
+  let body: { recipientEmail?: string; subject?: string; personalNote?: string; summaryUrl?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { recipientEmail, subject, personalNote } = body;
+  const { recipientEmail, subject, personalNote, summaryUrl } = body;
 
   if (!recipientEmail || !recipientEmail.includes("@")) {
     return NextResponse.json({ error: "A valid recipient email is required" }, { status: 400 });
@@ -76,40 +76,68 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  // Download PDF from Supabase Storage using admin client
-  const admin = createAdminClient();
-  const { data: blob, error: downloadError } = await admin.storage
-    .from("inspection-media")
-    .download(inspection.finalizedPdfPath);
-
-  if (downloadError || !blob) {
-    console.error("PDF download failed:", downloadError);
-    return NextResponse.json({ error: "Failed to download PDF from storage" }, { status: 500 });
-  }
-
-  const buffer = Buffer.from(await blob.arrayBuffer());
-  console.log(`[send-email] PDF size: ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
-
-  // Check buffer size: base64 encoding increases size by ~33%
-  const base64Size = buffer.length * (4 / 3);
-  const MAX_ATTACHMENT_SIZE = 35 * 1024 * 1024; // 35MB
-  if (base64Size > MAX_ATTACHMENT_SIZE) {
-    return NextResponse.json(
-      { error: "PDF too large for email (>35MB). Please download and send manually." },
-      { status: 400 },
-    );
-  }
-
-  // Build download filename
-  const downloadFilename = buildDownloadFilename(
-    inspection.facilityAddress,
-    inspection.completedAt,
-  );
-
-  // Compose email body
   const addressLine = inspection.facilityAddress || "the inspected property";
   const notePart = personalNote ? `${personalNote}\n\n` : "";
-  const emailBody = `Dear Customer,
+  const resend = new Resend(process.env.RESEND_API_KEY!);
+  const fromAddress = `SewerTime Inspections <${process.env.EMAIL_FROM_ADDRESS || "onboarding@resend.dev"}>`;
+
+  if (summaryUrl) {
+    // Summary URL mode: send link instead of PDF attachment
+    const emailBody = `Dear Customer,
+
+Your inspection summary for ${addressLine} is ready. You can view it here:
+
+${summaryUrl}
+
+${notePart}This link includes your inspection report download and a summary of findings.
+
+If you have any questions, please don't hesitate to contact us.
+
+Best regards,
+SewerTime Septic`;
+
+    try {
+      await resend.emails.send({
+        from: fromAddress,
+        to: [recipientEmail],
+        subject,
+        text: emailBody,
+      });
+    } catch (err) {
+      console.error("Resend email failed:", err);
+      const message = err instanceof Error ? err.message : "Unknown error";
+      return NextResponse.json({ error: `Failed to send email: ${message}` }, { status: 500 });
+    }
+  } else {
+    // PDF attachment mode (original flow)
+    const admin = createAdminClient();
+    const { data: blob, error: downloadError } = await admin.storage
+      .from("inspection-media")
+      .download(inspection.finalizedPdfPath);
+
+    if (downloadError || !blob) {
+      console.error("PDF download failed:", downloadError);
+      return NextResponse.json({ error: "Failed to download PDF from storage" }, { status: 500 });
+    }
+
+    const buffer = Buffer.from(await blob.arrayBuffer());
+    console.log(`[send-email] PDF size: ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
+
+    const base64Size = buffer.length * (4 / 3);
+    const MAX_ATTACHMENT_SIZE = 35 * 1024 * 1024;
+    if (base64Size > MAX_ATTACHMENT_SIZE) {
+      return NextResponse.json(
+        { error: "PDF too large for email (>35MB). Please download and send manually." },
+        { status: 400 },
+      );
+    }
+
+    const downloadFilename = buildDownloadFilename(
+      inspection.facilityAddress,
+      inspection.completedAt,
+    );
+
+    const emailBody = `Dear Customer,
 
 Please find attached your inspection report for ${addressLine}.
 
@@ -118,27 +146,24 @@ ${notePart}If you have any questions about this report, please don't hesitate to
 Best regards,
 SewerTime Septic`;
 
-  // Send via Resend
-  const resend = new Resend(process.env.RESEND_API_KEY!);
-  const fromAddress = `SewerTime Inspections <${process.env.EMAIL_FROM_ADDRESS || "onboarding@resend.dev"}>`;
-
-  try {
-    await resend.emails.send({
-      from: fromAddress,
-      to: [recipientEmail],
-      subject,
-      text: emailBody,
-      attachments: [
-        {
-          content: buffer.toString("base64"),
-          filename: downloadFilename,
-        },
-      ],
-    });
-  } catch (err) {
-    console.error("Resend email failed:", err);
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: `Failed to send email: ${message}` }, { status: 500 });
+    try {
+      await resend.emails.send({
+        from: fromAddress,
+        to: [recipientEmail],
+        subject,
+        text: emailBody,
+        attachments: [
+          {
+            content: buffer.toString("base64"),
+            filename: downloadFilename,
+          },
+        ],
+      });
+    } catch (err) {
+      console.error("Resend email failed:", err);
+      const message = err instanceof Error ? err.message : "Unknown error";
+      return NextResponse.json({ error: `Failed to send email: ${message}` }, { status: 500 });
+    }
   }
 
   // Record send history (only after successful send)

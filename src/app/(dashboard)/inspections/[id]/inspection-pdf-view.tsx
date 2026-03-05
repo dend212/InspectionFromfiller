@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeft, Calendar, Camera, Download, Edit, Loader2, Mail, MapPin } from "lucide-react";
+import { ArrowLeft, Calendar, Camera, Download, Edit, Link2, Loader2, Mail, MapPin } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import { GenerateSummaryDialog } from "@/components/dashboard/generate-summary-dialog";
 import { SendEmailDialog } from "@/components/dashboard/send-email-dialog";
 import { GeneratePdfButton } from "@/components/inspection/generate-pdf-button";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
@@ -45,6 +46,8 @@ export function InspectionPdfView({
 }: InspectionPdfViewProps) {
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const [sendEmailDialogOpen, setSendEmailDialogOpen] = useState(false);
+  const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
+  const [pendingSummaryUrl, setPendingSummaryUrl] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const { generatePdf, pdfData, isGenerating, error, clearPdf } = usePdfGeneration();
 
@@ -154,6 +157,14 @@ export function InspectionPdfView({
                   <Button
                     size="sm"
                     variant="outline"
+                    onClick={() => setSummaryDialogOpen(true)}
+                  >
+                    <Link2 className="size-4" />
+                    Summary Link
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={handleDownload}
                     disabled={isDownloading}
                   >
@@ -214,7 +225,23 @@ export function InspectionPdfView({
         facilityAddress={facilityAddress}
         customerEmail={customerEmail}
         open={sendEmailDialogOpen}
-        onOpenChange={setSendEmailDialogOpen}
+        onOpenChange={(open) => {
+          setSendEmailDialogOpen(open);
+          if (!open) setPendingSummaryUrl(null);
+        }}
+        summaryUrl={pendingSummaryUrl}
+      />
+
+      {/* Generate Summary Dialog */}
+      <GenerateSummaryDialog
+        inspectionId={inspectionId}
+        facilityAddress={facilityAddress}
+        open={summaryDialogOpen}
+        onOpenChange={setSummaryDialogOpen}
+        onSummaryGenerated={(url) => {
+          setPendingSummaryUrl(url);
+          setSendEmailDialogOpen(true);
+        }}
       />
     </div>
   );

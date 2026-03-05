@@ -30,6 +30,7 @@ interface SendEmailDialogProps {
   customerEmail: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  summaryUrl?: string | null;
 }
 
 export function SendEmailDialog({
@@ -38,6 +39,7 @@ export function SendEmailDialog({
   customerEmail,
   open,
   onOpenChange,
+  summaryUrl,
 }: SendEmailDialogProps) {
   const [recipientEmail, setRecipientEmail] = useState(customerEmail ?? "");
   const [subject, setSubject] = useState(
@@ -47,11 +49,17 @@ export function SendEmailDialog({
   const [isSending, setIsSending] = useState(false);
   const [emailHistory, setEmailHistory] = useState<EmailHistoryEntry[]>([]);
 
+  const isSummaryMode = !!summaryUrl;
+
   // Reset fields and fetch history when dialog opens
   useEffect(() => {
     if (open) {
       setRecipientEmail(customerEmail ?? "");
-      setSubject(`Inspection Report - ${facilityAddress || "Property Inspection"}`);
+      setSubject(
+        isSummaryMode
+          ? `Inspection Summary - ${facilityAddress || "Property Inspection"}`
+          : `Inspection Report - ${facilityAddress || "Property Inspection"}`,
+      );
       setPersonalNote("");
       setIsSending(false);
 
@@ -61,14 +69,27 @@ export function SendEmailDialog({
         .then((data: EmailHistoryEntry[]) => setEmailHistory(data))
         .catch(() => setEmailHistory([]));
     }
-  }, [open, inspectionId, customerEmail, facilityAddress]);
+  }, [open, inspectionId, customerEmail, facilityAddress, isSummaryMode]);
 
   const isValidEmail = recipientEmail.includes("@") && recipientEmail.trim().length > 0;
 
   // Compose preview body (matches server template)
   const addressLine = facilityAddress || "the inspected property";
   const notePart = personalNote ? `${personalNote}\n\n` : "";
-  const previewBody = `Dear Customer,
+  const previewBody = isSummaryMode
+    ? `Dear Customer,
+
+Your inspection summary for ${addressLine} is ready. You can view it here:
+
+${summaryUrl}
+
+${notePart}This link includes your inspection report download and a summary of findings.
+
+If you have any questions, please don't hesitate to contact us.
+
+Best regards,
+SewerTime Septic`
+    : `Dear Customer,
 
 Please find attached your inspection report for ${addressLine}.
 
@@ -89,6 +110,7 @@ SewerTime Septic`;
           recipientEmail: recipientEmail.trim(),
           subject,
           personalNote: personalNote.trim() || undefined,
+          summaryUrl: summaryUrl || undefined,
         }),
       });
 
@@ -112,10 +134,12 @@ SewerTime Septic`;
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <Mail className="size-5" />
-            Send Report to Customer
+            {isSummaryMode ? "Send Summary Link" : "Send Report to Customer"}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            Send the finalized inspection report as a PDF attachment.
+            {isSummaryMode
+              ? "Send the inspection summary page link to the customer."
+              : "Send the finalized inspection report as a PDF attachment."}
           </AlertDialogDescription>
         </AlertDialogHeader>
 

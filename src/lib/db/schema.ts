@@ -107,6 +107,19 @@ export const inspectionEmails = pgTable("inspection_emails", {
   sentBy: uuid("sent_by").references(() => profiles.id),
 });
 
+// Inspection summary pages (public tokenized URLs)
+export const inspectionSummaries = pgTable("inspection_summaries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  inspectionId: uuid("inspection_id")
+    .references(() => inspections.id, { onDelete: "cascade" })
+    .notNull(),
+  token: varchar("token", { length: 32 }).notNull().unique(),
+  recommendations: text("recommendations").notNull(),
+  createdBy: uuid("created_by").references(() => profiles.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
 // Relations
 export const profilesRelations = relations(profiles, ({ many }) => ({
   inspections: many(inspections),
@@ -127,6 +140,7 @@ export const inspectionsRelations = relations(inspections, ({ one, many }) => ({
   }),
   media: many(inspectionMedia),
   emails: many(inspectionEmails),
+  summaries: many(inspectionSummaries),
 }));
 
 export const inspectionMediaRelations = relations(inspectionMedia, ({ one }) => ({
@@ -143,6 +157,17 @@ export const inspectionEmailsRelations = relations(inspectionEmails, ({ one }) =
   }),
   sender: one(profiles, {
     fields: [inspectionEmails.sentBy],
+    references: [profiles.id],
+  }),
+}));
+
+export const inspectionSummariesRelations = relations(inspectionSummaries, ({ one }) => ({
+  inspection: one(inspections, {
+    fields: [inspectionSummaries.inspectionId],
+    references: [inspections.id],
+  }),
+  creator: one(profiles, {
+    fields: [inspectionSummaries.createdBy],
     references: [profiles.id],
   }),
 }));

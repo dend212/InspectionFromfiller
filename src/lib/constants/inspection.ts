@@ -185,6 +185,12 @@ export const ACTUAL_FLOW_EVALUATION = [
   { value: "unknown", label: "Unknown" },
 ] as const;
 
+/** SewerTime company contact info (public-facing) */
+export const COMPANY_CONTACT = {
+  phone: "(602) 777-7867",
+  email: "service@sewertime.com",
+} as const;
+
 /** Hardcoded SewerTime Septic inspector defaults (FORM-04) */
 export const INSPECTOR_DEFAULTS = {
   company: "SewerTime Septic",
