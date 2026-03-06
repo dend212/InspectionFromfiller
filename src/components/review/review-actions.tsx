@@ -2,7 +2,7 @@
 
 import { CheckCircle, Link2, Loader2, Mail, RotateCcw, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SendEmailDialog } from "@/components/dashboard/send-email-dialog";
 import {
@@ -58,6 +58,19 @@ export function ReviewActions({
   const [summaryUrl, setSummaryUrl] = useState<string | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [recommendations, setRecommendations] = useState("");
+  const [recommendationsLoaded, setRecommendationsLoaded] = useState(false);
+
+  // Pre-fill recommendations from the most recent summary for this inspection
+  useEffect(() => {
+    if (recommendationsLoaded) return;
+    fetch(`/api/inspections/${inspectionId}/generate-summary`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.recommendations) setRecommendations(data.recommendations);
+      })
+      .catch(() => {})
+      .finally(() => setRecommendationsLoaded(true));
+  }, [inspectionId, recommendationsLoaded]);
 
   const handleFinalize = async () => {
     setIsFinalizing(true);
