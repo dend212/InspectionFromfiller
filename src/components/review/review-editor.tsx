@@ -33,7 +33,12 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { usePdfGeneration } from "@/hooks/use-pdf-generation";
-import { STEP_LABELS } from "@/lib/constants/inspection";
+import {
+  BAFFLE_CONDITIONS,
+  BAFFLE_MATERIALS,
+  GP402_SYSTEM_TYPES,
+  STEP_LABELS,
+} from "@/lib/constants/inspection";
 import { getDefaultFormValues, inspectionFormSchema } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 import { ReviewActions } from "./review-actions";
@@ -306,6 +311,83 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
     </div>
   );
 
+  // Helper to render a button group selector (matches frontend ButtonGroup)
+  const renderButtonGroup = (
+    name: string,
+    label: string,
+    options: readonly { value: string; label: string }[],
+  ) => (
+    <FormField
+      control={form.control}
+      name={name as any}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel className="text-xs font-medium text-muted-foreground">{label}</FormLabel>
+          <div className="flex gap-1">
+            {options.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                disabled={isReadOnly}
+                onClick={() => field.onChange(field.value === opt.value ? "" : opt.value)}
+                className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  field.value === opt.value
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-input bg-background text-foreground hover:bg-accent"
+                } ${isReadOnly ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </FormItem>
+      )}
+    />
+  );
+
+  // Helper to render a multi-select checkbox group (matches frontend checkbox arrays)
+  const renderCheckboxGroup = (
+    name: string,
+    label: string,
+    options: readonly { value: string; label: string }[],
+  ) => (
+    <FormField
+      control={form.control}
+      name={name as any}
+      render={({ field }) => {
+        const selected: string[] = (field.value as string[]) ?? [];
+        const toggle = (value: string) => {
+          const next = selected.includes(value)
+            ? selected.filter((v) => v !== value)
+            : [...selected, value];
+          field.onChange(next);
+        };
+        return (
+          <FormItem>
+            <FormLabel className="text-xs font-medium text-muted-foreground">{label}</FormLabel>
+            <div className="flex flex-wrap gap-1">
+              {options.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  disabled={isReadOnly}
+                  onClick={() => toggle(opt.value)}
+                  className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+                    selected.includes(opt.value)
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-input bg-background text-foreground hover:bg-accent"
+                  } ${isReadOnly ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </FormItem>
+        );
+      }}
+    />
+  );
+
   return (
     <div className="space-y-4">
       {/* Navigation */}
@@ -354,6 +436,8 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
                 {renderTextField("facilityInfo.facilityZip", "Zip")}
                 {renderTextField("facilityInfo.taxParcelNumber", "Tax Parcel Number")}
                 {renderTextField("facilityInfo.dateOfInspection", "Date of Inspection")}
+                {renderButtonGroup("facilityInfo.recordsAvailable", "Records Available", YES_NO_OPTIONS)}
+                {renderButtonGroup("facilityInfo.isCesspool", "Is Cesspool", YES_NO_OPTIONS)}
               </div>
 
               <div className="mt-4 border-t pt-4">
@@ -470,12 +554,12 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
             {/* Section 2: General Treatment */}
             <ReviewSection title={STEP_LABELS[1]}>
               <div className="space-y-4">
-                {renderReadOnly(
+                {renderCheckboxGroup(
+                  "generalTreatment.systemTypes",
                   "System Types",
-                  (form.getValues("generalTreatment.systemTypes") ?? []).join(", ") ||
-                    "None selected",
+                  GP402_SYSTEM_TYPES,
                 )}
-                {renderSelectField(
+                {renderButtonGroup(
                   "generalTreatment.hasPerformanceAssurancePlan",
                   "Performance Assurance Plan",
                   YES_NO_OPTIONS,
@@ -629,17 +713,20 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
                           `septicTank.tanks.${index}.compromisedTank`,
                           "Compromised Tank",
                         )}
-                        {renderReadOnly(
+                        {renderCheckboxGroup(
+                          `septicTank.tanks.${index}.baffleMaterial`,
                           "Baffle Material",
-                          ((form.getValues(`septicTank.tanks.${index}.baffleMaterial`) ?? []) as string[]).join(", ") || undefined,
+                          BAFFLE_MATERIALS,
                         )}
-                        {renderReadOnly(
+                        {renderCheckboxGroup(
+                          `septicTank.tanks.${index}.inletBaffleCondition`,
                           "Inlet Baffle",
-                          ((form.getValues(`septicTank.tanks.${index}.inletBaffleCondition`) ?? []) as string[]).join(", ") || undefined,
+                          BAFFLE_CONDITIONS,
                         )}
-                        {renderReadOnly(
+                        {renderCheckboxGroup(
+                          `septicTank.tanks.${index}.outletBaffleCondition`,
                           "Outlet Baffle",
-                          ((form.getValues(`septicTank.tanks.${index}.outletBaffleCondition`) ?? []) as string[]).join(", ") || undefined,
+                          BAFFLE_CONDITIONS,
                         )}
                         {renderTextField(
                           `septicTank.tanks.${index}.effluentFilterPresent`,
@@ -703,7 +790,7 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
                     PRESENT_OPTIONS,
                   )}
                   {renderTextField("disposalWorks.numberOfPorts", "Number of Ports")}
-                  {renderSelectField(
+                  {renderButtonGroup(
                     "disposalWorks.hydraulicLoadTestPerformed",
                     "Hydraulic Load Test",
                     YES_NO_OPTIONS,
