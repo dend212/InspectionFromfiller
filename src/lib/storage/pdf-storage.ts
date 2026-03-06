@@ -69,6 +69,24 @@ export async function getReportDownloadUrl(
 }
 
 /**
+ * Generate a signed preview URL for displaying a PDF inline (e.g. in an iframe).
+ *
+ * Unlike `getReportDownloadUrl`, this does NOT set Content-Disposition: attachment,
+ * so the browser will render the PDF inline instead of downloading it.
+ */
+export async function getReportPreviewUrl(storagePath: string): Promise<string> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 3600);
+
+  if (error) {
+    throw new Error(`Signed URL creation failed: ${error.message}`);
+  }
+
+  return data.signedUrl;
+}
+
+/**
  * Build a download filename from the facility address and generation date.
  *
  * Format: "123-Main-St_ADEQ_2026-02-26.pdf"

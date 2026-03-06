@@ -123,6 +123,7 @@ export default async function ReviewDetailPage({ params }: { params: Promise<{ i
           createdAt: inspection.createdAt.toISOString(),
           reviewNotes: inspection.reviewNotes,
           customerEmail: inspection.customerEmail ?? null,
+          isFromWorkiz: !!inspection.workizJobId,
         }}
         media={mediaWithUrls}
       />

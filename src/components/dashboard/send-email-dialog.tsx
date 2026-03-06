@@ -28,6 +28,7 @@ interface SendEmailDialogProps {
   inspectionId: string;
   facilityAddress: string | null;
   customerEmail: string | null;
+  isFromWorkiz?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   summaryUrl?: string | null;
@@ -37,6 +38,7 @@ export function SendEmailDialog({
   inspectionId,
   facilityAddress,
   customerEmail,
+  isFromWorkiz,
   open,
   onOpenChange,
   summaryUrl,
@@ -154,6 +156,11 @@ SewerTime Septic`;
               onChange={(e) => setRecipientEmail(e.target.value)}
               placeholder="customer@example.com"
             />
+            {isFromWorkiz && customerEmail && (
+              <p className="text-xs text-amber-600">
+                Pre-filled from Workiz job
+              </p>
+            )}
           </div>
 
           {/* Subject */}

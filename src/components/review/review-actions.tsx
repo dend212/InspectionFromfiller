@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, Loader2, Mail, RotateCcw, Undo2 } from "lucide-react";
+import { CheckCircle, Link2, Loader2, Mail, RotateCcw, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { getStatusConfig } from "@/lib/constants/status";
 import { ReturnDialog } from "./return-dialog";
 
@@ -32,6 +34,7 @@ interface ReviewActionsProps {
   status: string;
   facilityAddress?: string | null;
   customerEmail?: string | null;
+  isFromWorkiz?: boolean;
   selectedMediaIds?: string[];
   onStatusChange: (newStatus: string) => void;
 }
@@ -41,6 +44,7 @@ export function ReviewActions({
   status,
   facilityAddress,
   customerEmail,
+  isFromWorkiz,
   selectedMediaIds,
   onStatusChange,
 }: ReviewActionsProps) {
@@ -49,6 +53,11 @@ export function ReviewActions({
   const [isReopening, setIsReopening] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [sendEmailDialogOpen, setSendEmailDialogOpen] = useState(false);
+  const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
+  const [summaryEmailDialogOpen, setSummaryEmailDialogOpen] = useState(false);
+  const [summaryUrl, setSummaryUrl] = useState<string | null>(null);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [recommendations, setRecommendations] = useState("");
 
   const handleFinalize = async () => {
     setIsFinalizing(true);
@@ -108,6 +117,34 @@ export function ReviewActions({
   const handleReturned = () => {
     onStatusChange("draft");
     router.refresh();
+  };
+
+  const handleGenerateSummary = async () => {
+    if (!recommendations.trim()) {
+      toast.error("Please enter recommendations before generating the summary link.");
+      return;
+    }
+    setIsGeneratingSummary(true);
+    try {
+      const res = await fetch(`/api/inspections/${inspectionId}/generate-summary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recommendations: recommendations.trim() }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Failed to generate summary link");
+      }
+      const data = await res.json();
+      setSummaryUrl(data.summaryUrl);
+      setSummaryDialogOpen(false);
+      setSummaryEmailDialogOpen(true);
+      toast.success("Summary link generated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to generate summary link");
+    } finally {
+      setIsGeneratingSummary(false);
+    }
   };
 
   return (
@@ -176,7 +213,12 @@ export function ReviewActions({
         <>
           <Button size="sm" onClick={() => setSendEmailDialogOpen(true)}>
             <Mail className="size-4" />
-            Send to Customer
+            Send PDF to Customer
+          </Button>
+
+          <Button size="sm" variant="outline" onClick={() => setSummaryDialogOpen(true)}>
+            <Link2 className="size-4" />
+            Send Summary Link
           </Button>
 
           <AlertDialog>
@@ -211,8 +253,51 @@ export function ReviewActions({
             inspectionId={inspectionId}
             facilityAddress={facilityAddress ?? null}
             customerEmail={customerEmail ?? null}
+            isFromWorkiz={isFromWorkiz}
             open={sendEmailDialogOpen}
             onOpenChange={setSendEmailDialogOpen}
+          />
+
+          {/* Summary link generation dialog */}
+          <AlertDialog open={summaryDialogOpen} onOpenChange={setSummaryDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Generate Summary Link</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Enter recommendations for the customer. A shareable summary link will be generated
+                  and you can email it to the customer.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="py-2">
+                <Label htmlFor="recommendations">Recommendations</Label>
+                <Textarea
+                  id="recommendations"
+                  value={recommendations}
+                  onChange={(e) => setRecommendations(e.target.value)}
+                  placeholder="Enter recommendations for the customer..."
+                  rows={4}
+                  className="mt-1"
+                />
+              </div>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <Button onClick={handleGenerateSummary} disabled={isGeneratingSummary}>
+                  {isGeneratingSummary && <Loader2 className="size-4 animate-spin" />}
+                  Generate & Send
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Email dialog for summary link */}
+          <SendEmailDialog
+            inspectionId={inspectionId}
+            facilityAddress={facilityAddress ?? null}
+            customerEmail={customerEmail ?? null}
+            isFromWorkiz={isFromWorkiz}
+            open={summaryEmailDialogOpen}
+            onOpenChange={setSummaryEmailDialogOpen}
+            summaryUrl={summaryUrl}
           />
         </>
       )}

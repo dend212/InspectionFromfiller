@@ -1,45 +1,47 @@
-import { eq } from "drizzle-orm";
-import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
-import { inspections, profiles } from "@/lib/db/schema";
-import { createClient } from "@/lib/supabase/server";
-import { getDefaultFormValues } from "@/lib/validators/inspection";
+"use client";
 
-/**
- * New Inspection Page
- * Creates a new draft inspection with pre-filled inspector info and redirects
- * to the edit wizard. This is a "create and redirect" page, not a form.
- */
-export default async function NewInspectionPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+import { FilePlus, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
-  if (!user) {
-    redirect("/login");
-  }
+export default function NewInspectionPage() {
+  const router = useRouter();
+  const [isCreating, setIsCreating] = useState(false);
 
-  // Look up the user's profile to get their full name
-  const [profile] = await db
-    .select({ fullName: profiles.fullName })
-    .from(profiles)
-    .where(eq(profiles.id, user.id))
-    .limit(1);
+  const handleCreate = async () => {
+    setIsCreating(true);
+    try {
+      const res = await fetch("/api/inspections", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Failed to create inspection");
+      }
+      const inspection = await res.json();
+      router.push(`/inspections/${inspection.id}/edit`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create inspection");
+      setIsCreating(false);
+    }
+  };
 
-  const inspectorName = profile?.fullName ?? user.user_metadata?.full_name ?? "";
-  const defaultFormData = getDefaultFormValues(inspectorName);
-
-  // Create the new inspection
-  const [newInspection] = await db
-    .insert(inspections)
-    .values({
-      inspectorId: user.id,
-      status: "draft",
-      formData: defaultFormData,
-    })
-    .returning();
-
-  // Redirect to the edit wizard for the new inspection
-  redirect(`/inspections/${newInspection.id}/edit`);
+  return (
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6">
+      <div className="text-center">
+        <h1 className="text-2xl font-semibold tracking-tight">New Inspection</h1>
+        <p className="mt-2 text-muted-foreground">
+          Start a new septic system inspection report.
+        </p>
+      </div>
+      <Button size="lg" onClick={handleCreate} disabled={isCreating}>
+        {isCreating ? (
+          <Loader2 className="size-5 animate-spin" />
+        ) : (
+          <FilePlus className="size-5" />
+        )}
+        {isCreating ? "Creating..." : "Create New Inspection"}
+      </Button>
+    </div>
+  );
 }

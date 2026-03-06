@@ -126,6 +126,7 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
 
   // Finalized PDF state — for showing the exact server-generated PDF
   const [finalizedPdfUrl, setFinalizedPdfUrl] = useState<string | null>(null);
+  const [finalizedDownloadUrl, setFinalizedDownloadUrl] = useState<string | null>(null);
   const [loadingFinalizedPdf, setLoadingFinalizedPdf] = useState(false);
 
   const fetchFinalizedPdf = useCallback(async () => {
@@ -134,7 +135,8 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
       const res = await fetch(`/api/inspections/${inspection.id}/download`);
       if (res.ok) {
         const data = await res.json();
-        setFinalizedPdfUrl(data.downloadUrl);
+        setFinalizedPdfUrl(data.previewUrl ?? data.downloadUrl);
+        setFinalizedDownloadUrl(data.downloadUrl);
       }
     } catch (err) {
       console.error("Failed to fetch finalized PDF:", err);
@@ -926,7 +928,7 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
                     <div className="flex items-center justify-between">
                       <h3 className="text-sm font-medium">Finalized Report</h3>
                       <Button variant="outline" size="sm" asChild>
-                        <a href={finalizedPdfUrl} target="_blank" rel="noopener noreferrer">
+                        <a href={finalizedDownloadUrl ?? finalizedPdfUrl} target="_blank" rel="noopener noreferrer">
                           <Download className="size-4" />
                           Download PDF
                         </a>

@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { inspections } from "@/lib/db/schema";
-import { buildDownloadFilename, getReportDownloadUrl } from "@/lib/storage/pdf-storage";
+import { buildDownloadFilename, getReportDownloadUrl, getReportPreviewUrl } from "@/lib/storage/pdf-storage";
 import { checkInspectionAccess } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
 
@@ -45,10 +45,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     inspection.completedAt,
   );
 
-  // Generate signed URL (1 hour expiry)
-  let signedUrl: string;
+  // Generate signed URLs (1 hour expiry)
+  let downloadUrl: string;
+  let previewUrl: string;
   try {
-    signedUrl = await getReportDownloadUrl(inspection.finalizedPdfPath, downloadFilename);
+    [downloadUrl, previewUrl] = await Promise.all([
+      getReportDownloadUrl(inspection.finalizedPdfPath, downloadFilename),
+      getReportPreviewUrl(inspection.finalizedPdfPath),
+    ]);
   } catch (err) {
     console.error("Download URL generation failed:", err);
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -59,7 +63,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
 
   return NextResponse.json({
-    downloadUrl: signedUrl,
+    downloadUrl,
+    previewUrl,
     filename: downloadFilename,
   });
 }
