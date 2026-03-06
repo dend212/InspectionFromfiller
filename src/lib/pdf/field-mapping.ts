@@ -46,7 +46,10 @@ function getInitials(name: string): string {
 }
 
 /** Returns true if the baffle condition indicates baffle is present */
-function isBafflePresent(condition: string | undefined): boolean {
+function isBafflePresent(condition: string | string[] | undefined): boolean {
+  if (Array.isArray(condition)) {
+    return condition.includes("present_operational") || condition.includes("present_not_operational");
+  }
   return condition === "present_operational" || condition === "present_not_operational";
 }
 
@@ -355,33 +358,33 @@ export function mapFormDataToFields(data: InspectionFormData): FormFieldMapping 
     defDeterioratingConcrete: !!tank?.deficiencyDeterioratingConcrete,
     defOtherConcerns: !!tank?.deficiencyOther,
 
-    // Baffle material
-    baffleMaterialPrecast: tank?.baffleMaterial === "precast_concrete",
-    baffleMaterialFiberglass: tank?.baffleMaterial === "fiberglass",
-    baffleMaterialPlastic: tank?.baffleMaterial === "plastic",
-    baffleMaterialClay: tank?.baffleMaterial === "clay",
-    baffleMaterialNotDetermined: tank?.baffleMaterial === "not_determined",
+    // Baffle material (multi-select array)
+    baffleMaterialPrecast: tank?.baffleMaterial?.includes("precast_concrete") ?? false,
+    baffleMaterialFiberglass: tank?.baffleMaterial?.includes("fiberglass") ?? false,
+    baffleMaterialPlastic: tank?.baffleMaterial?.includes("plastic") ?? false,
+    baffleMaterialClay: tank?.baffleMaterial?.includes("clay") ?? false,
+    baffleMaterialNotDetermined: tank?.baffleMaterial?.includes("not_determined") ?? false,
 
-    // Inlet baffle
+    // Inlet baffle (multi-select array)
     inletBafflePresent: isBafflePresent(tank?.inletBaffleCondition),
-    inletBaffleOperational: tank?.inletBaffleCondition === "present_operational",
-    inletBaffleNotOperational: tank?.inletBaffleCondition === "present_not_operational",
-    inletBaffleNotPresent: tank?.inletBaffleCondition === "not_present",
-    inletBaffleNotDetermined: tank?.inletBaffleCondition === "not_determined",
+    inletBaffleOperational: tank?.inletBaffleCondition?.includes("present_operational") ?? false,
+    inletBaffleNotOperational: tank?.inletBaffleCondition?.includes("present_not_operational") ?? false,
+    inletBaffleNotPresent: tank?.inletBaffleCondition?.includes("not_present") ?? false,
+    inletBaffleNotDetermined: tank?.inletBaffleCondition?.includes("not_determined") ?? false,
 
-    // Outlet baffle
+    // Outlet baffle (multi-select array)
     outletBafflePresent: isBafflePresent(tank?.outletBaffleCondition),
-    outletBaffleOperational: tank?.outletBaffleCondition === "present_operational",
-    outletBaffleNotOperational: tank?.outletBaffleCondition === "present_not_operational",
-    outletBaffleNotPresent: tank?.outletBaffleCondition === "not_present",
-    outletBaffleNotDetermined: tank?.outletBaffleCondition === "not_determined",
+    outletBaffleOperational: tank?.outletBaffleCondition?.includes("present_operational") ?? false,
+    outletBaffleNotOperational: tank?.outletBaffleCondition?.includes("present_not_operational") ?? false,
+    outletBaffleNotPresent: tank?.outletBaffleCondition?.includes("not_present") ?? false,
+    outletBaffleNotDetermined: tank?.outletBaffleCondition?.includes("not_determined") ?? false,
 
-    // Interior baffle
+    // Interior baffle (multi-select array)
     interiorBafflePresent: isBafflePresent(tank?.interiorBaffleCondition),
-    interiorBaffleOperational: tank?.interiorBaffleCondition === "present_operational",
-    interiorBaffleNotOperational: tank?.interiorBaffleCondition === "present_not_operational",
-    interiorBaffleNotPresent: tank?.interiorBaffleCondition === "not_present",
-    interiorBaffleNotDetermined: tank?.interiorBaffleCondition === "not_determined",
+    interiorBaffleOperational: tank?.interiorBaffleCondition?.includes("present_operational") ?? false,
+    interiorBaffleNotOperational: tank?.interiorBaffleCondition?.includes("present_not_operational") ?? false,
+    interiorBaffleNotPresent: tank?.interiorBaffleCondition?.includes("not_present") ?? false,
+    interiorBaffleNotDetermined: tank?.interiorBaffleCondition?.includes("not_determined") ?? false,
 
     // Effluent filter
     effluentFilterPresent: tank?.effluentFilterPresent === "present",

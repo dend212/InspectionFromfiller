@@ -51,6 +51,7 @@ interface ReviewEditorProps {
     createdAt: string;
     reviewNotes: string | null;
     customerEmail: string | null;
+    isFromWorkiz: boolean;
   };
   media: MediaRecord[];
 }
@@ -328,6 +329,7 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
               status={status}
               facilityAddress={inspection.facilityAddress}
               customerEmail={inspection.customerEmail}
+              isFromWorkiz={inspection.isFromWorkiz}
               selectedMediaIds={Array.from(selectedMediaIds)}
               onStatusChange={handleStatusChange}
             />
@@ -625,17 +627,17 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
                           `septicTank.tanks.${index}.compromisedTank`,
                           "Compromised Tank",
                         )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.baffleMaterial`,
+                        {renderReadOnly(
                           "Baffle Material",
+                          ((form.getValues(`septicTank.tanks.${index}.baffleMaterial`) ?? []) as string[]).join(", ") || undefined,
                         )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.inletBaffleCondition`,
-                          "Inlet Baffle Condition",
+                        {renderReadOnly(
+                          "Inlet Baffle",
+                          ((form.getValues(`septicTank.tanks.${index}.inletBaffleCondition`) ?? []) as string[]).join(", ") || undefined,
                         )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.outletBaffleCondition`,
-                          "Outlet Baffle Condition",
+                        {renderReadOnly(
+                          "Outlet Baffle",
+                          ((form.getValues(`septicTank.tanks.${index}.outletBaffleCondition`) ?? []) as string[]).join(", ") || undefined,
                         )}
                         {renderTextField(
                           `septicTank.tanks.${index}.effluentFilterPresent`,

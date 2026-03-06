@@ -180,11 +180,11 @@ const tankInspectionSchema = z.object({
   deficiencyDeterioratingConcrete: z.boolean().optional().default(false),
   deficiencyOther: z.boolean().optional().default(false),
 
-  // Baffles (Section 4L)
-  baffleMaterial: z.string().optional().default(""),
-  inletBaffleCondition: z.string().optional().default(""),
-  outletBaffleCondition: z.string().optional().default(""),
-  interiorBaffleCondition: z.string().optional().default(""),
+  // Baffles (Section 4L) — multi-select (a tank can have mixed materials/conditions)
+  baffleMaterial: z.array(z.string()).optional().default([]),
+  inletBaffleCondition: z.array(z.string()).optional().default([]),
+  outletBaffleCondition: z.array(z.string()).optional().default([]),
+  interiorBaffleCondition: z.array(z.string()).optional().default([]),
 
   // Effluent filter (Section 4M)
   effluentFilterPresent: z.enum(["present", "not_present", ""]).optional().default(""),

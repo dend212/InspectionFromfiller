@@ -32,14 +32,22 @@ export function GenerateSummaryDialog({
 }: GenerateSummaryDialogProps) {
   const [recommendations, setRecommendations] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Reset fields when dialog opens
+  // Pre-populate with most recent recommendations when dialog opens
   useEffect(() => {
     if (open) {
-      setRecommendations("");
       setIsGenerating(false);
+      setIsLoading(true);
+      fetch(`/api/inspections/${inspectionId}/generate-summary`)
+        .then((res) => (res.ok ? res.json() : { recommendations: "" }))
+        .then((data: { recommendations: string }) => {
+          setRecommendations(data.recommendations || "");
+        })
+        .catch(() => setRecommendations(""))
+        .finally(() => setIsLoading(false));
     }
-  }, [open]);
+  }, [open, inspectionId]);
 
   const handleGenerate = async () => {
     if (!recommendations.trim() || isGenerating) return;

@@ -210,10 +210,10 @@ septicTank.tanks[0].deficiencyDeterioratingConcrete (boolean)
 septicTank.tanks[0].deficiencyOther (boolean)
 
 --- Baffles (Section 4L) ---
-septicTank.tanks[0].baffleMaterial (enum): one of: precast_concrete, fiberglass, plastic, clay, not_determined
-septicTank.tanks[0].inletBaffleCondition (enum): one of: present_operational, present_not_operational, not_present, not_determined
-septicTank.tanks[0].outletBaffleCondition (enum): one of: present_operational, present_not_operational, not_present, not_determined
-septicTank.tanks[0].interiorBaffleCondition (enum): one of: present_operational, present_not_operational, not_present, not_determined
+septicTank.tanks[0].baffleMaterial (string[]): array of: precast_concrete, fiberglass, plastic, clay, not_determined — multiple may be selected
+septicTank.tanks[0].inletBaffleCondition (string[]): array of: present_operational, present_not_operational, not_present, not_determined — multiple may be selected
+septicTank.tanks[0].outletBaffleCondition (string[]): array of: present_operational, present_not_operational, not_present, not_determined — multiple may be selected
+septicTank.tanks[0].interiorBaffleCondition (string[]): array of: present_operational, present_not_operational, not_present, not_determined — multiple may be selected
 
 --- Effluent Filter (Section 4M) ---
 septicTank.tanks[0].effluentFilterPresent (enum): "present" or "not_present"

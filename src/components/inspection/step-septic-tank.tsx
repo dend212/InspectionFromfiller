@@ -131,10 +131,10 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
       deficiencyDamagedLids: false,
       deficiencyDeterioratingConcrete: false,
       deficiencyOther: false,
-      baffleMaterial: "",
-      inletBaffleCondition: "",
-      outletBaffleCondition: "",
-      interiorBaffleCondition: "",
+      baffleMaterial: [] as string[],
+      inletBaffleCondition: [] as string[],
+      outletBaffleCondition: [] as string[],
+      interiorBaffleCondition: [] as string[],
       effluentFilterPresent: "" as "" | "present" | "not_present",
       effluentFilterServiced: "" as "" | "serviced" | "not_serviced",
     };
@@ -172,10 +172,10 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
         accessOpenings: tank.accessOpenings || "",
         lidsRisersPresent: tank.lidsRisersPresent || "",
         lidsSecurelyFastened: tank.lidsSecurelyFastened || "",
-        baffleMaterial: tank.baffleMaterial || "",
-        inletBaffleCondition: tank.inletBaffleCondition || "",
-        outletBaffleCondition: tank.outletBaffleCondition || "",
-        interiorBaffleCondition: tank.interiorBaffleCondition || "",
+        baffleMaterial: tank.baffleMaterial || [],
+        inletBaffleCondition: tank.inletBaffleCondition || [],
+        outletBaffleCondition: tank.outletBaffleCondition || [],
+        interiorBaffleCondition: tank.interiorBaffleCondition || [],
         effluentFilterPresent: tank.effluentFilterPresent || "",
         effluentFilterServiced: tank.effluentFilterServiced || "",
         deficiencies,
@@ -788,105 +788,146 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
           {/* 4L: Baffles */}
           <div className="space-y-4">
             <h4 className="text-base font-medium">Section 4L: Baffles / Sanitary Tees</h4>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name={`septicTank.tanks.${tankIndex}.baffleMaterial`}
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
+
+            {/* Baffle Material — checkboxes (multi-select) */}
+            <FormField
+              control={form.control}
+              name={`septicTank.tanks.${tankIndex}.baffleMaterial`}
+              render={({ field }) => {
+                const selected: string[] = Array.isArray(field.value) ? field.value : [];
+                const toggle = (val: string) => {
+                  const next = selected.includes(val)
+                    ? selected.filter((v) => v !== val)
+                    : [...selected, val];
+                  field.onChange(next);
+                };
+                return (
+                  <FormItem>
                     <FormLabel className="text-base">Baffle Material</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Select material" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {BAFFLE_MATERIALS.map((mat) => (
-                          <SelectItem key={mat.value} value={mat.value}>
-                            {mat.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="space-y-2">
+                      {BAFFLE_MATERIALS.map((mat) => (
+                        <label
+                          key={mat.value}
+                          className="flex min-h-[48px] cursor-pointer items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent/50"
+                        >
+                          <span className="text-base font-medium">{mat.label}</span>
+                          <Checkbox
+                            checked={selected.includes(mat.value)}
+                            onCheckedChange={() => toggle(mat.value)}
+                          />
+                        </label>
+                      ))}
+                    </div>
                     <FormMessage />
                   </FormItem>
-                )}
-              />
+                );
+              }}
+            />
 
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {/* Inlet Baffle Condition — checkboxes */}
               <FormField
                 control={form.control}
                 name={`septicTank.tanks.${tankIndex}.inletBaffleCondition`}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-base">Inlet Baffle</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Condition" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
+                render={({ field }) => {
+                  const selected: string[] = Array.isArray(field.value) ? field.value : [];
+                  const toggle = (val: string) => {
+                    const next = selected.includes(val)
+                      ? selected.filter((v) => v !== val)
+                      : [...selected, val];
+                    field.onChange(next);
+                  };
+                  return (
+                    <FormItem>
+                      <FormLabel className="text-base">Inlet Baffle</FormLabel>
+                      <div className="space-y-2">
                         {BAFFLE_CONDITIONS.map((c) => (
-                          <SelectItem key={c.value} value={c.value}>
-                            {c.label}
-                          </SelectItem>
+                          <label
+                            key={c.value}
+                            className="flex min-h-[44px] cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors hover:bg-accent/50"
+                          >
+                            <span className="text-sm font-medium">{c.label}</span>
+                            <Checkbox
+                              checked={selected.includes(c.value)}
+                              onCheckedChange={() => toggle(c.value)}
+                            />
+                          </label>
                         ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
 
+              {/* Outlet Baffle Condition — checkboxes */}
               <FormField
                 control={form.control}
                 name={`septicTank.tanks.${tankIndex}.outletBaffleCondition`}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-base">Outlet Baffle</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Condition" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
+                render={({ field }) => {
+                  const selected: string[] = Array.isArray(field.value) ? field.value : [];
+                  const toggle = (val: string) => {
+                    const next = selected.includes(val)
+                      ? selected.filter((v) => v !== val)
+                      : [...selected, val];
+                    field.onChange(next);
+                  };
+                  return (
+                    <FormItem>
+                      <FormLabel className="text-base">Outlet Baffle</FormLabel>
+                      <div className="space-y-2">
                         {BAFFLE_CONDITIONS.map((c) => (
-                          <SelectItem key={c.value} value={c.value}>
-                            {c.label}
-                          </SelectItem>
+                          <label
+                            key={c.value}
+                            className="flex min-h-[44px] cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors hover:bg-accent/50"
+                          >
+                            <span className="text-sm font-medium">{c.label}</span>
+                            <Checkbox
+                              checked={selected.includes(c.value)}
+                              onCheckedChange={() => toggle(c.value)}
+                            />
+                          </label>
                         ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
 
+              {/* Interior Baffle Condition — checkboxes */}
               <FormField
                 control={form.control}
                 name={`septicTank.tanks.${tankIndex}.interiorBaffleCondition`}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-base">Interior Baffle</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Condition" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
+                render={({ field }) => {
+                  const selected: string[] = Array.isArray(field.value) ? field.value : [];
+                  const toggle = (val: string) => {
+                    const next = selected.includes(val)
+                      ? selected.filter((v) => v !== val)
+                      : [...selected, val];
+                    field.onChange(next);
+                  };
+                  return (
+                    <FormItem>
+                      <FormLabel className="text-base">Interior Baffle</FormLabel>
+                      <div className="space-y-2">
                         {BAFFLE_CONDITIONS.map((c) => (
-                          <SelectItem key={c.value} value={c.value}>
-                            {c.label}
-                          </SelectItem>
+                          <label
+                            key={c.value}
+                            className="flex min-h-[44px] cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors hover:bg-accent/50"
+                          >
+                            <span className="text-sm font-medium">{c.label}</span>
+                            <Checkbox
+                              checked={selected.includes(c.value)}
+                              onCheckedChange={() => toggle(c.value)}
+                            />
+                          </label>
                         ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
             </div>
           </div>

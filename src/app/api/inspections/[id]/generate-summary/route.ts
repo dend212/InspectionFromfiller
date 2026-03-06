@@ -1,10 +1,35 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { inspections, inspectionSummaries } from "@/lib/db/schema";
 import { getUserRole } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
+
+/**
+ * GET /api/inspections/[id]/generate-summary
+ * Returns the most recent summary's recommendations text.
+ */
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const [latest] = await db
+    .select({ recommendations: inspectionSummaries.recommendations })
+    .from(inspectionSummaries)
+    .where(eq(inspectionSummaries.inspectionId, id))
+    .orderBy(desc(inspectionSummaries.createdAt))
+    .limit(1);
+
+  return NextResponse.json({ recommendations: latest?.recommendations ?? "" });
+}
 
 /**
  * POST /api/inspections/[id]/generate-summary

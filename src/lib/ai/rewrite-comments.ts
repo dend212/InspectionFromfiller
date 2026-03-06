@@ -21,10 +21,10 @@ export interface SepticTankContext {
     accessOpenings: string;
     lidsRisersPresent: string;
     lidsSecurelyFastened: string;
-    baffleMaterial: string;
-    inletBaffleCondition: string;
-    outletBaffleCondition: string;
-    interiorBaffleCondition: string;
+    baffleMaterial: string | string[];
+    inletBaffleCondition: string | string[];
+    outletBaffleCondition: string | string[];
+    interiorBaffleCondition: string | string[];
     effluentFilterPresent: string;
     effluentFilterServiced: string;
     deficiencies: string[];
@@ -105,10 +105,14 @@ function formatTankContext(ctx: SepticTankContext): string {
     if (tank.accessOpenings) lines.push(`Access Openings: ${tank.accessOpenings}`);
     if (tank.lidsRisersPresent) lines.push(`Lids/Risers Present: ${tank.lidsRisersPresent}`);
     if (tank.lidsSecurelyFastened) lines.push(`Lids Securely Fastened: ${tank.lidsSecurelyFastened}`);
-    if (tank.baffleMaterial) lines.push(`Baffle Material: ${tank.baffleMaterial}`);
-    if (tank.inletBaffleCondition) lines.push(`Inlet Baffle: ${tank.inletBaffleCondition}`);
-    if (tank.outletBaffleCondition) lines.push(`Outlet Baffle: ${tank.outletBaffleCondition}`);
-    if (tank.interiorBaffleCondition) lines.push(`Interior Baffle: ${tank.interiorBaffleCondition}`);
+    const bm = Array.isArray(tank.baffleMaterial) ? tank.baffleMaterial.join(", ") : tank.baffleMaterial;
+    if (bm) lines.push(`Baffle Material: ${bm}`);
+    const ib = Array.isArray(tank.inletBaffleCondition) ? tank.inletBaffleCondition.join(", ") : tank.inletBaffleCondition;
+    if (ib) lines.push(`Inlet Baffle: ${ib}`);
+    const ob = Array.isArray(tank.outletBaffleCondition) ? tank.outletBaffleCondition.join(", ") : tank.outletBaffleCondition;
+    if (ob) lines.push(`Outlet Baffle: ${ob}`);
+    const intb = Array.isArray(tank.interiorBaffleCondition) ? tank.interiorBaffleCondition.join(", ") : tank.interiorBaffleCondition;
+    if (intb) lines.push(`Interior Baffle: ${intb}`);
     if (tank.effluentFilterPresent) lines.push(`Effluent Filter Present: ${tank.effluentFilterPresent}`);
     if (tank.effluentFilterServiced) lines.push(`Effluent Filter Serviced: ${tank.effluentFilterServiced}`);
 

@@ -386,30 +386,42 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="disposalWorks.hydraulicLoadTestPerformed"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base">Hydraulic Load Test Performed?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
       </section>
+
+      {/* Hydraulic Load Test */}
+      <FormField
+        control={form.control}
+        name="disposalWorks.hydraulicLoadTestPerformed"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-base">Hydraulic Load Test Performed?</FormLabel>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: "yes", label: "Yes" },
+                { value: "no", label: "No" },
+              ].map((opt) => {
+                const isSelected = field.value === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    aria-pressed={isSelected}
+                    className={`min-h-[48px] rounded-lg px-4 py-2.5 text-base font-medium transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                      isSelected
+                        ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25"
+                        : "border border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground hover:border-primary/30"
+                    }`}
+                    onClick={() => field.onChange(isSelected ? "" : opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
 
       <Separator />
 
