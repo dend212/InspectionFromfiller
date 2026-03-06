@@ -24,7 +24,7 @@ export async function sendSubmissionNotification(
 
   try {
     await resend.emails.send({
-      from: "SewerTime Inspections <onboarding@resend.dev>",
+      from: `SewerTime Inspections <${process.env.EMAIL_FROM_ADDRESS || "onboarding@resend.dev"}>`,
       to: adminEmail,
       subject: `New Inspection Submitted: ${facilityName || "Untitled"}`,
       text: [
