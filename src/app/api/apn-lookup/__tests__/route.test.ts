@@ -123,11 +123,14 @@ describe("GET /api/apn-lookup", () => {
       expect(json.error).toMatch(/apn.*required/i);
     });
 
-    it("returns 400 for APN with invalid characters (letters)", async () => {
+    it("accepts APN with letter suffix (e.g. 201-13-030Z)", async () => {
+      const res = await GET(makeRequest("201-13-030Z"));
+      expect(res.status).toBe(200);
+    });
+
+    it("accepts APN with mixed letters and digits", async () => {
       const res = await GET(makeRequest("ABC-45-678"));
-      expect(res.status).toBe(400);
-      const json = await res.json();
-      expect(json.error).toMatch(/invalid apn format/i);
+      expect(res.status).toBe(200);
     });
 
     it("returns 400 for APN with special characters", async () => {
@@ -146,8 +149,13 @@ describe("GET /api/apn-lookup", () => {
       expect(json.error).toMatch(/invalid apn format/i);
     });
 
-    it("returns 400 for APN with no digits", async () => {
+    it("returns 400 for APN with no digits (dashes only)", async () => {
       const res = await GET(makeRequest("---"));
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 for APN with no digits (letters only)", async () => {
+      const res = await GET(makeRequest("ABC"));
       expect(res.status).toBe(400);
     });
 

@@ -60,8 +60,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "APN parameter is required" }, { status: 400 });
   }
 
-  // Validate APN format — digits, dashes, spaces only; must contain a digit; max 20 chars
-  if (apn.length > 20 || !/^[\d -]+$/.test(apn) || !/\d/.test(apn)) {
+  // Validate APN format — digits, letters, dashes, spaces; must contain a digit; max 20 chars
+  if (apn.length > 20 || !/^[\dA-Za-z -]+$/.test(apn) || !/\d/.test(apn)) {
     return NextResponse.json({ error: "Invalid APN format" }, { status: 400 });
   }
 
