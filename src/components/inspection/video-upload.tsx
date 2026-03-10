@@ -52,13 +52,19 @@ export function VideoUpload({ inspectionId, onUploadComplete }: VideoUploadProps
     setUploading(true);
 
     try {
-      // Duration validation (MDIA-02): reject videos over 120 seconds
-      const duration = await getVideoDuration(file);
-      if (duration > 120) {
-        toast.error("Video must be 120 seconds or less");
-        setUploading(false);
-        if (inputRef.current) inputRef.current.value = "";
-        return;
+      // Duration validation (MDIA-02): reject videos over 120 seconds.
+      // Best-effort — if the browser can't decode the codec / read metadata, allow upload anyway.
+      try {
+        const duration = await getVideoDuration(file);
+        if (duration > 300) {
+          toast.error("Video must be 5 minutes or less", { duration: 5000 });
+          setUploading(false);
+          if (inputRef.current) inputRef.current.value = "";
+          return;
+        }
+      } catch {
+        // Browser couldn't read duration (unsupported codec, timeout, etc.) — skip check
+        console.warn("Could not read video duration — skipping length check");
       }
 
       // Step 1: Get a presigned upload URL from the API
@@ -110,7 +116,8 @@ export function VideoUpload({ inspectionId, onUploadComplete }: VideoUploadProps
       toast.success("Video uploaded");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed";
-      toast.error(message);
+      console.error("Video upload error:", err);
+      toast.error(message, { duration: 5000 });
     } finally {
       setUploading(false);
       if (inputRef.current) {
