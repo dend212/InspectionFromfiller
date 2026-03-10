@@ -348,20 +348,13 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">Domestic Water Source</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select source" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {WATER_SOURCES.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ButtonGroup
+                    options={WATER_SOURCES}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}

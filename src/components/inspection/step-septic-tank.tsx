@@ -16,13 +16,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -240,17 +233,16 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">Tanks Pumped?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ButtonGroup
+                    options={[
+                      { value: "yes", label: "Yes" },
+                      { value: "no", label: "No" },
+                    ]}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -290,22 +282,17 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">If Not Pumped, Reason</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select reason" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="discharge_auth">
-                      Discharge Authorization issued within 12 months
-                    </SelectItem>
-                    <SelectItem value="not_necessary">
-                      Pumping not necessary per manufacturer instructions
-                    </SelectItem>
-                    <SelectItem value="no_accumulation">No accumulation of waste</SelectItem>
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ButtonGroup
+                    options={[
+                      { value: "discharge_auth", label: "Discharge Auth (12 mo)" },
+                      { value: "not_necessary", label: "Not necessary (mfr)" },
+                      { value: "no_accumulation", label: "No accumulation" },
+                    ]}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -512,20 +499,13 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-base">Capacity Basis</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Select basis" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {CAPACITY_BASIS_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <ButtonGroup
+                        options={CAPACITY_BASIS_OPTIONS}
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -559,20 +539,13 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-base">Tank Material</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Select material" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {TANK_MATERIALS.map((mat) => (
-                          <SelectItem key={mat.value} value={mat.value}>
-                            {mat.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <ButtonGroup
+                        options={TANK_MATERIALS}
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -598,19 +571,18 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-base">Access Openings</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="one">One</SelectItem>
-                        <SelectItem value="two">Two</SelectItem>
-                        <SelectItem value="three">Three or more</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <ButtonGroup
+                        options={[
+                          { value: "one", label: "One" },
+                          { value: "two", label: "Two" },
+                          { value: "three", label: "Three+" },
+                          { value: "other", label: "Other" },
+                        ]}
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -644,17 +616,16 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-base">Lids/Risers Present?</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="present">Present</SelectItem>
-                        <SelectItem value="not_present">Not Present</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <ButtonGroup
+                        options={[
+                          { value: "present", label: "Present" },
+                          { value: "not_present", label: "Not Present" },
+                        ]}
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -666,17 +637,16 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-base">Lids Securely Fastened?</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="yes">Yes</SelectItem>
-                        <SelectItem value="no">No</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <ButtonGroup
+                        options={[
+                          { value: "yes", label: "Yes" },
+                          { value: "no", label: "No" },
+                        ]}
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -696,18 +666,17 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-base">Number of Compartments</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="one">One</SelectItem>
-                        <SelectItem value="two">Two</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <ButtonGroup
+                        options={[
+                          { value: "one", label: "One" },
+                          { value: "two", label: "Two" },
+                          { value: "other", label: "Other" },
+                        ]}
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -733,17 +702,16 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-base">Compromised Tank?</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="yes">Yes</SelectItem>
-                        <SelectItem value="no">No</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <ButtonGroup
+                        options={[
+                          { value: "yes", label: "Yes" },
+                          { value: "no", label: "No" },
+                        ]}
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -944,17 +912,16 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-base">Effluent Filter Present?</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="present">Present</SelectItem>
-                        <SelectItem value="not_present">Not Present</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <ButtonGroup
+                        options={[
+                          { value: "present", label: "Present" },
+                          { value: "not_present", label: "Not Present" },
+                        ]}
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -966,17 +933,16 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-base">Filter Serviced?</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="min-h-[48px] w-full">
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="serviced">Serviced</SelectItem>
-                        <SelectItem value="not_serviced">Not Serviced</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <ButtonGroup
+                        options={[
+                          { value: "serviced", label: "Serviced" },
+                          { value: "not_serviced", label: "Not Serviced" },
+                        ]}
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useFormContext } from "react-hook-form";
 import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
 import { PhotoCapture } from "@/components/inspection/photo-capture";
+import { ButtonGroup } from "@/components/ui/button-group";
 import {
   FormControl,
   FormDescription,
@@ -13,13 +14,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { ACTUAL_FLOW_EVALUATION, DESIGN_FLOW_BASIS } from "@/lib/constants/inspection";
@@ -108,20 +102,13 @@ export function StepDesignFlow({ inspectionId }: StepDesignFlowProps) {
             render={({ field }) => (
               <FormItem className="sm:col-span-2">
                 <FormLabel className="text-base">Basis for Design Flow</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select basis" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {DESIGN_FLOW_BASIS.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ButtonGroup
+                    options={DESIGN_FLOW_BASIS}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -190,20 +177,13 @@ export function StepDesignFlow({ inspectionId }: StepDesignFlowProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel className="text-base">Actual Flow Evaluation</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger className="min-h-[48px] w-full">
-                    <SelectValue placeholder="Select evaluation" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {ACTUAL_FLOW_EVALUATION.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <FormControl>
+                <ButtonGroup
+                  options={ACTUAL_FLOW_EVALUATION}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}

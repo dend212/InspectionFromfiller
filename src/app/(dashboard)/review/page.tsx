@@ -138,8 +138,8 @@ export default async function ReviewQueuePage() {
               <Link key={inspection.id} href={`/review/${inspection.id}`} className="group">
                 <Card className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary/25 hover:-translate-y-0.5">
                   <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <CardTitle className="text-base truncate group-hover:text-primary transition-colors duration-200" title={inspection.facilityName || undefined}>
+                    <div className="flex items-start justify-between gap-2">
+                      <CardTitle className="text-base min-w-0 break-words group-hover:text-primary transition-colors duration-200" title={inspection.facilityName || undefined}>
                         {inspection.facilityName || "Untitled Inspection"}
                       </CardTitle>
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -200,8 +200,8 @@ export default async function ReviewQueuePage() {
                 <Link key={inspection.id} href={`/review/${inspection.id}`} className="group">
                   <Card className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary/25 hover:-translate-y-0.5">
                     <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base truncate group-hover:text-primary transition-colors duration-200" title={inspection.facilityName || undefined}>
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-base min-w-0 break-words group-hover:text-primary transition-colors duration-200" title={inspection.facilityName || undefined}>
                           {inspection.facilityName || "Untitled Inspection"}
                         </CardTitle>
                         <div className="flex items-center gap-1.5 shrink-0">

@@ -5,6 +5,7 @@ import { useFormContext, useWatch } from "react-hook-form";
 import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
 import { PhotoCapture } from "@/components/inspection/photo-capture";
 import { VideoUpload } from "@/components/inspection/video-upload";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   FormControl,
@@ -147,17 +148,16 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">Location Determined?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ButtonGroup
+                    options={[
+                      { value: "yes", label: "Yes" },
+                      { value: "no", label: "No" },
+                    ]}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -259,20 +259,13 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">Supply Line Material</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select material" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {SUPPLY_LINE_MATERIALS.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>
-                        {m.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ButtonGroup
+                    options={SUPPLY_LINE_MATERIALS}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -298,17 +291,16 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">Distribution Component Inspected?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ButtonGroup
+                    options={[
+                      { value: "yes", label: "Yes" },
+                      { value: "no", label: "No" },
+                    ]}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -328,17 +320,16 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-base">Inspection Ports Present?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="min-h-[48px] w-full">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="present">Present</SelectItem>
-                    <SelectItem value="not_present">Not Present</SelectItem>
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ButtonGroup
+                    options={[
+                      { value: "present", label: "Present" },
+                      { value: "not_present", label: "Not Present" },
+                    ]}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -435,17 +426,16 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel className="text-base">Deficiencies Found?</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger className="min-h-[48px] w-full">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="yes">Yes</SelectItem>
-                  <SelectItem value="no">No</SelectItem>
-                </SelectContent>
-              </Select>
+              <FormControl>
+                <ButtonGroup
+                  options={[
+                    { value: "yes", label: "Yes" },
+                    { value: "no", label: "No" },
+                  ]}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -485,17 +475,16 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel className="text-base">Repairs Recommended?</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger className="min-h-[48px] w-full">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="yes">Yes</SelectItem>
-                  <SelectItem value="no">No</SelectItem>
-                </SelectContent>
-              </Select>
+              <FormControl>
+                <ButtonGroup
+                  options={[
+                    { value: "yes", label: "Yes" },
+                    { value: "no", label: "No" },
+                  ]}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
