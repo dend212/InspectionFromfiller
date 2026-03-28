@@ -89,9 +89,12 @@ export function VideoUpload({ inspectionId, onUploadComplete }: VideoUploadProps
       const supabase = createClient();
       const { error: uploadError } = await supabase.storage
         .from("inspection-media")
-        .uploadToSignedUrl(storagePath, token, file);
+        .uploadToSignedUrl(storagePath, token, file, {
+          contentType: file.type || "video/mp4",
+        });
 
       if (uploadError) {
+        console.error("Supabase upload error:", uploadError);
         throw new Error(uploadError.message || "Storage upload failed");
       }
 

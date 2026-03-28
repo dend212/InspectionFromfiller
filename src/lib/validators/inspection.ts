@@ -271,6 +271,100 @@ export const disposalWorksSchema = z.object({
 });
 
 // ============================================================================
+// Section 5 & 5.1: Alternative System Inspection (optional pages)
+// Covers: Qualified inspector, aerator, pump checklist, disposal works,
+//         inspection ports, deficiencies, condition, signatures
+// ============================================================================
+
+export const alternativeSystemSchema = z.object({
+  // Section 5: Alternative System info
+  qualifiedInspector: z.string().optional().default(""),
+  manufacturer: z.string().optional().default(""),
+  modelCapacity: z.string().optional().default(""),
+  treatmentEquipmentType: z.string().optional().default(""),
+
+  // Aerator and maintenance
+  aeratorWorking: z.enum(["yes", "no", "na", ""]).optional().default(""),
+  systemMaintained: z.enum(["yes", "no", ""]).optional().default(""),
+
+  // Pump systems
+  pumpSystems: z.enum(["yes", "no", ""]).optional().default(""),
+  pumpOperating: z.enum(["yes", "no", ""]).optional().default(""),
+  highLevelAlarm: z.enum(["yes", "no", ""]).optional().default(""),
+  alarmsSeparateCircuits: z.enum(["yes", "no", ""]).optional().default(""),
+  wiringProtected: z.enum(["yes", "no", ""]).optional().default(""),
+  audibleVisualAlarm: z.enum(["yes", "no", ""]).optional().default(""),
+  pumpCycleDesigned: z.enum(["yes", "no", ""]).optional().default(""),
+  riserToGrade: z.enum(["yes", "no", ""]).optional().default(""),
+  tankWatertight: z.enum(["yes", "no", ""]).optional().default(""),
+  checkValveVent: z.enum(["yes", "no", ""]).optional().default(""),
+
+  // Inspector comments for Section 5
+  altSystemComments: z.string().optional().default(""),
+
+  // Section 5.1: Alternative disposal works location
+  altDisposalLocationDetermined: z.enum(["yes", "no", ""]).optional().default(""),
+  altDisposalLocationExplanation: z.string().optional().default(""),
+
+  // Disposal type checkboxes (multi-select)
+  altDisposalTypes: z.array(z.string()).optional().default([]),
+
+  // Distribution method checkboxes (multi-select)
+  altDistributionMethods: z.array(z.string()).optional().default([]),
+
+  // Distribution component inspection
+  altDistCompInspected: z.enum(["yes", "no", ""]).optional().default(""),
+  altDistCompYesDescription: z.string().optional().default(""),
+  altDistCompNoExplanation: z.string().optional().default(""),
+
+  // Operational status (single-select stored as string)
+  altOperationalStatus: z.string().optional().default(""),
+  altOperationalStatusExplanation: z.string().optional().default(""),
+
+  // Supply line material checkboxes (multi-select)
+  altSupplyLineMaterials: z.array(z.string()).optional().default([]),
+  altSupplyLineOtherDescription: z.string().optional().default(""),
+
+  // Inspection ports
+  altInspectionPortsPresent: z.enum(["present", "not_present", ""]).optional().default(""),
+  altNumberOfPorts: z.string().optional().default(""),
+  altPortDepths: z.array(z.string()).optional().default([]),
+
+  // Operational (water loading) test
+  altOperationalTest: z.enum(["yes", "no", ""]).optional().default(""),
+  altOperationalTestExplanation: z.string().optional().default(""),
+
+  // Deficiencies
+  altHasDeficiency: z.enum(["yes", "no", ""]).optional().default(""),
+  altDefCrushedOutletPipe: z.boolean().optional().default(false),
+  altDefRootInvasion: z.boolean().optional().default(false),
+  altDefHighWaterLines: z.boolean().optional().default(false),
+  altDefDboxNotFunctioning: z.boolean().optional().default(false),
+  altDefSurfacing: z.boolean().optional().default(false),
+  altDefLushVegetation: z.boolean().optional().default(false),
+  altDefErosion: z.boolean().optional().default(false),
+  altDefPondingWater: z.boolean().optional().default(false),
+  altDefAnimalIntrusion: z.boolean().optional().default(false),
+  altDefLoadTestFailure: z.boolean().optional().default(false),
+  altDefOtherProblems: z.boolean().optional().default(false),
+  altDefOtherProblemsDescription: z.string().optional().default(""),
+  altDefCouldNotDetermine: z.boolean().optional().default(false),
+  altDefCouldNotDetermineExplanation: z.string().optional().default(""),
+
+  // Repairs & condition
+  altRepairs: z.enum(["yes", "no", ""]).optional().default(""),
+  altDisposalCondition: z.string().optional().default(""),
+  altDisposalComments: z.string().optional().default(""),
+
+  // Inspector contact block
+  orgResponsible: z.string().optional().default(""),
+  contactName: z.string().optional().default(""),
+  contactPhone: z.string().optional().default(""),
+  contactEmail: z.string().optional().default(""),
+  altPrintedName: z.string().optional().default(""),
+});
+
+// ============================================================================
 // Combined Form Schema
 // ============================================================================
 
@@ -280,6 +374,8 @@ export const inspectionFormSchema = z.object({
   designFlow: designFlowSchema,
   septicTank: septicTankSchema,
   disposalWorks: disposalWorksSchema,
+  includeAlternativePages: z.boolean().optional().default(false),
+  alternativeSystem: alternativeSystemSchema.optional(),
 });
 
 // ============================================================================
@@ -351,6 +447,14 @@ export const STEP_FIELDS: Record<number, string[]> = {
     "disposalWorks.disposalWorksComments",
     "disposalWorks.signatureDate",
     "disposalWorks.printedName",
+  ],
+  5: [
+    "alternativeSystem.qualifiedInspector",
+    "alternativeSystem.manufacturer",
+    "alternativeSystem.modelCapacity",
+    "alternativeSystem.altSystemComments",
+    "alternativeSystem.altDisposalLocationDetermined",
+    "alternativeSystem.altDisposalComments",
   ],
 };
 
@@ -481,6 +585,65 @@ export function getDefaultFormValues(inspectorName: string) {
       disposalWorksComments: "",
       signatureDate: "",
       printedName: inspectorName,
+    },
+    includeAlternativePages: false,
+    alternativeSystem: {
+      qualifiedInspector: inspectorName,
+      manufacturer: "",
+      modelCapacity: "",
+      treatmentEquipmentType: "",
+      aeratorWorking: "" as const,
+      systemMaintained: "" as const,
+      pumpSystems: "" as const,
+      pumpOperating: "" as const,
+      highLevelAlarm: "" as const,
+      alarmsSeparateCircuits: "" as const,
+      wiringProtected: "" as const,
+      audibleVisualAlarm: "" as const,
+      pumpCycleDesigned: "" as const,
+      riserToGrade: "" as const,
+      tankWatertight: "" as const,
+      checkValveVent: "" as const,
+      altSystemComments: "",
+      altDisposalLocationDetermined: "" as const,
+      altDisposalLocationExplanation: "",
+      altDisposalTypes: [] as string[],
+      altDistributionMethods: [] as string[],
+      altDistCompInspected: "" as const,
+      altDistCompYesDescription: "",
+      altDistCompNoExplanation: "",
+      altOperationalStatus: "",
+      altOperationalStatusExplanation: "",
+      altSupplyLineMaterials: [] as string[],
+      altSupplyLineOtherDescription: "",
+      altInspectionPortsPresent: "" as const,
+      altNumberOfPorts: "",
+      altPortDepths: [] as string[],
+      altOperationalTest: "" as const,
+      altOperationalTestExplanation: "",
+      altHasDeficiency: "" as const,
+      altDefCrushedOutletPipe: false,
+      altDefRootInvasion: false,
+      altDefHighWaterLines: false,
+      altDefDboxNotFunctioning: false,
+      altDefSurfacing: false,
+      altDefLushVegetation: false,
+      altDefErosion: false,
+      altDefPondingWater: false,
+      altDefAnimalIntrusion: false,
+      altDefLoadTestFailure: false,
+      altDefOtherProblems: false,
+      altDefOtherProblemsDescription: "",
+      altDefCouldNotDetermine: false,
+      altDefCouldNotDetermineExplanation: "",
+      altRepairs: "" as const,
+      altDisposalCondition: "",
+      altDisposalComments: "",
+      orgResponsible: INSPECTOR_DEFAULTS.company,
+      contactName: inspectorName,
+      contactPhone: "",
+      contactEmail: "",
+      altPrintedName: inspectorName,
     },
   };
 }

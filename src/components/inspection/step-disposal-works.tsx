@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   DISPOSAL_TYPES,
@@ -588,6 +589,34 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
           onDescriptionUpdate={handleDescriptionUpdate}
         />
       </div>
+
+      <Separator className="my-6" />
+
+      {/* Alternative System Pages toggle */}
+      <FormField
+        control={form.control}
+        name="includeAlternativePages"
+        render={({ field }) => (
+          <FormItem>
+            <div className="flex items-center gap-3 rounded-lg border border-dashed p-4">
+              <FormControl>
+                <Switch
+                  checked={!!field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+              <div>
+                <FormLabel className="text-base cursor-pointer">
+                  Add Alternative System Pages
+                </FormLabel>
+                <FormDescription className="mt-0.5">
+                  Adds Section 5 &amp; 5.1 to the report for properties with alternative/aerobic systems
+                </FormDescription>
+              </div>
+            </div>
+          </FormItem>
+        )}
+      />
     </div>
   );
 }

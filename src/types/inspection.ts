@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type {
+  alternativeSystemSchema,
   designFlowSchema,
   disposalWorksSchema,
   facilityInfoSchema,
@@ -13,4 +14,5 @@ export type GeneralTreatment = z.infer<typeof generalTreatmentSchema>;
 export type DesignFlow = z.infer<typeof designFlowSchema>;
 export type SepticTank = z.infer<typeof septicTankSchema>;
 export type DisposalWorks = z.infer<typeof disposalWorksSchema>;
+export type AlternativeSystem = z.infer<typeof alternativeSystemSchema>;
 export type InspectionFormData = z.infer<typeof inspectionFormSchema>;

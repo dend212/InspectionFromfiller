@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { cn } from "@/lib/utils";
@@ -49,6 +49,19 @@ interface StepSepticTankProps {
 export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
   const form = useFormContext<InspectionFormData>();
   const [media, setMedia] = useState<MediaRecord[]>([]);
+
+  // Auto-fill tank inspection date from facility info inspection date
+  const inspectionDate = useWatch({ control: form.control, name: "facilityInfo.dateOfInspection" });
+  const tankDateSyncedRef = useRef(false);
+  useEffect(() => {
+    if (!inspectionDate) return;
+    const currentTankDate = form.getValues("septicTank.tankInspectionDate");
+    // Only auto-fill if tank date is empty or was previously synced (not manually edited)
+    if (!currentTankDate || !tankDateSyncedRef.current) {
+      form.setValue("septicTank.tankInspectionDate", inspectionDate);
+      tankDateSyncedRef.current = true;
+    }
+  }, [inspectionDate, form]);
 
   useEffect(() => {
     async function loadMedia() {
@@ -793,34 +806,35 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
             />
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {/* Inlet Baffle Condition — checkboxes */}
+              {/* Inlet Baffle Condition — single select */}
               <FormField
                 control={form.control}
                 name={`septicTank.tanks.${tankIndex}.inletBaffleCondition`}
                 render={({ field }) => {
-                  const selected: string[] = Array.isArray(field.value) ? field.value : [];
-                  const toggle = (val: string) => {
-                    const next = selected.includes(val)
-                      ? selected.filter((v) => v !== val)
-                      : [...selected, val];
-                    field.onChange(next);
-                  };
+                  const current = Array.isArray(field.value) ? field.value[0] ?? "" : field.value ?? "";
                   return (
                     <FormItem>
                       <FormLabel className="text-base">Inlet Baffle</FormLabel>
                       <div className="space-y-2">
-                        {BAFFLE_CONDITIONS.map((c) => (
-                          <label
-                            key={c.value}
-                            className="flex min-h-[44px] cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors hover:bg-accent/50"
-                          >
-                            <span className="text-sm font-medium">{c.label}</span>
-                            <Checkbox
-                              checked={selected.includes(c.value)}
-                              onCheckedChange={() => toggle(c.value)}
-                            />
-                          </label>
-                        ))}
+                        {BAFFLE_CONDITIONS.map((c) => {
+                          const isSelected = current === c.value;
+                          return (
+                            <button
+                              key={c.value}
+                              type="button"
+                              aria-pressed={isSelected}
+                              className={`flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left transition-colors ${
+                                isSelected
+                                  ? "border-primary bg-primary/10 font-semibold"
+                                  : "hover:bg-accent/50"
+                              }`}
+                              onClick={() => field.onChange(isSelected ? [] : [c.value])}
+                            >
+                              <span className="text-sm font-medium">{c.label}</span>
+                              <Checkbox checked={isSelected} tabIndex={-1} />
+                            </button>
+                          );
+                        })}
                       </div>
                       <FormMessage />
                     </FormItem>
@@ -828,34 +842,35 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 }}
               />
 
-              {/* Outlet Baffle Condition — checkboxes */}
+              {/* Outlet Baffle Condition — single select */}
               <FormField
                 control={form.control}
                 name={`septicTank.tanks.${tankIndex}.outletBaffleCondition`}
                 render={({ field }) => {
-                  const selected: string[] = Array.isArray(field.value) ? field.value : [];
-                  const toggle = (val: string) => {
-                    const next = selected.includes(val)
-                      ? selected.filter((v) => v !== val)
-                      : [...selected, val];
-                    field.onChange(next);
-                  };
+                  const current = Array.isArray(field.value) ? field.value[0] ?? "" : field.value ?? "";
                   return (
                     <FormItem>
                       <FormLabel className="text-base">Outlet Baffle</FormLabel>
                       <div className="space-y-2">
-                        {BAFFLE_CONDITIONS.map((c) => (
-                          <label
-                            key={c.value}
-                            className="flex min-h-[44px] cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors hover:bg-accent/50"
-                          >
-                            <span className="text-sm font-medium">{c.label}</span>
-                            <Checkbox
-                              checked={selected.includes(c.value)}
-                              onCheckedChange={() => toggle(c.value)}
-                            />
-                          </label>
-                        ))}
+                        {BAFFLE_CONDITIONS.map((c) => {
+                          const isSelected = current === c.value;
+                          return (
+                            <button
+                              key={c.value}
+                              type="button"
+                              aria-pressed={isSelected}
+                              className={`flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left transition-colors ${
+                                isSelected
+                                  ? "border-primary bg-primary/10 font-semibold"
+                                  : "hover:bg-accent/50"
+                              }`}
+                              onClick={() => field.onChange(isSelected ? [] : [c.value])}
+                            >
+                              <span className="text-sm font-medium">{c.label}</span>
+                              <Checkbox checked={isSelected} tabIndex={-1} />
+                            </button>
+                          );
+                        })}
                       </div>
                       <FormMessage />
                     </FormItem>
@@ -863,34 +878,35 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                 }}
               />
 
-              {/* Interior Baffle Condition — checkboxes */}
+              {/* Interior Baffle Condition — single select */}
               <FormField
                 control={form.control}
                 name={`septicTank.tanks.${tankIndex}.interiorBaffleCondition`}
                 render={({ field }) => {
-                  const selected: string[] = Array.isArray(field.value) ? field.value : [];
-                  const toggle = (val: string) => {
-                    const next = selected.includes(val)
-                      ? selected.filter((v) => v !== val)
-                      : [...selected, val];
-                    field.onChange(next);
-                  };
+                  const current = Array.isArray(field.value) ? field.value[0] ?? "" : field.value ?? "";
                   return (
                     <FormItem>
                       <FormLabel className="text-base">Interior Baffle</FormLabel>
                       <div className="space-y-2">
-                        {BAFFLE_CONDITIONS.map((c) => (
-                          <label
-                            key={c.value}
-                            className="flex min-h-[44px] cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors hover:bg-accent/50"
-                          >
-                            <span className="text-sm font-medium">{c.label}</span>
-                            <Checkbox
-                              checked={selected.includes(c.value)}
-                              onCheckedChange={() => toggle(c.value)}
-                            />
-                          </label>
-                        ))}
+                        {BAFFLE_CONDITIONS.map((c) => {
+                          const isSelected = current === c.value;
+                          return (
+                            <button
+                              key={c.value}
+                              type="button"
+                              aria-pressed={isSelected}
+                              className={`flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left transition-colors ${
+                                isSelected
+                                  ? "border-primary bg-primary/10 font-semibold"
+                                  : "hover:bg-accent/50"
+                              }`}
+                              onClick={() => field.onChange(isSelected ? [] : [c.value])}
+                            >
+                              <span className="text-sm font-medium">{c.label}</span>
+                              <Checkbox checked={isSelected} tabIndex={-1} />
+                            </button>
+                          );
+                        })}
                       </div>
                       <FormMessage />
                     </FormItem>

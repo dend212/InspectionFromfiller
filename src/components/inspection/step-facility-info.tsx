@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useFormContext } from "react-hook-form";
+import { useFormContext, useWatch } from "react-hook-form";
 import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
 import { PhotoCapture } from "@/components/inspection/photo-capture";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -49,6 +49,20 @@ interface StepFacilityInfoProps {
 export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
   const form = useFormContext<InspectionFormData>();
   const [media, setMedia] = useState<MediaRecord[]>([]);
+
+  // Auto-set "Records Available?" to "yes" when any record checkbox is checked
+  const hasDischargeAuth = useWatch({ control: form.control, name: "facilityInfo.hasDischargeAuth" });
+  const hasApprovalOfConstruction = useWatch({ control: form.control, name: "facilityInfo.hasApprovalOfConstruction" });
+  const hasSitePlan = useWatch({ control: form.control, name: "facilityInfo.hasSitePlan" });
+  const hasOperationDocs = useWatch({ control: form.control, name: "facilityInfo.hasOperationDocs" });
+  const hasOtherRecords = useWatch({ control: form.control, name: "facilityInfo.hasOtherRecords" });
+
+  useEffect(() => {
+    const anyChecked = hasDischargeAuth || hasApprovalOfConstruction || hasSitePlan || hasOperationDocs || hasOtherRecords;
+    if (anyChecked && form.getValues("facilityInfo.recordsAvailable") !== "yes") {
+      form.setValue("facilityInfo.recordsAvailable", "yes");
+    }
+  }, [hasDischargeAuth, hasApprovalOfConstruction, hasSitePlan, hasOperationDocs, hasOtherRecords, form]);
 
   useEffect(() => {
     async function loadMedia() {
