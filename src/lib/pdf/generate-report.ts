@@ -107,11 +107,14 @@ export async function generateReport(
   // Step 8: Flatten form to make it read-only
   form.flatten();
 
-  // Step 9: Remove pages 7, 8, 9 (Alternative System + Sketch) — 0-indexed: 6, 7, 8
-  // Remove in reverse order to avoid index shifting
-  doc.removePage(8); // Page 9: Required Sketch
-  doc.removePage(7); // Page 8: Alt System Disposal Works + second signature
-  doc.removePage(6); // Page 7: Alternative System
+  // Step 9: Remove optional/unused pages — always remove page 9 (Sketch).
+  // Keep pages 7-8 (Alternative System) only when includeAlternativePages is true.
+  // Remove in reverse order to avoid index shifting.
+  doc.removePage(8); // Page 9: Required Sketch (always removed)
+  if (!formData.includeAlternativePages) {
+    doc.removePage(7); // Page 8: Alt System Disposal Works + second signature
+    doc.removePage(6); // Page 7: Alternative System
+  }
 
   // Step 10: Save the filled form (now 6 pages)
   const formPdf = await doc.save();

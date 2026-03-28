@@ -8,10 +8,25 @@
 
 import {
   ACCESS_OPENINGS,
+  ALT_DEFICIENCY,
+  ALT_DISPOSAL_CONDITION,
+  ALT_DISPOSAL_LOCATION,
+  ALT_DISPOSAL_TYPE,
+  ALT_DIST_COMP,
+  ALT_DISTRIBUTION,
+  ALT_INSPECTION_PORTS,
+  ALT_OPERATIONAL_STATUS,
+  ALT_OPERATIONAL_TEST,
+  ALT_REPAIRS,
+  ALT_SUPPLY_LINE,
+  ALT_SYSTEM_CHECKS,
+  ALT_SYSTEM_INFO,
+  ALT_SYSTEM_INSPECTOR,
   CESSPOOL,
   COMPARTMENTS,
   COMPROMISED_TANK,
   CONDITION_SUMMARY,
+  CONVENTIONAL_SIGNATURE_2,
   DISPOSAL_DEFICIENCY,
   DISPOSAL_LOCATION,
   DISPOSAL_REPAIRS,
@@ -261,6 +276,9 @@ export function mapFormDataToFields(data: InspectionFormData): FormFieldMapping 
 
     // Signature
     conventionalPrintedName: str(dw?.printedName),
+
+    // Alternative System (pages 7-8) — only populated when includeAlternativePages is true
+    ...mapAltSystemTextFields(data),
   };
 
   // =========================================================================
@@ -426,6 +444,9 @@ export function mapFormDataToFields(data: InspectionFormData): FormFieldMapping 
     dwDefAnimalIntrusion: !!dw?.defAnimalIntrusion,
     dwDefLoadTestFailure: !!dw?.defLoadTestFailure,
     dwDefCouldNotDetermine: !!dw?.defCouldNotDetermine,
+
+    // Alternative System (pages 7-8) checkboxes
+    ...mapAltSystemCheckboxFields(data),
   };
 
   // =========================================================================
@@ -582,6 +603,9 @@ export function mapFormDataToFields(data: InspectionFormData): FormFieldMapping 
     dw?.repairsRecommended,
   );
 
+  // Alternative System radio fields (pages 7-8)
+  mapAltSystemRadioFields(radioFields, data);
+
   return { textFields, checkboxFields, radioFields, overflow };
 }
 
@@ -615,6 +639,166 @@ function mapConditionRadio(
   } else if (value === "not_operational") {
     radioFields[fieldName] = options.notOperational;
   }
+}
+
+// ---------------------------------------------------------------------------
+// GP system type checkbox mapping
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Alternative System field mappers (pages 7-8)
+// Only called when data.includeAlternativePages is true; returns empty objects otherwise.
+// ---------------------------------------------------------------------------
+
+function mapAltSystemTextFields(data: InspectionFormData): Record<string, string> {
+  if (!data.includeAlternativePages) return {};
+  const as = data.alternativeSystem;
+  if (!as) return {};
+
+  return {
+    [ALT_SYSTEM_INFO.qualifiedInspector]: str(as.qualifiedInspector),
+    [ALT_SYSTEM_INFO.manufacturer]: str(as.manufacturer),
+    [ALT_SYSTEM_INFO.modelCapacity]: str(as.modelCapacity),
+    [ALT_SYSTEM_INFO.treatmentEquipmentType]: str(as.treatmentEquipmentType),
+    [ALT_DIST_COMP.yesDescription]: str(as.altDistCompYesDescription),
+    [ALT_DIST_COMP.noExplanation]: str(as.altDistCompNoExplanation),
+    [ALT_OPERATIONAL_STATUS.explanation]: str(as.altOperationalStatusExplanation),
+    [ALT_SUPPLY_LINE.otherDescription]: str(as.altSupplyLineOtherDescription),
+    [ALT_INSPECTION_PORTS.numberOfPorts]: str(as.altNumberOfPorts),
+    [ALT_INSPECTION_PORTS.portDepth1]: str(as.altPortDepths?.[0]),
+    [ALT_INSPECTION_PORTS.portDepth2]: str(as.altPortDepths?.[1]),
+    [ALT_INSPECTION_PORTS.portDepth3]: str(as.altPortDepths?.[2]),
+    [ALT_INSPECTION_PORTS.portDepth4]: str(as.altPortDepths?.[3]),
+    [ALT_INSPECTION_PORTS.portDepth5]: str(as.altPortDepths?.[4]),
+    [ALT_INSPECTION_PORTS.portDepth6]: str(as.altPortDepths?.[5]),
+    [ALT_INSPECTION_PORTS.portDepth7]: str(as.altPortDepths?.[6]),
+    [ALT_INSPECTION_PORTS.portDepth8]: str(as.altPortDepths?.[7]),
+    [ALT_OPERATIONAL_TEST.explanation]: str(as.altOperationalTestExplanation),
+    [ALT_DEFICIENCY.otherProblemsDescription]: str(as.altDefOtherProblemsDescription),
+    [ALT_DEFICIENCY.couldNotDetermineExplanation]: str(as.altDefCouldNotDetermineExplanation),
+    // Section 5 comments
+    altInspectorComments: str(as.altSystemComments),
+    // Section 5.1 comments and location
+    [ALT_DISPOSAL_LOCATION.locationExplanation]: str(as.altDisposalLocationExplanation),
+    altDisposalComments: str(as.altDisposalComments),
+    // Inspector contact block
+    [ALT_SYSTEM_INSPECTOR.orgResponsible]: str(as.orgResponsible),
+    [ALT_SYSTEM_INSPECTOR.contactName]: str(as.contactName),
+    [ALT_SYSTEM_INSPECTOR.contactPhone]: str(as.contactPhone),
+    [ALT_SYSTEM_INSPECTOR.contactEmail]: str(as.contactEmail),
+    [CONVENTIONAL_SIGNATURE_2.printedName]: str(as.altPrintedName),
+  };
+}
+
+function mapAltSystemCheckboxFields(data: InspectionFormData): Record<string, boolean> {
+  if (!data.includeAlternativePages) return {};
+  const as = data.alternativeSystem;
+  if (!as) return {};
+
+  const disposalTypes = new Set(as.altDisposalTypes ?? []);
+  const distMethods = new Set(as.altDistributionMethods ?? []);
+  const supplyMaterials = new Set(as.altSupplyLineMaterials ?? []);
+
+  return {
+    // Alt disposal type checkboxes
+    [ALT_DISPOSAL_TYPE.trench]: disposalTypes.has("trench"),
+    [ALT_DISPOSAL_TYPE.bed]: disposalTypes.has("bed"),
+    [ALT_DISPOSAL_TYPE.chamber]: disposalTypes.has("chamber"),
+    [ALT_DISPOSAL_TYPE.seepagePit]: disposalTypes.has("seepage_pit"),
+    [ALT_DISPOSAL_TYPE.drip]: disposalTypes.has("drip"),
+    [ALT_DISPOSAL_TYPE.lowPressure]: disposalTypes.has("low_pressure"),
+
+    // Alt distribution method checkboxes
+    [ALT_DISTRIBUTION.diversionValve]: distMethods.has("diversion_valve"),
+    [ALT_DISTRIBUTION.dropBox]: distMethods.has("drop_box"),
+    [ALT_DISTRIBUTION.box]: distMethods.has("distribution_box"),
+    [ALT_DISTRIBUTION.manifold]: distMethods.has("manifold"),
+    [ALT_DISTRIBUTION.serialLoading]: distMethods.has("serial_loading"),
+    [ALT_DISTRIBUTION.pressurized]: distMethods.has("pressurized"),
+    [ALT_DISTRIBUTION.unknown]: distMethods.has("unknown"),
+    [ALT_DISTRIBUTION.other]: distMethods.has("other"),
+
+    // Alt operational status (checkboxes)
+    [ALT_OPERATIONAL_STATUS.operational]: as.altOperationalStatus === "operational",
+    [ALT_OPERATIONAL_STATUS.concerns]: as.altOperationalStatus === "operational_with_concerns",
+    [ALT_OPERATIONAL_STATUS.notOperational]: as.altOperationalStatus === "not_operational",
+    [ALT_OPERATIONAL_STATUS.couldNotDetermine]: as.altOperationalStatus === "could_not_determine",
+
+    // Alt supply line checkboxes
+    [ALT_SUPPLY_LINE.pvc]: supplyMaterials.has("pvc"),
+    [ALT_SUPPLY_LINE.orangeburg]: supplyMaterials.has("orangeburg"),
+    [ALT_SUPPLY_LINE.tile]: supplyMaterials.has("tile"),
+    [ALT_SUPPLY_LINE.other]: supplyMaterials.has("other"),
+
+    // Alt deficiency checkboxes
+    [ALT_DEFICIENCY.crushedOutletPipe]: !!as.altDefCrushedOutletPipe,
+    [ALT_DEFICIENCY.rootInvasion]: !!as.altDefRootInvasion,
+    [ALT_DEFICIENCY.highWaterLines]: !!as.altDefHighWaterLines,
+    [ALT_DEFICIENCY.dboxNotFunctioning]: !!as.altDefDboxNotFunctioning,
+    [ALT_DEFICIENCY.surfacing]: !!as.altDefSurfacing,
+    [ALT_DEFICIENCY.lushVegetation]: !!as.altDefLushVegetation,
+    [ALT_DEFICIENCY.erosion]: !!as.altDefErosion,
+    [ALT_DEFICIENCY.pondingWater]: !!as.altDefPondingWater,
+    [ALT_DEFICIENCY.animalIntrusion]: !!as.altDefAnimalIntrusion,
+    [ALT_DEFICIENCY.loadTestFailure]: !!as.altDefLoadTestFailure,
+    [ALT_DEFICIENCY.otherProblems]: !!as.altDefOtherProblems,
+    [ALT_DEFICIENCY.couldNotDetermine]: !!as.altDefCouldNotDetermine,
+  };
+}
+
+function mapAltSystemRadioFields(
+  radioFields: Record<string, string>,
+  data: InspectionFormData,
+): void {
+  if (!data.includeAlternativePages) return;
+  const as = data.alternativeSystem;
+  if (!as) return;
+
+  // Aerator working (yes/no/na)
+  if (as.aeratorWorking === "yes") {
+    radioFields[ALT_SYSTEM_CHECKS.aeratorWorking] = ALT_SYSTEM_CHECKS.aeratorWorkingOptions.yes;
+  } else if (as.aeratorWorking === "no") {
+    radioFields[ALT_SYSTEM_CHECKS.aeratorWorking] = ALT_SYSTEM_CHECKS.aeratorWorkingOptions.no;
+  } else if (as.aeratorWorking === "na") {
+    radioFields[ALT_SYSTEM_CHECKS.aeratorWorking] = ALT_SYSTEM_CHECKS.aeratorWorkingOptions.na;
+  }
+
+  mapYesNoRadio(radioFields, ALT_SYSTEM_CHECKS.systemMaintained, ALT_SYSTEM_CHECKS.systemMaintainedOptions, as.systemMaintained);
+  mapYesNoRadio(radioFields, ALT_SYSTEM_CHECKS.pumpSystems, ALT_SYSTEM_CHECKS.pumpSystemsOptions, as.pumpSystems);
+  mapYesNoRadio(radioFields, ALT_SYSTEM_CHECKS.pumpOperating, ALT_SYSTEM_CHECKS.pumpOperatingOptions, as.pumpOperating);
+  mapYesNoRadio(radioFields, ALT_SYSTEM_CHECKS.highLevelAlarm, ALT_SYSTEM_CHECKS.highLevelAlarmOptions, as.highLevelAlarm);
+  mapYesNoRadio(radioFields, ALT_SYSTEM_CHECKS.alarmsSeparateCircuits, ALT_SYSTEM_CHECKS.alarmsSeparateCircuitsOptions, as.alarmsSeparateCircuits);
+  mapYesNoRadio(radioFields, ALT_SYSTEM_CHECKS.wiringProtected, ALT_SYSTEM_CHECKS.wiringProtectedOptions, as.wiringProtected);
+  mapYesNoRadio(radioFields, ALT_SYSTEM_CHECKS.audibleVisualAlarm, ALT_SYSTEM_CHECKS.audibleVisualAlarmOptions, as.audibleVisualAlarm);
+  mapYesNoRadio(radioFields, ALT_SYSTEM_CHECKS.pumpCycleDesigned, ALT_SYSTEM_CHECKS.pumpCycleDesignedOptions, as.pumpCycleDesigned);
+  mapYesNoRadio(radioFields, ALT_SYSTEM_CHECKS.riserToGrade, ALT_SYSTEM_CHECKS.riserToGradeOptions, as.riserToGrade);
+  mapYesNoRadio(radioFields, ALT_SYSTEM_CHECKS.tankWatertight, ALT_SYSTEM_CHECKS.tankWatertightOptions, as.tankWatertight);
+  mapYesNoRadio(radioFields, ALT_SYSTEM_CHECKS.checkValveVent, ALT_SYSTEM_CHECKS.checkValveVentOptions, as.checkValveVent);
+
+  // Alt disposal location
+  mapYesNoRadio(radioFields, ALT_DISPOSAL_LOCATION.locationDetermined, ALT_DISPOSAL_LOCATION.locationDeterminedOptions, as.altDisposalLocationDetermined);
+
+  // Alt distribution component inspected
+  mapYesNoRadio(radioFields, ALT_DIST_COMP.inspected, ALT_DIST_COMP.inspectedOptions, as.altDistCompInspected);
+
+  // Alt inspection ports
+  if (as.altInspectionPortsPresent === "present") {
+    radioFields[ALT_INSPECTION_PORTS.present] = ALT_INSPECTION_PORTS.presentOptions.yes;
+  } else if (as.altInspectionPortsPresent === "not_present") {
+    radioFields[ALT_INSPECTION_PORTS.present] = ALT_INSPECTION_PORTS.presentOptions.no;
+  }
+
+  // Alt operational test
+  mapYesNoRadio(radioFields, ALT_OPERATIONAL_TEST.test, ALT_OPERATIONAL_TEST.testOptions, as.altOperationalTest);
+
+  // Alt deficiency
+  mapYesNoRadio(radioFields, ALT_DEFICIENCY.hasDeficiency, ALT_DEFICIENCY.hasDeficiencyOptions, as.altHasDeficiency);
+
+  // Alt repairs
+  mapYesNoRadio(radioFields, ALT_REPAIRS.repairs, ALT_REPAIRS.repairsOptions, as.altRepairs);
+
+  // Alt disposal condition
+  mapConditionRadio(radioFields, ALT_DISPOSAL_CONDITION.condition, ALT_DISPOSAL_CONDITION.conditionOptions, as.altDisposalCondition);
 }
 
 // ---------------------------------------------------------------------------

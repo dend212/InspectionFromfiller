@@ -2,11 +2,12 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
-import { type FieldPath, useForm } from "react-hook-form";
+import { type FieldPath, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { ApnLookupInput } from "@/components/inspection/apn-lookup-input";
 import { ReviewNoteBanner } from "@/components/inspection/review-note-banner";
 import { ScanFormButton } from "@/components/inspection/scan-form-button";
+import { StepAlternativeSystem } from "@/components/inspection/step-alternative-system";
 import { StepDesignFlow } from "@/components/inspection/step-design-flow";
 import { StepDisposalWorks } from "@/components/inspection/step-disposal-works";
 import { StepFacilityInfo } from "@/components/inspection/step-facility-info";
@@ -46,6 +47,16 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
 
   const { saving, lastSaved } = useAutoSave(form, inspection.id);
 
+  // Watch the toggle — drives step count and isLastStep
+  const includeAlternativePages = useWatch({
+    control: form.control,
+    name: "includeAlternativePages",
+    defaultValue: false,
+  });
+
+  const totalSteps = includeAlternativePages ? 6 : 5;
+  const isLastStep = currentStep === totalSteps - 1;
+
   const handleNext = async () => {
     // Trigger validation for current step fields
     const isValid = await form.trigger(STEP_FIELDS[currentStep] as FieldPath<InspectionFormData>[]);
@@ -53,7 +64,7 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
       toast.error("Please fill in all required fields before continuing");
       return;
     }
-    setCurrentStep((prev) => Math.min(prev + 1, 4));
+    setCurrentStep((prev) => Math.min(prev + 1, totalSteps - 1));
   };
 
   const handleBack = () => {
@@ -101,12 +112,16 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
           </div>
         )}
 
-        <WizardProgress currentStep={currentStep} onStepClick={handleStepClick} />
+        <WizardProgress
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+          onStepClick={handleStepClick}
+        />
 
         <div className="rounded-lg border bg-card p-4 sm:p-6">
           <div className="mb-5 pb-4 border-b">
             <p className="text-xs font-medium text-primary uppercase tracking-wider">
-              Step {currentStep + 1} of 5
+              Step {currentStep + 1} of {totalSteps}
             </p>
             <h2 className="text-xl font-semibold mt-1">{STEP_LABELS[currentStep]}</h2>
           </div>
@@ -117,6 +132,7 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
             {currentStep === 2 && <StepDesignFlow inspectionId={inspection.id} />}
             {currentStep === 3 && <StepSepticTank inspectionId={inspection.id} />}
             {currentStep === 4 && <StepDisposalWorks inspectionId={inspection.id} />}
+            {currentStep === 5 && <StepAlternativeSystem inspectionId={inspection.id} />}
           </div>
         </div>
 
@@ -124,7 +140,7 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
           currentStep={currentStep}
           onNext={handleNext}
           onBack={handleBack}
-          isLastStep={currentStep === 4}
+          isLastStep={isLastStep}
           isSubmitting={form.formState.isSubmitting}
           saving={saving}
           lastSaved={lastSaved}

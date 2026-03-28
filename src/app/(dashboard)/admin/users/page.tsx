@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { CreateUserForm } from "@/components/admin/create-user-form";
+import { DeleteUserButton } from "@/components/admin/delete-user-button";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -91,12 +92,13 @@ export default async function AdminUsersPage() {
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Created</TableHead>
+                <TableHead className="w-12"><span className="sr-only">Actions</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-6">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
                     No users found.
                   </TableCell>
                 </TableRow>
@@ -114,6 +116,11 @@ export default async function AdminUsersPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "-"}
+                    </TableCell>
+                    <TableCell>
+                      {u.id !== user.id && (
+                        <DeleteUserButton userId={u.id} userName={u.fullName} />
+                      )}
                     </TableCell>
                   </TableRow>
                 ))

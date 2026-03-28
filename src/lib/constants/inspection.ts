@@ -203,11 +203,42 @@ export const INSPECTOR_DEFAULTS = {
   truckNumber: "ADEQ Truck #2833",
 } as const;
 
-/** Step labels for the 5-step wizard (matching ADEQ form sections) */
+/** Step labels for the wizard (matching ADEQ form sections). Index 5 is the optional alternative system step. */
 export const STEP_LABELS = [
   "Facility Info",
   "General Treatment",
   "Design Flow",
   "Septic Tank",
   "Disposal Works",
+  "Alternative System",
+] as const;
+
+/** Alternative system disposal type options (Section 5.1) */
+export const ALT_DISPOSAL_TYPES = [
+  { value: "trench", label: "Trench" },
+  { value: "bed", label: "Bed" },
+  { value: "chamber", label: "Chamber" },
+  { value: "seepage_pit", label: "Seepage Pit" },
+  { value: "drip", label: "Drip" },
+  { value: "low_pressure", label: "Low Pressure Pipe" },
+] as const;
+
+/** Alternative system distribution method options (Section 5.1) */
+export const ALT_DISTRIBUTION_METHODS = [
+  { value: "diversion_valve", label: "Diversion Valve" },
+  { value: "drop_box", label: "Drop Box" },
+  { value: "distribution_box", label: "Distribution Box" },
+  { value: "manifold", label: "Manifold" },
+  { value: "serial_loading", label: "Serial Loading" },
+  { value: "pressurized", label: "Pressurized" },
+  { value: "unknown", label: "Unknown" },
+  { value: "other", label: "Other" },
+] as const;
+
+/** Alternative system supply line material options (Section 5.1) */
+export const ALT_SUPPLY_LINE_MATERIALS = [
+  { value: "pvc", label: "PVC" },
+  { value: "orangeburg", label: "Orangeburg" },
+  { value: "tile", label: "Tile" },
+  { value: "other", label: "Other" },
 ] as const;

@@ -5,14 +5,18 @@ import { cn } from "@/lib/utils";
 
 interface WizardProgressProps {
   currentStep: number;
+  totalSteps?: number;
   onStepClick?: (step: number) => void;
 }
 
-export function WizardProgress({ currentStep, onStepClick }: WizardProgressProps) {
+export function WizardProgress({ currentStep, totalSteps, onStepClick }: WizardProgressProps) {
+  const stepCount = totalSteps ?? 5;
+  const labels = STEP_LABELS.slice(0, stepCount);
+
   return (
     <nav aria-label="Inspection form progress" className="w-full">
       <ol className="flex items-center justify-between gap-1">
-        {STEP_LABELS.map((label, index) => {
+        {labels.map((label, index) => {
           const isCompleted = index < currentStep;
           const isCurrent = index === currentStep;
 
