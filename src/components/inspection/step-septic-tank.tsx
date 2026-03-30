@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CheckIcon } from "lucide-react";
 import { useFormContext, useWatch } from "react-hook-form";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { cn } from "@/lib/utils";
@@ -828,7 +829,9 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                               onClick={() => field.onChange(isSelected ? [] : [c.value])}
                             >
                               <span className="text-sm font-medium">{c.label}</span>
-                              <Checkbox checked={isSelected} tabIndex={-1} />
+                              <div className={`size-4 shrink-0 rounded-[4px] border transition-colors ${isSelected ? "border-primary bg-primary" : "border-input"}`}>
+                                {isSelected && <CheckIcon className="size-4 text-primary-foreground p-[1px]" />}
+                              </div>
                             </button>
                           );
                         })}
@@ -864,7 +867,9 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                               onClick={() => field.onChange(isSelected ? [] : [c.value])}
                             >
                               <span className="text-sm font-medium">{c.label}</span>
-                              <Checkbox checked={isSelected} tabIndex={-1} />
+                              <div className={`size-4 shrink-0 rounded-[4px] border transition-colors ${isSelected ? "border-primary bg-primary" : "border-input"}`}>
+                                {isSelected && <CheckIcon className="size-4 text-primary-foreground p-[1px]" />}
+                              </div>
                             </button>
                           );
                         })}
@@ -900,7 +905,9 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                               onClick={() => field.onChange(isSelected ? [] : [c.value])}
                             >
                               <span className="text-sm font-medium">{c.label}</span>
-                              <Checkbox checked={isSelected} tabIndex={-1} />
+                              <div className={`size-4 shrink-0 rounded-[4px] border transition-colors ${isSelected ? "border-primary bg-primary" : "border-input"}`}>
+                                {isSelected && <CheckIcon className="size-4 text-primary-foreground p-[1px]" />}
+                              </div>
                             </button>
                           );
                         })}
