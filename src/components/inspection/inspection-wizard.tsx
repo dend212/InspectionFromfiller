@@ -54,6 +54,9 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
     defaultValue: false,
   });
 
+  const altSystemChecked =
+    useWatch({ control: form.control, name: "generalTreatment.alternativeSystem" }) ?? false;
+
   const totalSteps = includeAlternativePages ? 6 : 5;
   const isLastStep = currentStep === totalSteps - 1;
 
@@ -146,7 +149,12 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
           lastSaved={lastSaved}
           submitButton={
             inspection.status === "draft" ? (
-              <SubmitForReviewButton inspectionId={inspection.id} formData={form.getValues()} />
+              <SubmitForReviewButton
+                  inspectionId={inspection.id}
+                  formData={form.getValues()}
+                  altSystemChecked={altSystemChecked}
+                  includeAlternativePages={includeAlternativePages}
+                />
             ) : undefined
           }
         />

@@ -23,12 +23,16 @@ interface SubmitForReviewButtonProps {
   inspectionId: string;
   formData: InspectionFormData | null;
   disabled?: boolean;
+  altSystemChecked?: boolean;
+  includeAlternativePages?: boolean;
 }
 
 export function SubmitForReviewButton({
   inspectionId,
   formData,
   disabled,
+  altSystemChecked,
+  includeAlternativePages,
 }: SubmitForReviewButtonProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -38,16 +42,18 @@ export function SubmitForReviewButton({
   const handleOpenDialog = () => {
     // Run validation to collect warnings
     const result = inspectionFormSchema.safeParse(formData);
+    const issues: string[] = result.success
+      ? []
+      : result.error.issues.map((issue) => `${issue.path.join(" > ")}: ${issue.message}`);
 
-    if (!result.success) {
-      const issues = result.error.issues.map(
-        (issue) => `${issue.path.join(" > ")}: ${issue.message}`,
+    // Warn if alternative system is documented but the alt pages toggle is not enabled
+    if (altSystemChecked && !includeAlternativePages) {
+      issues.unshift(
+        'Alternative system is checked but "Alt. System Pages" is not enabled \u2014 the PDF will not include pages 7-8 for the alternative system.',
       );
-      setWarnings(issues);
-    } else {
-      setWarnings([]);
     }
 
+    setWarnings(issues);
     setOpen(true);
   };
 
