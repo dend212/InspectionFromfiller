@@ -50,16 +50,13 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
   const form = useFormContext<InspectionFormData>();
   const [media, setMedia] = useState<MediaRecord[]>([]);
 
-  // Auto-fill tank inspection date from facility info inspection date
+  // Auto-fill tank inspection date from facility info inspection date (only when empty)
   const inspectionDate = useWatch({ control: form.control, name: "facilityInfo.dateOfInspection" });
-  const tankDateSyncedRef = useRef(false);
   useEffect(() => {
     if (!inspectionDate) return;
     const currentTankDate = form.getValues("septicTank.tankInspectionDate");
-    // Only auto-fill if tank date is empty or was previously synced (not manually edited)
-    if (!currentTankDate || !tankDateSyncedRef.current) {
+    if (!currentTankDate) {
       form.setValue("septicTank.tankInspectionDate", inspectionDate);
-      tankDateSyncedRef.current = true;
     }
   }, [inspectionDate]);
 
