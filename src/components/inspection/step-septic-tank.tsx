@@ -61,7 +61,7 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
       form.setValue("septicTank.tankInspectionDate", inspectionDate);
       tankDateSyncedRef.current = true;
     }
-  }, [inspectionDate, form]);
+  }, [inspectionDate]);
 
   useEffect(() => {
     async function loadMedia() {
@@ -98,7 +98,7 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
     setMedia((prev) => prev.map((m) => (m.id === mediaId ? { ...m, description: newDescription } : m)));
   }, []);
 
-  const numberOfTanksValue = form.watch("septicTank.numberOfTanks");
+  const numberOfTanksValue = useWatch({ control: form.control, name: "septicTank.numberOfTanks" });
   const numberOfTanks = Math.min(
     Math.max(Number.parseInt(numberOfTanksValue || "1", 10) || 1, 1),
     3,
@@ -155,7 +155,7 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
       // Shrink: remove extra tanks
       form.setValue("septicTank.tanks", currentTanks.slice(0, numberOfTanks));
     }
-  }, [numberOfTanks, form]);
+  }, [numberOfTanks]);
 
   const buildTankContext = useCallback((): SepticTankContext => {
     const st = form.getValues("septicTank");

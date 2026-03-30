@@ -56,6 +56,17 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
   const hasSitePlan = useWatch({ control: form.control, name: "facilityInfo.hasSitePlan" });
   const hasOperationDocs = useWatch({ control: form.control, name: "facilityInfo.hasOperationDocs" });
   const hasOtherRecords = useWatch({ control: form.control, name: "facilityInfo.hasOtherRecords" });
+  const facilityAddress = useWatch({ control: form.control, name: "facilityInfo.facilityAddress" });
+  const facilityCity = useWatch({ control: form.control, name: "facilityInfo.facilityCity" });
+  const sellerAddress = useWatch({ control: form.control, name: "facilityInfo.sellerAddress" });
+  const sellerCity = useWatch({ control: form.control, name: "facilityInfo.sellerCity" });
+  const facilityType = useWatch({ control: form.control, name: "facilityInfo.facilityType" });
+  const hasAdeqCourse = useWatch({ control: form.control, name: "facilityInfo.hasAdeqCourse" });
+  const isProfessionalEngineer = useWatch({ control: form.control, name: "facilityInfo.isProfessionalEngineer" });
+  const isRegisteredSanitarian = useWatch({ control: form.control, name: "facilityInfo.isRegisteredSanitarian" });
+  const isWastewaterOperator = useWatch({ control: form.control, name: "facilityInfo.isWastewaterOperator" });
+  const isLicensedContractor = useWatch({ control: form.control, name: "facilityInfo.isLicensedContractor" });
+  const hasPumperTruck = useWatch({ control: form.control, name: "facilityInfo.hasPumperTruck" });
 
   useEffect(() => {
     const anyChecked = hasDischargeAuth || hasApprovalOfConstruction || hasSitePlan || hasOperationDocs || hasOtherRecords;
@@ -240,10 +251,9 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
         <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border bg-muted/50 p-3">
           <Checkbox
             checked={
-              form.watch("facilityInfo.sellerAddress") ===
-                form.watch("facilityInfo.facilityAddress") &&
-              form.watch("facilityInfo.sellerCity") === form.watch("facilityInfo.facilityCity") &&
-              !!form.watch("facilityInfo.facilityAddress")
+              sellerAddress === facilityAddress &&
+              sellerCity === facilityCity &&
+              !!facilityAddress
             }
             onCheckedChange={(checked) => {
               if (checked) {
@@ -442,7 +452,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             )}
           />
 
-          {form.watch("facilityInfo.facilityType") === "other" && (
+          {facilityType === "other" && (
             <div className="border-l-2 border-primary/20 pl-4">
               <FormField
                 control={form.control}
@@ -798,7 +808,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             )}
           />
 
-          {form.watch("facilityInfo.hasAdeqCourse") && (
+          {hasAdeqCourse && (
             <div className="grid grid-cols-1 gap-4 border-l-2 border-primary/20 pl-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
@@ -845,7 +855,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             )}
           />
 
-          {form.watch("facilityInfo.isProfessionalEngineer") && (
+          {isProfessionalEngineer && (
             <div className="border-l-2 border-primary/20 pl-4">
               <FormField
                 control={form.control}
@@ -879,7 +889,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             )}
           />
 
-          {form.watch("facilityInfo.isRegisteredSanitarian") && (
+          {isRegisteredSanitarian && (
             <div className="border-l-2 border-primary/20 pl-4">
               <FormField
                 control={form.control}
@@ -913,7 +923,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             )}
           />
 
-          {form.watch("facilityInfo.isWastewaterOperator") && (
+          {isWastewaterOperator && (
             <div className="border-l-2 border-primary/20 pl-4">
               <FormField
                 control={form.control}
@@ -947,7 +957,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             )}
           />
 
-          {form.watch("facilityInfo.isLicensedContractor") && (
+          {isLicensedContractor && (
             <div className="border-l-2 border-primary/20 pl-4">
               <FormField
                 control={form.control}
@@ -981,7 +991,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             )}
           />
 
-          {form.watch("facilityInfo.hasPumperTruck") && (
+          {hasPumperTruck && (
             <div className="border-l-2 border-primary/20 pl-4">
               <FormField
                 control={form.control}
@@ -1047,7 +1057,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             )}
           />
 
-          {form.watch("facilityInfo.hasDischargeAuth") && (
+          {hasDischargeAuth && (
             <div className="border-l-2 border-primary/20 pl-4">
               <FormField
                 control={form.control}
@@ -1080,7 +1090,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             )}
           />
 
-          {form.watch("facilityInfo.hasApprovalOfConstruction") && (
+          {hasApprovalOfConstruction && (
             <div className="border-l-2 border-primary/20 pl-4">
               <FormField
                 control={form.control}
@@ -1143,7 +1153,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             )}
           />
 
-          {form.watch("facilityInfo.hasOtherRecords") && (
+          {hasOtherRecords && (
             <div className="border-l-2 border-primary/20 pl-4">
               <FormField
                 control={form.control}

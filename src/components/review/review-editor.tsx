@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
 import { PdfPreview } from "@/components/inspection/pdf-preview";
@@ -127,6 +127,7 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
     defaultValues: inspection.formData ?? getDefaultFormValues(""),
   });
 
+  const facilityName = useWatch({ control: form.control, name: "facilityInfo.facilityName" });
   const { generatePdf, pdfData, isGenerating, error, clearPdf } = usePdfGeneration();
 
   // Finalized PDF state — for showing the exact server-generated PDF
@@ -1035,7 +1036,7 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
                 ) : pdfData ? (
                   <PdfPreview
                     pdfData={pdfData}
-                    facilityName={form.watch("facilityInfo.facilityName") || undefined}
+                    facilityName={facilityName || undefined}
                   />
                 ) : !isReadOnly ? (
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
