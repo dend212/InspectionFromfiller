@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useFormContext } from "react-hook-form";
+import { useFormContext, useWatch } from "react-hook-form";
 import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
 import { PhotoCapture } from "@/components/inspection/photo-capture";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -33,17 +33,17 @@ const RARE_SYSTEM_TYPES = GP402_SYSTEM_TYPES.slice(6);
 
 export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps) {
   const form = useFormContext<InspectionFormData>();
-  const showAlternative = form.watch("generalTreatment.alternativeSystem");
+  const showAlternative = useWatch({ control: form.control, name: "generalTreatment.alternativeSystem" });
   const [showAllTypes, setShowAllTypes] = useState(false);
   const [media, setMedia] = useState<MediaRecord[]>([]);
 
   // Auto-expand if any rare type is already selected
-  const selectedTypes = form.watch("generalTreatment.systemTypes") ?? [];
+  const selectedTypes = useWatch({ control: form.control, name: "generalTreatment.systemTypes" }) ?? [];
   useEffect(() => {
-    if (RARE_SYSTEM_TYPES.some((t) => selectedTypes.includes(t.value))) {
+    if (!showAllTypes && RARE_SYSTEM_TYPES.some((t) => selectedTypes.includes(t.value))) {
       setShowAllTypes(true);
     }
-  }, [selectedTypes]);
+  }, [selectedTypes, showAllTypes]);
 
   useEffect(() => {
     async function loadMedia() {

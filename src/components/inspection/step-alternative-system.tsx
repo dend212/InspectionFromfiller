@@ -78,6 +78,9 @@ export function StepAlternativeSystem({ inspectionId: _inspectionId }: StepAlter
   const altHasDeficiency = useWatch({ control: form.control, name: "alternativeSystem.altHasDeficiency" });
   const altDefOtherProblems = useWatch({ control: form.control, name: "alternativeSystem.altDefOtherProblems" });
   const altDefCouldNotDetermine = useWatch({ control: form.control, name: "alternativeSystem.altDefCouldNotDetermine" });
+  const altDisposalLocationDetermined = useWatch({ control: form.control, name: "alternativeSystem.altDisposalLocationDetermined" });
+  const altOperationalStatus = useWatch({ control: form.control, name: "alternativeSystem.altOperationalStatus" });
+  const altOperationalTest = useWatch({ control: form.control, name: "alternativeSystem.altOperationalTest" });
 
   return (
     <div className="space-y-6">
@@ -285,7 +288,7 @@ export function StepAlternativeSystem({ inspectionId: _inspectionId }: StepAlter
           )}
         />
 
-        {form.watch("alternativeSystem.altDisposalLocationDetermined") === "no" && (
+        {altDisposalLocationDetermined === "no" && (
           <FormField
             control={form.control}
             name="alternativeSystem.altDisposalLocationExplanation"
@@ -429,7 +432,7 @@ export function StepAlternativeSystem({ inspectionId: _inspectionId }: StepAlter
           )}
         />
 
-        {form.watch("alternativeSystem.altOperationalStatus") === "could_not_determine" && (
+        {altOperationalStatus === "could_not_determine" && (
           <FormField
             control={form.control}
             name="alternativeSystem.altOperationalStatusExplanation"
@@ -587,7 +590,7 @@ export function StepAlternativeSystem({ inspectionId: _inspectionId }: StepAlter
         )}
       />
 
-      {form.watch("alternativeSystem.altOperationalTest") === "no" && (
+      {altOperationalTest === "no" && (
         <FormField
           control={form.control}
           name="alternativeSystem.altOperationalTestExplanation"

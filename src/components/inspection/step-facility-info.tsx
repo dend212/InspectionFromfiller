@@ -62,7 +62,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
     if (anyChecked && form.getValues("facilityInfo.recordsAvailable") !== "yes") {
       form.setValue("facilityInfo.recordsAvailable", "yes");
     }
-  }, [hasDischargeAuth, hasApprovalOfConstruction, hasSitePlan, hasOperationDocs, hasOtherRecords, form]);
+  }, [hasDischargeAuth, hasApprovalOfConstruction, hasSitePlan, hasOperationDocs, hasOtherRecords]);
 
   useEffect(() => {
     async function loadMedia() {
