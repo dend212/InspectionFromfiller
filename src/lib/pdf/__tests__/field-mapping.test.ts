@@ -1195,11 +1195,18 @@ describe("mapFormDataToFields", () => {
       expect(result.textFields.primaryChamberMeasured).toBe("");
     });
 
-    it("sets liquidLevelNotDetermined when indicated", () => {
+    it("sets liquidLevelNotDetermined as a checkbox when indicated", () => {
       const data = makeFullFormData();
       data.septicTank.tanks[0].liquidLevelNotDetermined = true;
       const result = mapFormDataToFields(data);
-      expect(result.textFields.liquidLevelNotDetermined).toBe("X");
+      expect(result.checkboxFields.liquidLevelNotDetermined).toBe(true);
+    });
+
+    it("clears liquidLevelNotDetermined checkbox when not set", () => {
+      const data = makeFullFormData();
+      data.septicTank.tanks[0].liquidLevelNotDetermined = false;
+      const result = mapFormDataToFields(data);
+      expect(result.checkboxFields.liquidLevelNotDetermined).toBe(false);
     });
   });
 });

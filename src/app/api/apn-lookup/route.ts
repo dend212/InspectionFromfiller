@@ -107,7 +107,12 @@ export async function GET(request: Request) {
         physicalAddress: feature.PHYSICAL_ADDRESS || "",
         city: feature.PHYSICAL_CITY || "",
         zip: feature.PHYSICAL_ZIP || "",
-        county: feature.JURISDICTION || "",
+        // The Maricopa County Assessor API only serves parcels in Maricopa
+        // County, so the county is always "Maricopa". The JURISDICTION field on
+        // the source record is the *city* (Phoenix, Tempe, etc.), not the
+        // county — using it here previously left the County dropdown empty
+        // because no value matched AZ_COUNTIES.
+        county: "Maricopa",
         apnFormatted: feature.APN_DASH || "",
         legalDescription: legalParts.join(", "),
         lotSize: String(feature.LAND_SIZE || ""),

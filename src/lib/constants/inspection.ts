@@ -124,13 +124,46 @@ export const BAFFLE_MATERIALS = [
   { value: "not_determined", label: "Could not be determined" },
 ] as const;
 
-/** Baffle condition options from Section 4L */
+/**
+ * Baffle condition options from Section 4L.
+ *
+ * These are independent checkboxes that match the paper form layout — multiple
+ * may be selected (e.g. Present + Not Determined for an operational state that
+ * couldn't be confirmed). The PDF has separate checkboxes for each.
+ */
 export const BAFFLE_CONDITIONS = [
-  { value: "present_operational", label: "Present - Operational" },
-  { value: "present_not_operational", label: "Present - Not Operational" },
+  { value: "present", label: "Present" },
+  { value: "operational", label: "Operational" },
+  { value: "not_operational", label: "Not Operational" },
   { value: "not_present", label: "Not Present" },
   { value: "not_determined", label: "Not Determined" },
 ] as const;
+
+/**
+ * Migrate legacy single-value baffle conditions into the new multi-select array.
+ * Old data may contain "present_operational" or "present_not_operational" — these
+ * are split into the new independent checkbox values.
+ */
+export function normalizeBaffleCondition(
+  value: string | string[] | undefined | null,
+): string[] {
+  if (!value) return [];
+  const input = Array.isArray(value) ? value : [value];
+  const out = new Set<string>();
+  for (const v of input) {
+    if (!v) continue;
+    if (v === "present_operational") {
+      out.add("present");
+      out.add("operational");
+    } else if (v === "present_not_operational") {
+      out.add("present");
+      out.add("not_operational");
+    } else {
+      out.add(v);
+    }
+  }
+  return Array.from(out);
+}
 
 /** Domestic water source options from Section 1A */
 export const WATER_SOURCES = [

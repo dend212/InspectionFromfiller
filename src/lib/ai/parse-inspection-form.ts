@@ -107,12 +107,18 @@ const ENUM_NORMALIZATIONS: Record<string, Record<string, string>> = {
     "not determined": "not_determined",
   },
   baffleCondition: {
+    // Independent checkbox values (current schema)
+    present: "present",
+    operational: "operational",
+    "not operational": "not_operational",
+    "not present": "not_present",
+    "not determined": "not_determined",
+    // Legacy combined labels — preserved so old scan responses still parse.
+    // The UI normalizes these into the new independent values on load.
     "present - operational": "present_operational",
     "present operational": "present_operational",
     "present - not operational": "present_not_operational",
     "present not operational": "present_not_operational",
-    "not present": "not_present",
-    "not determined": "not_determined",
   },
 };
 

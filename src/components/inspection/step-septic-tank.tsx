@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon } from "lucide-react";
-import { useFormContext, useWatch } from "react-hook-form";
+import { useFormContext, useWatch, type Control, type FieldPath } from "react-hook-form";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { cn } from "@/lib/utils";
 import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
@@ -24,6 +24,7 @@ import {
   BAFFLE_MATERIALS,
   CAPACITY_BASIS_OPTIONS,
   TANK_MATERIALS,
+  normalizeBaffleCondition,
 } from "@/lib/constants/inspection";
 import { AiCommentButton, CharacterCount } from "@/components/inspection/ai-comment-button";
 import type { SepticTankContext } from "@/lib/ai/rewrite-comments";
@@ -42,6 +43,72 @@ const TANK_DEFICIENCY_ITEMS = [
 ];
 
 const SECTION_NAME = "septic-tank";
+
+/**
+ * Multi-select baffle condition field. Each option is an independent checkbox so
+ * inspectors can record combinations like Present + Not Determined that match the
+ * paper form's layout.
+ */
+function BaffleConditionField({
+  control,
+  name,
+  label,
+}: {
+  control: Control<InspectionFormData>;
+  name: FieldPath<InspectionFormData>;
+  label: string;
+}) {
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => {
+        const selected = normalizeBaffleCondition(field.value as string | string[] | undefined);
+        const toggle = (value: string) => {
+          const next = selected.includes(value)
+            ? selected.filter((v) => v !== value)
+            : [...selected, value];
+          field.onChange(next);
+        };
+        return (
+          <FormItem>
+            <FormLabel className="text-base">{label}</FormLabel>
+            <div className="space-y-2">
+              {BAFFLE_CONDITIONS.map((c) => {
+                const isSelected = selected.includes(c.value);
+                return (
+                  <button
+                    key={c.value}
+                    type="button"
+                    aria-pressed={isSelected}
+                    className={`flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left transition-colors ${
+                      isSelected
+                        ? "border-primary bg-primary/10 font-semibold"
+                        : "hover:bg-accent/50"
+                    }`}
+                    onClick={() => toggle(c.value)}
+                  >
+                    <span className="text-sm font-medium">{c.label}</span>
+                    <div
+                      className={`size-4 shrink-0 rounded-[4px] border transition-colors ${
+                        isSelected ? "border-primary bg-primary" : "border-input"
+                      }`}
+                    >
+                      {isSelected && (
+                        <CheckIcon className="size-4 text-primary-foreground p-[1px]" />
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <FormMessage />
+          </FormItem>
+        );
+      }}
+    />
+  );
+}
 
 interface StepSepticTankProps {
   inspectionId: string;
@@ -177,9 +244,9 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
         lidsRisersPresent: tank.lidsRisersPresent || "",
         lidsSecurelyFastened: tank.lidsSecurelyFastened || "",
         baffleMaterial: tank.baffleMaterial || [],
-        inletBaffleCondition: tank.inletBaffleCondition || [],
-        outletBaffleCondition: tank.outletBaffleCondition || [],
-        interiorBaffleCondition: tank.interiorBaffleCondition || [],
+        inletBaffleCondition: normalizeBaffleCondition(tank.inletBaffleCondition),
+        outletBaffleCondition: normalizeBaffleCondition(tank.outletBaffleCondition),
+        interiorBaffleCondition: normalizeBaffleCondition(tank.interiorBaffleCondition),
         effluentFilterPresent: tank.effluentFilterPresent || "",
         effluentFilterServiced: tank.effluentFilterServiced || "",
         deficiencies,
@@ -803,119 +870,25 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
               }}
             />
 
+            <p className="text-xs text-muted-foreground">
+              Select all that apply — these checkboxes are independent so you can record
+              combinations like Present + Not Determined.
+            </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {/* Inlet Baffle Condition — single select */}
-              <FormField
+              <BaffleConditionField
                 control={form.control}
                 name={`septicTank.tanks.${tankIndex}.inletBaffleCondition`}
-                render={({ field }) => {
-                  const current = Array.isArray(field.value) ? field.value[0] ?? "" : field.value ?? "";
-                  return (
-                    <FormItem>
-                      <FormLabel className="text-base">Inlet Baffle</FormLabel>
-                      <div className="space-y-2">
-                        {BAFFLE_CONDITIONS.map((c) => {
-                          const isSelected = current === c.value;
-                          return (
-                            <button
-                              key={c.value}
-                              type="button"
-                              aria-pressed={isSelected}
-                              className={`flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left transition-colors ${
-                                isSelected
-                                  ? "border-primary bg-primary/10 font-semibold"
-                                  : "hover:bg-accent/50"
-                              }`}
-                              onClick={() => field.onChange(isSelected ? [] : [c.value])}
-                            >
-                              <span className="text-sm font-medium">{c.label}</span>
-                              <div className={`size-4 shrink-0 rounded-[4px] border transition-colors ${isSelected ? "border-primary bg-primary" : "border-input"}`}>
-                                {isSelected && <CheckIcon className="size-4 text-primary-foreground p-[1px]" />}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
+                label="Inlet Baffle"
               />
-
-              {/* Outlet Baffle Condition — single select */}
-              <FormField
+              <BaffleConditionField
                 control={form.control}
                 name={`septicTank.tanks.${tankIndex}.outletBaffleCondition`}
-                render={({ field }) => {
-                  const current = Array.isArray(field.value) ? field.value[0] ?? "" : field.value ?? "";
-                  return (
-                    <FormItem>
-                      <FormLabel className="text-base">Outlet Baffle</FormLabel>
-                      <div className="space-y-2">
-                        {BAFFLE_CONDITIONS.map((c) => {
-                          const isSelected = current === c.value;
-                          return (
-                            <button
-                              key={c.value}
-                              type="button"
-                              aria-pressed={isSelected}
-                              className={`flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left transition-colors ${
-                                isSelected
-                                  ? "border-primary bg-primary/10 font-semibold"
-                                  : "hover:bg-accent/50"
-                              }`}
-                              onClick={() => field.onChange(isSelected ? [] : [c.value])}
-                            >
-                              <span className="text-sm font-medium">{c.label}</span>
-                              <div className={`size-4 shrink-0 rounded-[4px] border transition-colors ${isSelected ? "border-primary bg-primary" : "border-input"}`}>
-                                {isSelected && <CheckIcon className="size-4 text-primary-foreground p-[1px]" />}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
+                label="Outlet Baffle"
               />
-
-              {/* Interior Baffle Condition — single select */}
-              <FormField
+              <BaffleConditionField
                 control={form.control}
                 name={`septicTank.tanks.${tankIndex}.interiorBaffleCondition`}
-                render={({ field }) => {
-                  const current = Array.isArray(field.value) ? field.value[0] ?? "" : field.value ?? "";
-                  return (
-                    <FormItem>
-                      <FormLabel className="text-base">Interior Baffle</FormLabel>
-                      <div className="space-y-2">
-                        {BAFFLE_CONDITIONS.map((c) => {
-                          const isSelected = current === c.value;
-                          return (
-                            <button
-                              key={c.value}
-                              type="button"
-                              aria-pressed={isSelected}
-                              className={`flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left transition-colors ${
-                                isSelected
-                                  ? "border-primary bg-primary/10 font-semibold"
-                                  : "hover:bg-accent/50"
-                              }`}
-                              onClick={() => field.onChange(isSelected ? [] : [c.value])}
-                            >
-                              <span className="text-sm font-medium">{c.label}</span>
-                              <div className={`size-4 shrink-0 rounded-[4px] border transition-colors ${isSelected ? "border-primary bg-primary" : "border-input"}`}>
-                                {isSelected && <CheckIcon className="size-4 text-primary-foreground p-[1px]" />}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
+                label="Interior Baffle"
               />
             </div>
           </div>

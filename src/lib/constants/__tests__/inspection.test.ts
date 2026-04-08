@@ -271,18 +271,25 @@ describe("BAFFLE_MATERIALS", () => {
 // ============================================================================
 
 describe("BAFFLE_CONDITIONS", () => {
-  it("has 4 conditions", () => {
-    expect(BAFFLE_CONDITIONS).toHaveLength(4);
+  it("has 5 independent checkbox conditions", () => {
+    expect(BAFFLE_CONDITIONS).toHaveLength(5);
   });
 
   it("has valid items with unique values", () => {
-    expectValueLabelArray(BAFFLE_CONDITIONS, 4);
+    expectValueLabelArray(BAFFLE_CONDITIONS, 5);
   });
 
-  it("includes present_operational and not_present", () => {
+  it("includes the five independent values", () => {
     const values = BAFFLE_CONDITIONS.map((c) => c.value);
-    expect(values).toContain("present_operational");
-    expect(values).toContain("not_present");
+    expect(values).toEqual(
+      expect.arrayContaining([
+        "present",
+        "operational",
+        "not_operational",
+        "not_present",
+        "not_determined",
+      ]),
+    );
   });
 });
 

@@ -60,12 +60,42 @@ function getInitials(name: string): string {
     .join("");
 }
 
-/** Returns true if the baffle condition indicates baffle is present */
+/**
+ * Baffle condition checks. The form supports independent checkboxes (Present,
+ * Operational, Not Operational, Not Present, Not Determined) so multiple may be
+ * selected at once. Legacy single-value strings ("present_operational",
+ * "present_not_operational") are still recognized for backward compatibility
+ * with previously saved inspections.
+ */
+function hasBaffleValue(
+  condition: string | string[] | undefined,
+  value: string,
+): boolean {
+  if (!condition) return false;
+  if (Array.isArray(condition)) return condition.includes(value);
+  return condition === value;
+}
+
 function isBafflePresent(condition: string | string[] | undefined): boolean {
-  if (Array.isArray(condition)) {
-    return condition.includes("present_operational") || condition.includes("present_not_operational");
-  }
-  return condition === "present_operational" || condition === "present_not_operational";
+  return (
+    hasBaffleValue(condition, "present") ||
+    hasBaffleValue(condition, "present_operational") ||
+    hasBaffleValue(condition, "present_not_operational")
+  );
+}
+
+function isBaffleOperational(condition: string | string[] | undefined): boolean {
+  return (
+    hasBaffleValue(condition, "operational") ||
+    hasBaffleValue(condition, "present_operational")
+  );
+}
+
+function isBaffleNotOperational(condition: string | string[] | undefined): boolean {
+  return (
+    hasBaffleValue(condition, "not_operational") ||
+    hasBaffleValue(condition, "present_not_operational")
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +257,6 @@ export function mapFormDataToFields(data: InspectionFormData): FormFieldMapping 
     secondaryChamberMeasured: str(tank?.secondaryScumThickness ? "X" : ""),
     secondaryScumThickness: str(tank?.secondaryScumThickness),
     secondarySludgeThickness: str(tank?.secondarySludgeThickness),
-    liquidLevelNotDetermined: tank?.liquidLevelNotDetermined ? "X" : "",
 
     // Pumping
     haulerCompany: str(st?.haulerCompany),
@@ -286,6 +315,11 @@ export function mapFormDataToFields(data: InspectionFormData): FormFieldMapping 
   // =========================================================================
 
   const checkboxFields: Record<string, boolean> = {
+    // Section 4B: Liquid level could not be determined (PDF field is a CheckBox,
+    // not a text field — must live in checkboxFields so generate-report.ts uses
+    // the checkbox API to set it).
+    liquidLevelNotDetermined: !!tank?.liquidLevelNotDetermined,
+
     // Qualifications
     qualAdeqCourse: !!fi?.hasAdeqCourse,
     qualProfessionalEngineer: !!fi?.isProfessionalEngineer,
@@ -383,26 +417,26 @@ export function mapFormDataToFields(data: InspectionFormData): FormFieldMapping 
     baffleMaterialClay: tank?.baffleMaterial?.includes("clay") ?? false,
     baffleMaterialNotDetermined: tank?.baffleMaterial?.includes("not_determined") ?? false,
 
-    // Inlet baffle (multi-select array)
+    // Inlet baffle (independent checkboxes — multiple may be selected)
     inletBafflePresent: isBafflePresent(tank?.inletBaffleCondition),
-    inletBaffleOperational: tank?.inletBaffleCondition?.includes("present_operational") ?? false,
-    inletBaffleNotOperational: tank?.inletBaffleCondition?.includes("present_not_operational") ?? false,
-    inletBaffleNotPresent: tank?.inletBaffleCondition?.includes("not_present") ?? false,
-    inletBaffleNotDetermined: tank?.inletBaffleCondition?.includes("not_determined") ?? false,
+    inletBaffleOperational: isBaffleOperational(tank?.inletBaffleCondition),
+    inletBaffleNotOperational: isBaffleNotOperational(tank?.inletBaffleCondition),
+    inletBaffleNotPresent: hasBaffleValue(tank?.inletBaffleCondition, "not_present"),
+    inletBaffleNotDetermined: hasBaffleValue(tank?.inletBaffleCondition, "not_determined"),
 
-    // Outlet baffle (multi-select array)
+    // Outlet baffle (independent checkboxes — multiple may be selected)
     outletBafflePresent: isBafflePresent(tank?.outletBaffleCondition),
-    outletBaffleOperational: tank?.outletBaffleCondition?.includes("present_operational") ?? false,
-    outletBaffleNotOperational: tank?.outletBaffleCondition?.includes("present_not_operational") ?? false,
-    outletBaffleNotPresent: tank?.outletBaffleCondition?.includes("not_present") ?? false,
-    outletBaffleNotDetermined: tank?.outletBaffleCondition?.includes("not_determined") ?? false,
+    outletBaffleOperational: isBaffleOperational(tank?.outletBaffleCondition),
+    outletBaffleNotOperational: isBaffleNotOperational(tank?.outletBaffleCondition),
+    outletBaffleNotPresent: hasBaffleValue(tank?.outletBaffleCondition, "not_present"),
+    outletBaffleNotDetermined: hasBaffleValue(tank?.outletBaffleCondition, "not_determined"),
 
-    // Interior baffle (multi-select array)
+    // Interior baffle (independent checkboxes — multiple may be selected)
     interiorBafflePresent: isBafflePresent(tank?.interiorBaffleCondition),
-    interiorBaffleOperational: tank?.interiorBaffleCondition?.includes("present_operational") ?? false,
-    interiorBaffleNotOperational: tank?.interiorBaffleCondition?.includes("present_not_operational") ?? false,
-    interiorBaffleNotPresent: tank?.interiorBaffleCondition?.includes("not_present") ?? false,
-    interiorBaffleNotDetermined: tank?.interiorBaffleCondition?.includes("not_determined") ?? false,
+    interiorBaffleOperational: isBaffleOperational(tank?.interiorBaffleCondition),
+    interiorBaffleNotOperational: isBaffleNotOperational(tank?.interiorBaffleCondition),
+    interiorBaffleNotPresent: hasBaffleValue(tank?.interiorBaffleCondition, "not_present"),
+    interiorBaffleNotDetermined: hasBaffleValue(tank?.interiorBaffleCondition, "not_determined"),
 
     // Effluent filter
     effluentFilterPresent: tank?.effluentFilterPresent === "present",
