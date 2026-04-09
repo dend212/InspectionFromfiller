@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles, Trash2, Upload } from "lucide-react";
+import { Sparkles, Trash2, Upload, Video } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
@@ -10,7 +10,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useJobNoteRewrite } from "@/hooks/use-job-note-rewrite";
+import { uploadVideoTus } from "@/lib/storage/tus-upload.mjs";
+import { createClient } from "@/lib/supabase/client";
 import type { AppRole } from "@/types/roles";
+
+// Hard ceiling from migration 0010 bumping the bucket file_size_limit.
+const VIDEO_BUCKET_LIMIT_MB = 500;
+const MAX_VIDEO_SECONDS = 300;
 
 interface JobDetail {
   id: string;
@@ -49,6 +55,7 @@ interface MediaRow {
   checklistItemId: string | null;
   storagePath: string;
   signedUrl: string | null;
+  type: "photo" | "video";
   description: string | null;
   visibleToCustomer: boolean;
   sortOrder: number;
@@ -221,8 +228,121 @@ export function JobDetailView({
     }
   };
 
+  const uploadVideoFile = async (
+    file: File,
+    bucket: "checklist_item" | "general",
+    checklistItemId: string | undefined,
+    onProgress: (pct: number) => void,
+  ) => {
+    // Guard: hard size ceiling (bucket file_size_limit is 500 MB)
+    const sizeMb = file.size / (1024 * 1024);
+    if (sizeMb > VIDEO_BUCKET_LIMIT_MB) {
+      toast.error(
+        `Video is ${sizeMb.toFixed(0)} MB. Maximum is ${VIDEO_BUCKET_LIMIT_MB} MB — please trim or compress first.`,
+        { duration: 6000 },
+      );
+      return null;
+    }
+
+    // Best-effort duration check (skip silently if browser can't decode)
+    try {
+      const duration = await new Promise<number>((resolve, reject) => {
+        const videoEl = document.createElement("video");
+        videoEl.preload = "metadata";
+        const url = URL.createObjectURL(file);
+        videoEl.src = url;
+        const timeout = setTimeout(() => {
+          URL.revokeObjectURL(url);
+          reject(new Error("timeout"));
+        }, 10_000);
+        videoEl.onloadedmetadata = () => {
+          clearTimeout(timeout);
+          URL.revokeObjectURL(url);
+          resolve(videoEl.duration);
+        };
+        videoEl.onerror = () => {
+          clearTimeout(timeout);
+          URL.revokeObjectURL(url);
+          reject(new Error("decode"));
+        };
+      });
+      if (duration > MAX_VIDEO_SECONDS) {
+        toast.error(`Video must be ${MAX_VIDEO_SECONDS / 60} minutes or less`, {
+          duration: 5000,
+        });
+        return null;
+      }
+    } catch {
+      // Unreadable metadata — allow upload anyway
+    }
+
+    try {
+      // 1. Ask API for an authorized storage path (no signed URL for video)
+      const urlRes = await fetch(`/api/jobs/${job.id}/media/upload-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          bucket,
+          mediaType: "video",
+          checklistItemId,
+        }),
+      });
+      if (!urlRes.ok) {
+        const err = await urlRes.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to get upload URL");
+      }
+      const { storagePath } = (await urlRes.json()) as { storagePath: string };
+
+      // 2. Get the user JWT for TUS auth
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Session expired — please log in again");
+
+      // 3. TUS resumable upload direct to Supabase Storage
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      if (!supabaseUrl) throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set");
+      await uploadVideoTus({
+        supabaseUrl,
+        bearerToken: session.access_token,
+        bucket: "inspection-media",
+        objectPath: storagePath,
+        body: file,
+        contentType: file.type || "video/mp4",
+        onProgress: (sent: number, total: number) => {
+          if (total > 0) onProgress(Math.round((sent / total) * 100));
+        },
+      });
+
+      // 4. Register in DB
+      const regRes = await fetch(`/api/jobs/${job.id}/media`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storagePath,
+          bucket,
+          checklistItemId: bucket === "checklist_item" ? checklistItemId : undefined,
+          type: "video",
+        }),
+      });
+      if (!regRes.ok) {
+        const err = await regRes.json().catch(() => ({}));
+        throw new Error(err.error ?? "Registration failed");
+      }
+      toast.success("Video uploaded");
+      router.refresh();
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      toast.error(msg, { duration: 6000 });
+      return null;
+    }
+  };
+
   const deleteMedia = async (mediaId: string) => {
-    if (!confirm("Delete this photo?")) return;
+    if (!confirm("Delete this media?")) return;
     const res = await fetch(`/api/jobs/${job.id}/media/${mediaId}`, { method: "DELETE" });
     if (!res.ok) {
       toast.error("Failed to delete");
@@ -384,6 +504,9 @@ export function JobDetailView({
               onPatch={(patch) => patchItem(item.id, patch)}
               onDelete={() => deleteItem(item.id)}
               onUploadFile={(file) => uploadFile(file, "checklist_item", item.id)}
+              onUploadVideo={(file, onProgress) =>
+                uploadVideoFile(file, "checklist_item", item.id, onProgress)
+              }
               onDeleteMedia={deleteMedia}
               onRewrite={() => handleRewriteItemNote(item.id, item.note ?? "")}
               rewriteBusy={rewrite.isGenerating}
@@ -420,22 +543,28 @@ export function JobDetailView({
         />
       </section>
 
-      {/* General photos */}
+      {/* General media */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">General Photos</h2>
-          <GeneralPhotoUploadButton
-            disabled={isCompleted}
-            onFile={(file) => uploadFile(file, "general")}
-          />
+          <h2 className="text-lg font-semibold">General Photos & Videos</h2>
+          <div className="flex gap-2">
+            <GeneralPhotoUploadButton
+              disabled={isCompleted}
+              onFile={(file) => uploadFile(file, "general")}
+            />
+            <VideoUploadButton
+              disabled={isCompleted}
+              onFile={(file, onProgress) => uploadVideoFile(file, "general", undefined, onProgress)}
+            />
+          </div>
         </div>
         {generalMedia.length === 0 ? (
-          <p className="text-sm italic text-muted-foreground">No general photos yet.</p>
+          <p className="text-sm italic text-muted-foreground">No general media yet.</p>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {generalMedia.map((m) => (
               <div key={m.id} className="group relative overflow-hidden rounded-lg border bg-white">
-                {m.signedUrl && (
+                {m.signedUrl && m.type === "photo" && (
                   <div className="relative aspect-square w-full">
                     <Image
                       src={m.signedUrl}
@@ -445,6 +574,18 @@ export function JobDetailView({
                       className="object-cover"
                       unoptimized
                     />
+                  </div>
+                )}
+                {m.signedUrl && m.type === "video" && (
+                  <div className="relative aspect-square w-full bg-black">
+                    <video
+                      src={m.signedUrl}
+                      controls
+                      preload="metadata"
+                      className="absolute inset-0 h-full w-full object-contain"
+                    >
+                      <track kind="captions" />
+                    </video>
                   </div>
                 )}
                 <div className="flex items-center gap-1.5 border-t bg-muted/30 px-2 py-1.5 text-[11px]">
@@ -559,6 +700,7 @@ function ChecklistItemCard({
   onPatch,
   onDelete,
   onUploadFile,
+  onUploadVideo,
   onDeleteMedia,
   onRewrite,
   rewriteBusy,
@@ -570,6 +712,7 @@ function ChecklistItemCard({
   onPatch: (patch: Partial<Pick<ChecklistItem, "status" | "note">>) => void;
   onDelete: () => void;
   onUploadFile: (file: File) => void;
+  onUploadVideo: (file: File, onProgress: (pct: number) => void) => Promise<true | null>;
   onDeleteMedia: (mediaId: string) => void;
   onRewrite: () => void;
   rewriteBusy: boolean;
@@ -577,7 +720,10 @@ function ChecklistItemCard({
   const [note, setNote] = useState(item.note ?? "");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const photoCountOk = media.length >= item.requiredPhotoCount;
+  // Only photos count toward requiredPhotoCount (finalize gate is photo-only)
+  const photoCount = media.filter((m) => m.type === "photo").length;
+  const videoCount = media.length - photoCount;
+  const photoCountOk = photoCount >= item.requiredPhotoCount;
   const noteOk = !item.requiresNote || note.trim().length > 0;
 
   return (
@@ -596,7 +742,8 @@ function ChecklistItemCard({
             <p className="mt-1 text-sm italic text-muted-foreground">{item.instructions}</p>
           )}
           <p className="mt-1 text-xs text-muted-foreground">
-            Photos: {media.length} / {item.requiredPhotoCount}
+            Photos: {photoCount} / {item.requiredPhotoCount}
+            {videoCount > 0 ? ` · Videos: ${videoCount}` : ""}
             {item.requiresNote ? " · Note required" : ""}
           </p>
         </div>
@@ -651,7 +798,7 @@ function ChecklistItemCard({
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {media.map((m) => (
             <div key={m.id} className="group relative overflow-hidden rounded-md border bg-white">
-              {m.signedUrl && (
+              {m.signedUrl && m.type === "photo" && (
                 <div className="relative aspect-square w-full">
                   <Image
                     src={m.signedUrl}
@@ -663,12 +810,24 @@ function ChecklistItemCard({
                   />
                 </div>
               )}
+              {m.signedUrl && m.type === "video" && (
+                <div className="relative aspect-square w-full bg-black">
+                  <video
+                    src={m.signedUrl}
+                    controls
+                    preload="metadata"
+                    className="absolute inset-0 h-full w-full object-contain"
+                  >
+                    <track kind="captions" />
+                  </video>
+                </div>
+              )}
               {!disabled && (
                 <button
                   type="button"
                   onClick={() => onDeleteMedia(m.id)}
                   className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 group-hover:opacity-100"
-                  aria-label="Delete photo"
+                  aria-label="Delete media"
                 >
                   <Trash2 className="size-3" />
                 </button>
@@ -680,11 +839,11 @@ function ChecklistItemCard({
 
       {!photoCountOk && (
         <p className="text-xs text-amber-700">
-          {item.requiredPhotoCount - media.length} more photo(s) required to finalize.
+          {item.requiredPhotoCount - photoCount} more photo(s) required to finalize.
         </p>
       )}
 
-      <div>
+      <div className="flex flex-wrap gap-2">
         <input
           ref={fileInputRef}
           type="file"
@@ -705,6 +864,10 @@ function ChecklistItemCard({
           <Upload className="size-3.5 mr-1.5" />
           Add photo
         </Button>
+        <VideoUploadButton
+          disabled={disabled}
+          onFile={(file, onProgress) => onUploadVideo(file, onProgress)}
+        />
       </div>
     </div>
   );
@@ -734,6 +897,54 @@ function GeneralPhotoUploadButton({
       <Button size="sm" variant="outline" disabled={disabled} onClick={() => ref.current?.click()}>
         <Upload className="size-3.5 mr-1.5" />
         Add photo
+      </Button>
+    </>
+  );
+}
+
+function VideoUploadButton({
+  disabled,
+  onFile,
+}: {
+  disabled: boolean;
+  onFile: (file: File, onProgress: (pct: number) => void) => Promise<unknown>;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [pct, setPct] = useState(0);
+
+  const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = ""; // reset so the same file can be re-selected
+    if (!f) return;
+    setUploading(true);
+    setPct(0);
+    try {
+      await onFile(f, setPct);
+    } finally {
+      setUploading(false);
+      setPct(0);
+    }
+  };
+
+  return (
+    <>
+      <input
+        ref={ref}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={handleChange}
+        disabled={disabled || uploading}
+      />
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={disabled || uploading}
+        onClick={() => ref.current?.click()}
+      >
+        <Video className="size-3.5 mr-1.5" />
+        {uploading ? `Uploading ${pct}%` : "Add video"}
       </Button>
     </>
   );

@@ -56,6 +56,7 @@ export default async function JobSummaryPage({ params }: JobSummaryPageProps) {
         signedUrl: data?.signedUrl ?? null,
         bucket: m.bucket,
         checklistItemId: m.checklistItemId,
+        type: m.type as "photo" | "video",
         description: m.description,
       };
     }),

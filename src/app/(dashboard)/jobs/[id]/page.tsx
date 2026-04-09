@@ -108,6 +108,7 @@ export default async function JobDetailPage({ params }: PageProps) {
         checklistItemId: m.checklistItemId,
         storagePath: m.storagePath,
         signedUrl: m.signedUrl,
+        type: m.type as "photo" | "video",
         description: m.description,
         visibleToCustomer: m.visibleToCustomer,
         sortOrder: m.sortOrder,

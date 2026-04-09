@@ -9,16 +9,27 @@ import { createClient } from "@/lib/supabase/server";
 /**
  * POST /api/jobs/[id]/media/upload-url
  *
- * Authorizes a direct client-to-storage upload for a job photo. Mirrors the
- * inspections upload-url route: photos get a Supabase signed upload URL and
- * the client uploads bytes directly (no API body size constraints).
+ * Authorizes a direct client-to-storage upload for a job photo or video.
+ * Mirrors the inspections upload-url route:
+ *   - Photos (`mediaType=photo`, default) use Supabase signed upload URLs —
+ *     returns `{ signedUrl, token, storagePath, ... }` and the client calls
+ *     `uploadToSignedUrl`. Signed uploads bypass storage RLS.
+ *   - Videos (`mediaType=video`) use the TUS resumable protocol for large
+ *     files, progress tracking, and network-drop recovery. Returns just
+ *     `{ storagePath, ... }`; the client uploads with its own user JWT
+ *     against the Supabase `/storage/v1/upload/resumable` endpoint. Storage
+ *     RLS (migration 0010) allows any authenticated user to insert into the
+ *     `inspection-media` bucket; the path is a server-generated UUID so it
+ *     cannot be guessed.
  *
  * Body: {
  *   fileName: string,
  *   bucket: "checklist_item" | "general",
- *   checklistItemId?: string    // required when bucket === "checklist_item"
+ *   mediaType?: "photo" | "video"  // default "photo"
+ *   checklistItemId?: string       // required when bucket === "checklist_item"
  * }
- * Returns: { storagePath, signedUrl, token, bucket, checklistItemId }
+ * Returns photo: { storagePath, signedUrl, token, bucket, checklistItemId, mediaType: "photo" }
+ * Returns video: { storagePath, bucket, checklistItemId, mediaType: "video" }
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -38,7 +49,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { allowed } = await checkJobAccess(supabase, user.id, job.assignedTo);
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  let body: { fileName?: string; bucket?: string; checklistItemId?: string };
+  let body: {
+    fileName?: string;
+    bucket?: string;
+    mediaType?: string;
+    checklistItemId?: string;
+  };
   try {
     body = await request.json();
   } catch {
@@ -46,6 +62,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const { fileName, bucket, checklistItemId } = body;
+  const mediaType = body.mediaType ?? "photo";
   if (!fileName || typeof fileName !== "string") {
     return NextResponse.json({ error: "fileName is required" }, { status: 400 });
   }
@@ -54,6 +71,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       { error: "bucket must be 'checklist_item' or 'general'" },
       { status: 400 },
     );
+  }
+  if (mediaType !== "photo" && mediaType !== "video") {
+    return NextResponse.json({ error: "mediaType must be 'photo' or 'video'" }, { status: 400 });
   }
   if (bucket === "checklist_item") {
     if (!checklistItemId) {
@@ -72,11 +92,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
   }
 
-  const ext = fileName.split(".").pop()?.toLowerCase() ?? "jpg";
+  const defaultExt = mediaType === "video" ? "mp4" : "jpg";
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? defaultExt;
   const storagePath =
     bucket === "checklist_item"
       ? `jobs/${id}/items/${checklistItemId}/${crypto.randomUUID()}.${ext}`
       : `jobs/${id}/general/${crypto.randomUUID()}.${ext}`;
+
+  // Videos use TUS resumable upload direct from the browser; no signed URL.
+  // Authorization is enforced by this route + storage.objects RLS (migration 0010).
+  if (mediaType === "video") {
+    return NextResponse.json({
+      storagePath,
+      bucket,
+      checklistItemId: bucket === "checklist_item" ? checklistItemId : null,
+      mediaType: "video",
+    });
+  }
 
   const admin = createAdminClient();
   const { data, error } = await admin.storage
@@ -97,5 +129,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     token: data.token,
     bucket,
     checklistItemId: bucket === "checklist_item" ? checklistItemId : null,
+    mediaType: "photo",
   });
 }

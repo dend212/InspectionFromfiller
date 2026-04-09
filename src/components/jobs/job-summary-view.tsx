@@ -13,6 +13,7 @@ interface JobSummaryMedia {
   signedUrl: string | null;
   bucket: "checklist_item" | "general";
   checklistItemId: string | null;
+  type: "photo" | "video";
   description: string | null;
 }
 
@@ -156,8 +157,33 @@ export function JobSummaryView({
                     )}
                     {photos.length > 0 && (
                       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                        {photos.map((p) =>
-                          p.signedUrl ? (
+                        {photos.map((p) => {
+                          if (!p.signedUrl) return null;
+                          if (p.type === "video") {
+                            return (
+                              <div
+                                key={p.id}
+                                className="overflow-hidden rounded-lg border bg-black"
+                              >
+                                <div className="relative aspect-[4/3] w-full">
+                                  <video
+                                    src={p.signedUrl}
+                                    controls
+                                    preload="metadata"
+                                    className="absolute inset-0 h-full w-full object-contain"
+                                  >
+                                    <track kind="captions" />
+                                  </video>
+                                </div>
+                                {p.description && (
+                                  <p className="bg-white px-2 py-1 text-[11px] text-slate-600">
+                                    {p.description}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          }
+                          return (
                             <a
                               key={p.id}
                               href={p.signedUrl}
@@ -181,8 +207,8 @@ export function JobSummaryView({
                                 </p>
                               )}
                             </a>
-                          ) : null,
-                        )}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -192,15 +218,40 @@ export function JobSummaryView({
           </section>
         )}
 
-        {/* Additional photos (general, customer-visible only) */}
+        {/* Additional media (general, customer-visible only) */}
         {generalMedia.length > 0 && (
           <section>
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">
-              Additional Photos
+              Additional Photos & Videos
             </h2>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-              {generalMedia.map((p) =>
-                p.signedUrl ? (
+              {generalMedia.map((p) => {
+                if (!p.signedUrl) return null;
+                if (p.type === "video") {
+                  return (
+                    <div
+                      key={p.id}
+                      className="overflow-hidden rounded-lg border bg-black shadow-sm"
+                    >
+                      <div className="relative aspect-square w-full">
+                        <video
+                          src={p.signedUrl}
+                          controls
+                          preload="metadata"
+                          className="absolute inset-0 h-full w-full object-contain"
+                        >
+                          <track kind="captions" />
+                        </video>
+                      </div>
+                      {p.description && (
+                        <p className="bg-white px-2 py-1 text-[11px] text-slate-600">
+                          {p.description}
+                        </p>
+                      )}
+                    </div>
+                  );
+                }
+                return (
                   <a
                     key={p.id}
                     href={p.signedUrl}
@@ -222,8 +273,8 @@ export function JobSummaryView({
                       <p className="px-2 py-1 text-[11px] text-slate-600">{p.description}</p>
                     )}
                   </a>
-                ) : null,
-              )}
+                );
+              })}
             </div>
           </section>
         )}

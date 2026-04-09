@@ -45,10 +45,14 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .where(eq(jobMedia.jobId, id))
     .orderBy(asc(jobMedia.sortOrder), asc(jobMedia.createdAt));
 
-  // Count photos per checklist item for the completion gate
+  // Count photos per checklist item for the completion gate. Videos do NOT
+  // count toward `requiredPhotoCount` — that field is named after photos for
+  // a reason: the report embeds photos but videos live only on the customer
+  // web page.
   const photoCountByItem = new Map<string, number>();
   for (const m of media) {
     if (m.bucket !== "checklist_item" || !m.checklistItemId) continue;
+    if (m.type !== "photo") continue;
     photoCountByItem.set(m.checklistItemId, (photoCountByItem.get(m.checklistItemId) ?? 0) + 1);
   }
 

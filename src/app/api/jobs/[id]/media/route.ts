@@ -77,13 +77,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     checklistItemId = body.checklistItemId;
   }
 
+  const type = body.type ?? "photo";
+  if (type !== "photo" && type !== "video") {
+    return NextResponse.json({ error: "type must be 'photo' or 'video'" }, { status: 400 });
+  }
+
   const [inserted] = await db
     .insert(jobMedia)
     .values({
       jobId: id,
       checklistItemId,
       bucket,
-      type: body.type ?? "photo",
+      type,
       storagePath,
       description: body.description?.trim() || null,
       uploadedBy: user.id,
