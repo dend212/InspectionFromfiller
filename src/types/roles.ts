@@ -45,16 +45,10 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["admin", "field_tech", "office_staff"],
   },
   {
-    label: "Checklist Templates",
-    href: "/admin/checklist-templates",
-    icon: "ListChecks",
-    roles: ["admin"],
-  },
-  {
-    label: "Manage Users",
-    href: "/admin/users",
-    icon: "Users",
-    roles: ["admin"],
+    label: "Jobs Map",
+    href: "/jobs/map",
+    icon: "Map",
+    roles: ["admin", "field_tech", "office_staff"],
   },
   {
     label: "Settings",

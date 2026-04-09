@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { JobDetailView } from "@/components/jobs/job-detail-view";
 import { db } from "@/lib/db";
@@ -22,7 +22,7 @@ export default async function JobDetailPage({ params }: PageProps) {
   const [job] = await db.select().from(jobs).where(eq(jobs.id, id)).limit(1);
   if (!job) notFound();
 
-  const { allowed } = await checkJobAccess(supabase, user.id, job.assignedTo);
+  const { allowed } = await checkJobAccess(supabase, user.id, job.assignees);
   if (!allowed) {
     return (
       <div className="max-w-xl">
@@ -33,11 +33,21 @@ export default async function JobDetailPage({ params }: PageProps) {
   }
   const role = (await getUserRole(supabase)) ?? "field_tech";
 
-  const [assignee] = await db
-    .select({ fullName: profiles.fullName })
+  const assigneeProfiles = job.assignees.length
+    ? await db
+        .select({ id: profiles.id, fullName: profiles.fullName })
+        .from(profiles)
+        .where(inArray(profiles.id, job.assignees))
+    : [];
+  const nameById = new Map(assigneeProfiles.map((p) => [p.id, p.fullName] as const));
+  const assigneeNames = job.assignees.map((aid) => nameById.get(aid) ?? "Unknown");
+
+  // For the assignee picker the admin/office_staff can edit, fetch every
+  // field_tech profile so the detail view can render the multi-select.
+  const assignableTechs = await db
+    .select({ id: profiles.id, fullName: profiles.fullName })
     .from(profiles)
-    .where(eq(profiles.id, job.assignedTo))
-    .limit(1);
+    .orderBy(asc(profiles.fullName));
 
   const items = await db
     .select()
@@ -77,8 +87,8 @@ export default async function JobDetailPage({ params }: PageProps) {
         id: job.id,
         title: job.title,
         status: job.status as "open" | "in_progress" | "completed",
-        assignedTo: job.assignedTo,
-        assigneeName: assignee?.fullName ?? null,
+        assignees: job.assignees,
+        assigneeNames,
         customerName: job.customerName,
         customerEmail: job.customerEmail,
         customerPhone: job.customerPhone,
@@ -114,6 +124,7 @@ export default async function JobDetailPage({ params }: PageProps) {
         sortOrder: m.sortOrder,
       }))}
       latestSummaryToken={latestSummary?.token ?? null}
+      assignableTechs={assignableTechs}
     />
   );
 }

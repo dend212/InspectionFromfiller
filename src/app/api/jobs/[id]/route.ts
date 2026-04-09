@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jobChecklistItems, jobMedia, jobs, profiles } from "@/lib/db/schema";
@@ -22,8 +22,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       id: jobs.id,
       title: jobs.title,
       status: jobs.status,
-      assignedTo: jobs.assignedTo,
-      assigneeName: profiles.fullName,
+      assignees: jobs.assignees,
       createdBy: jobs.createdBy,
       customerName: jobs.customerName,
       customerEmail: jobs.customerEmail,
@@ -44,14 +43,23 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       updatedAt: jobs.updatedAt,
     })
     .from(jobs)
-    .leftJoin(profiles, eq(profiles.id, jobs.assignedTo))
     .where(eq(jobs.id, id))
     .limit(1);
 
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
-  const { allowed } = await checkJobAccess(supabase, user.id, job.assignedTo);
+  const { allowed } = await checkJobAccess(supabase, user.id, job.assignees);
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  // Resolve assignee names
+  const assigneeProfiles = job.assignees.length
+    ? await db
+        .select({ id: profiles.id, fullName: profiles.fullName })
+        .from(profiles)
+        .where(inArray(profiles.id, job.assignees))
+    : [];
+  const nameById = new Map(assigneeProfiles.map((p) => [p.id, p.fullName] as const));
+  const assigneeNames = job.assignees.map((aid) => nameById.get(aid) ?? "Unknown");
 
   const items = await db
     .select()
@@ -65,7 +73,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .where(eq(jobMedia.jobId, id))
     .orderBy(asc(jobMedia.sortOrder), asc(jobMedia.createdAt));
 
-  return NextResponse.json({ job, items, media });
+  return NextResponse.json({ job: { ...job, assigneeNames }, items, media });
 }
 
 /**
@@ -83,13 +91,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const [existing] = await db
-    .select({ id: jobs.id, assignedTo: jobs.assignedTo, status: jobs.status })
+    .select({ id: jobs.id, assignees: jobs.assignees, status: jobs.status })
     .from(jobs)
     .where(eq(jobs.id, id))
     .limit(1);
   if (!existing) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
-  const { allowed } = await checkJobAccess(supabase, user.id, existing.assignedTo);
+  const { allowed } = await checkJobAccess(supabase, user.id, existing.assignees);
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   let body: Record<string, unknown>;
@@ -121,7 +129,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.scheduledFor !== undefined) {
     updates.scheduledFor = body.scheduledFor ? new Date(body.scheduledFor as string) : null;
   }
-  if (body.assignedTo !== undefined) {
+  if (body.assignees !== undefined || body.assignedTo !== undefined) {
     const role = await getUserRole(supabase);
     if (role !== "admin" && role !== "office_staff") {
       return NextResponse.json(
@@ -129,7 +137,35 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         { status: 403 },
       );
     }
-    updates.assignedTo = body.assignedTo as string;
+    // Accept either `assignees: string[]` (new) or legacy `assignedTo: string`.
+    const raw: unknown = body.assignees ?? (body.assignedTo ? [body.assignedTo] : []);
+    if (!Array.isArray(raw)) {
+      return NextResponse.json({ error: "assignees must be an array" }, { status: 400 });
+    }
+    const normalized = Array.from(
+      new Set(
+        (raw as unknown[])
+          .filter((v): v is string => typeof v === "string")
+          .map((v) => v.trim())
+          .filter(Boolean),
+      ),
+    );
+    // Verify every assignee id exists in profiles.
+    if (normalized.length > 0) {
+      const existingProfiles = await db
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(inArray(profiles.id, normalized));
+      const found = new Set(existingProfiles.map((p) => p.id));
+      const missing = normalized.filter((pid) => !found.has(pid));
+      if (missing.length) {
+        return NextResponse.json(
+          { error: `Assignee(s) not found: ${missing.join(", ")}` },
+          { status: 400 },
+        );
+      }
+    }
+    updates.assignees = normalized;
   }
   if (body.status !== undefined) {
     const next = body.status as "open" | "in_progress" | "completed";

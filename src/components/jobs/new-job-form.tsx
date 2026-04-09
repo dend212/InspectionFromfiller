@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -19,10 +20,13 @@ interface NewJobFormProps {
 export function NewJobForm({ templates, assignees, currentUser, role }: NewJobFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  // Default for field techs: pre-assign themselves. Admin/office_staff start
+  // unassigned so they can deliberately choose (or leave it unassigned).
+  const initialAssignees = role === "field_tech" ? [currentUser.id] : [];
   const [form, setForm] = useState({
     title: "",
     templateId: "",
-    assignedTo: role === "field_tech" ? currentUser.id : currentUser.id,
+    assignees: initialAssignees,
     customerName: "",
     customerEmail: "",
     customerPhone: "",
@@ -33,6 +37,18 @@ export function NewJobForm({ templates, assignees, currentUser, role }: NewJobFo
   });
 
   const update = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
+
+  // Assignee name lookup for the chip display
+  const assigneeLookup = new Map(assignees.map((a) => [a.id, a.fullName] as const));
+  assigneeLookup.set(currentUser.id, currentUser.fullName);
+
+  const addAssignee = (id: string) => {
+    if (!id || form.assignees.includes(id)) return;
+    update({ assignees: [...form.assignees, id] });
+  };
+  const removeAssignee = (id: string) => {
+    update({ assignees: form.assignees.filter((a) => a !== id) });
+  };
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +64,7 @@ export function NewJobForm({ templates, assignees, currentUser, role }: NewJobFo
         body: JSON.stringify({
           title: form.title.trim(),
           templateId: form.templateId || undefined,
-          assignedTo: form.assignedTo,
+          assignees: form.assignees,
           customerName: form.customerName.trim() || undefined,
           customerEmail: form.customerEmail.trim() || undefined,
           customerPhone: form.customerPhone.trim() || undefined,
@@ -68,6 +84,9 @@ export function NewJobForm({ templates, assignees, currentUser, role }: NewJobFo
       router.push(`/jobs/${job.id}`);
     });
   };
+
+  // Options still addable: not already selected
+  const availableToAdd = assignees.filter((a) => !form.assignees.includes(a.id));
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
@@ -100,22 +119,60 @@ export function NewJobForm({ templates, assignees, currentUser, role }: NewJobFo
             </select>
           </div>
           <div>
-            <Label htmlFor="assignee">Assigned tech</Label>
+            <Label htmlFor="assignee">
+              Assigned techs
+              <span className="ml-1 font-normal text-muted-foreground">(empty = any tech)</span>
+            </Label>
             {role === "field_tech" ? (
               <Input id="assignee" value={currentUser.fullName} disabled className="mt-1.5" />
             ) : (
-              <select
-                id="assignee"
-                value={form.assignedTo}
-                onChange={(e) => update({ assignedTo: e.target.value })}
-                className="mt-1.5 h-10 w-full rounded-md border bg-background px-3 text-sm"
-              >
-                {assignees.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.fullName}
-                  </option>
-                ))}
-              </select>
+              <div className="mt-1.5 space-y-2">
+                {/* Chips for selected assignees */}
+                {form.assignees.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {form.assignees.map((id) => (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+                      >
+                        {assigneeLookup.get(id) ?? "Unknown"}
+                        <button
+                          type="button"
+                          onClick={() => removeAssignee(id)}
+                          className="rounded-full p-0.5 hover:bg-primary/20"
+                          aria-label={`Remove ${assigneeLookup.get(id) ?? "tech"}`}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs italic text-muted-foreground">
+                    Unassigned — any field tech can pick it up.
+                  </p>
+                )}
+                {/* Add-another dropdown */}
+                {availableToAdd.length > 0 && (
+                  <select
+                    id="assignee"
+                    value=""
+                    onChange={(e) => {
+                      addAssignee(e.target.value);
+                      // Reset to placeholder so the same option can be re-picked later
+                      e.currentTarget.value = "";
+                    }}
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  >
+                    <option value="">+ Add tech…</option>
+                    {availableToAdd.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.fullName}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
             )}
           </div>
         </div>

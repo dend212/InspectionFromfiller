@@ -33,7 +33,12 @@ import type {
   jobs as jobsTable,
 } from "@/lib/db/schema";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { loadPublicFile } from "../load-public-file";
 import { fetchImageBytesForPdf } from "./image-embed";
+
+const COMPANY_NAME = "SewerTime Septic";
+const COMPANY_PHONE = "(602) 777-7867";
+const COMPANY_ADDRESS = "33645 N Cave Creek Rd, Cave Creek, AZ 85331";
 
 type JobRow = typeof jobsTable.$inferSelect;
 type JobItemRow = typeof jobChecklistItemsTable.$inferSelect;
@@ -43,8 +48,16 @@ export interface JobReportInput {
   job: JobRow;
   items: JobItemRow[];
   media: JobMediaRow[];
-  assigneeName: string | null;
+  /** Ordered list of assignee display names; empty = unassigned. */
+  assigneeNames: string[];
   audience: "staff" | "customer";
+}
+
+function formatTechnicianLabel(names: string[]): string {
+  if (names.length === 0) return "Unassigned";
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]}, ${names[1]}`;
+  return `${names[0]}, ${names[1]} +${names.length - 2}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +229,12 @@ function drawStatusChip(page: PDFPage, fonts: Fonts, x: number, y: number, statu
 // Cover page
 // ---------------------------------------------------------------------------
 
-function buildCoverPage(doc: PDFDocument, fonts: Fonts, input: JobReportInput): void {
+function buildCoverPage(
+  doc: PDFDocument,
+  fonts: Fonts,
+  input: JobReportInput,
+  logo: PDFImage | null,
+): void {
   const page = doc.addPage([PAGE_W, PAGE_H]);
 
   // Brand accent stripe
@@ -228,18 +246,43 @@ function buildCoverPage(doc: PDFDocument, fonts: Fonts, input: JobReportInput): 
     color: C.brand,
   });
 
-  // Header label
-  page.drawText("SERVICE VISIT REPORT", {
-    x: MARGIN,
-    y: PAGE_H - 110,
-    size: 12,
+  // --- SewerTime logo (centered, top) ---
+  let contentStartY = PAGE_H - 90;
+  if (logo) {
+    const maxLogoW = 260;
+    const maxLogoH = 90;
+    const scale = Math.min(maxLogoW / logo.width, maxLogoH / logo.height);
+    const drawW = logo.width * scale;
+    const drawH = logo.height * scale;
+    const logoX = (PAGE_W - drawW) / 2;
+    const logoY = PAGE_H - 50 - drawH;
+    page.drawImage(logo, { x: logoX, y: logoY, width: drawW, height: drawH });
+    contentStartY = logoY - 30;
+  }
+
+  // Header label (centered under logo)
+  const headerLabel = "SERVICE VISIT REPORT";
+  const headerSize = 12;
+  const headerW = fonts.bold.widthOfTextAtSize(headerLabel, headerSize);
+  page.drawText(headerLabel, {
+    x: (PAGE_W - headerW) / 2,
+    y: contentStartY,
+    size: headerSize,
     font: fonts.bold,
     color: C.muted,
   });
 
+  // Thin divider under the header label
+  page.drawLine({
+    start: { x: MARGIN, y: contentStartY - 12 },
+    end: { x: PAGE_W - MARGIN, y: contentStartY - 12 },
+    thickness: 0.75,
+    color: C.line,
+  });
+
   // Title
   const titleLines = wrapText(input.job.title, fonts.bold, 28, CONTENT_W);
-  let y = PAGE_H - 148;
+  let y = contentStartY - 44;
   for (const line of titleLines.slice(0, 2)) {
     page.drawText(line, { x: MARGIN, y, size: 28, font: fonts.bold, color: C.dark });
     y -= 34;
@@ -268,7 +311,7 @@ function buildCoverPage(doc: PDFDocument, fonts: Fonts, input: JobReportInput): 
   }
 
   // Bottom metadata
-  const metaY = 150;
+  const metaY = 180;
   page.drawLine({
     start: { x: MARGIN, y: metaY + 70 },
     end: { x: PAGE_W - MARGIN, y: metaY + 70 },
@@ -297,9 +340,39 @@ function buildCoverPage(doc: PDFDocument, fonts: Fonts, input: JobReportInput): 
     day: "numeric",
     year: "numeric",
   });
-  label("Technician", input.assigneeName ?? "—", metaY + 50);
+  label(
+    input.assigneeNames.length > 1 ? "Technicians" : "Technician",
+    formatTechnicianLabel(input.assigneeNames),
+    metaY + 50,
+  );
   label("Service date", dateStr, metaY + 30);
   label("Status", (input.job.status ?? "open").replace("_", " ").toUpperCase(), metaY + 10);
+
+  // Company contact footer (bottom of cover page)
+  const footerY = 70;
+  page.drawLine({
+    start: { x: MARGIN, y: footerY + 38 },
+    end: { x: PAGE_W - MARGIN, y: footerY + 38 },
+    thickness: 0.5,
+    color: C.line,
+  });
+  const nameW = fonts.bold.widthOfTextAtSize(COMPANY_NAME, 11);
+  page.drawText(COMPANY_NAME, {
+    x: (PAGE_W - nameW) / 2,
+    y: footerY + 22,
+    size: 11,
+    font: fonts.bold,
+    color: C.dark,
+  });
+  const contactLine = `${COMPANY_PHONE}  ·  ${COMPANY_ADDRESS}`;
+  const contactW = fonts.regular.widthOfTextAtSize(contactLine, 9);
+  page.drawText(contactLine, {
+    x: (PAGE_W - contactW) / 2,
+    y: footerY + 8,
+    size: 9,
+    font: fonts.regular,
+    color: C.muted,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -324,7 +397,13 @@ function buildJobInfoSection(
     "City / State / Zip",
     [input.job.city, input.job.state, input.job.zip].filter(Boolean).join(", ") || null,
   );
-  c = drawLabeledField(doc, c, fonts, "Technician", input.assigneeName);
+  c = drawLabeledField(
+    doc,
+    c,
+    fonts,
+    input.assigneeNames.length > 1 ? "Technicians" : "Technician",
+    formatTechnicianLabel(input.assigneeNames),
+  );
   c = drawLabeledField(
     doc,
     c,
@@ -542,6 +621,16 @@ export async function buildJobReportPdf(input: JobReportInput): Promise<Uint8Arr
     italic: await doc.embedFont(StandardFonts.HelveticaOblique),
   };
 
+  // Embed the SewerTime logo for branding. Fail soft if unavailable — a
+  // missing asset should never prevent the report from generating.
+  let logo: PDFImage | null = null;
+  try {
+    const logoBytes = await loadPublicFile("/sewertime-logo.png");
+    logo = await doc.embedPng(new Uint8Array(logoBytes));
+  } catch (err) {
+    console.error("Failed to load SewerTime logo for job report:", err);
+  }
+
   // Partition media by bucket; filter general by audience visibility.
   const checklistMedia = input.media.filter((m) => m.bucket === "checklist_item");
   const generalMediaAll = input.media.filter((m) => m.bucket === "general");
@@ -563,7 +652,7 @@ export async function buildJobReportPdf(input: JobReportInput): Promise<Uint8Arr
   }
 
   // Page 1 = cover
-  buildCoverPage(doc, fonts, input);
+  buildCoverPage(doc, fonts, input, logo);
 
   // Page 2+ = content
   let cursor = newPage(doc);

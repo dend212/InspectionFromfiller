@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { JobSummaryView } from "@/components/jobs/job-summary-view";
 import { SummaryExpired } from "@/components/summary/summary-expired";
 import { db } from "@/lib/db";
@@ -24,11 +24,14 @@ export default async function JobSummaryPage({ params }: JobSummaryPageProps) {
   const [job] = await db.select().from(jobs).where(eq(jobs.id, summary.jobId)).limit(1);
   if (!job) return <SummaryExpired />;
 
-  const [assignee] = await db
-    .select({ fullName: profiles.fullName })
-    .from(profiles)
-    .where(eq(profiles.id, job.assignedTo))
-    .limit(1);
+  const assigneeProfiles = job.assignees.length
+    ? await db
+        .select({ id: profiles.id, fullName: profiles.fullName })
+        .from(profiles)
+        .where(inArray(profiles.id, job.assignees))
+    : [];
+  const nameById = new Map(assigneeProfiles.map((p) => [p.id, p.fullName] as const));
+  const assigneeNames = job.assignees.map((aid) => nameById.get(aid) ?? "Unknown");
 
   const items = await db
     .select()
@@ -76,7 +79,7 @@ export default async function JobSummaryPage({ params }: JobSummaryPageProps) {
         completedAt: job.completedAt?.toISOString() ?? null,
         customerSummary: summary.customerSummary,
       }}
-      assigneeName={assignee?.fullName ?? null}
+      assigneeNames={assigneeNames}
       items={items.map((i) => ({
         id: i.id,
         title: i.title,

@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
@@ -24,9 +24,13 @@ import { jobsWebhookCreateSchema } from "@/lib/validators/jobs-webhook";
  * job already exists for the same externalId, we return it with
  * `duplicate: true` and HTTP 200 — safe to retry.
  *
- * Tech lookup: tries `assignedToEmail` first (exact, case-insensitive),
- * then `assignedToName` (case-insensitive trim match). 404 if neither finds
- * a profile.
+ * Tech lookup: resolves every entry in `assignedToEmail` (exact, case-
+ * insensitive email match) and in `assignedToName` (case-insensitive name
+ * match) to a profile id. The resulting set is stored as the job's
+ * `assignees` array. If both fields are empty the job is created
+ * "unassigned" and any field tech can pick it up. If a lookup value is
+ * provided but doesn't resolve to a profile, the entire request fails with
+ * 404 so the upstream CRM knows something is wrong.
  *
  * Template lookup (optional): `templateId` wins over `templateName`; if
  * `templateName` is provided, look up active (non-archived) templates by
@@ -71,35 +75,52 @@ export async function POST(request: Request) {
     );
   }
 
-  // 4. Tech lookup — email first, fall back to fuzzy name
-  let techProfile: { id: string; fullName: string; email: string } | undefined;
+  // 4. Tech lookup — resolve every email + name into a profile id.
+  //    Emails are matched exactly (case-insensitive); names use ILIKE.
+  //    The final assignees list is the union of both lookups, deduplicated.
+  const resolvedProfiles = new Map<string, { id: string; fullName: string; email: string }>();
 
-  if (payload.assignedToEmail.trim()) {
-    const [byEmail] = await db
+  // Emails: bulk lookup in one query
+  const emailLookups = payload.assignedToEmail.map((e) => e.trim().toLowerCase()).filter(Boolean);
+  if (emailLookups.length > 0) {
+    const rows = await db
       .select({ id: profiles.id, fullName: profiles.fullName, email: profiles.email })
       .from(profiles)
-      .where(eq(sql`lower(${profiles.email})`, payload.assignedToEmail.trim().toLowerCase()))
-      .limit(1);
-    techProfile = byEmail;
+      .where(inArray(sql`lower(${profiles.email})`, emailLookups));
+    for (const row of rows) resolvedProfiles.set(row.id, row);
+
+    // Detect unresolved emails (one per line) so the CRM gets a specific error.
+    const foundEmails = new Set(rows.map((r) => r.email.toLowerCase()));
+    const unresolvedEmails = emailLookups.filter((e) => !foundEmails.has(e));
+    if (unresolvedEmails.length > 0) {
+      return NextResponse.json(
+        { error: `No user found for email(s): ${unresolvedEmails.join(", ")}` },
+        { status: 404 },
+      );
+    }
   }
 
-  if (!techProfile && payload.assignedToName.trim()) {
+  // Names: one lookup per entry because ILIKE isn't bulk-friendly.
+  for (const nameRaw of payload.assignedToName) {
+    const name = nameRaw.trim();
+    if (!name) continue;
     const [byName] = await db
       .select({ id: profiles.id, fullName: profiles.fullName, email: profiles.email })
       .from(profiles)
-      .where(ilike(profiles.fullName, payload.assignedToName.trim()))
+      .where(ilike(profiles.fullName, name))
       .limit(1);
-    techProfile = byName;
+    if (!byName) {
+      return NextResponse.json({ error: `No user found matching name: ${name}` }, { status: 404 });
+    }
+    resolvedProfiles.set(byName.id, byName);
   }
 
-  if (!techProfile) {
-    return NextResponse.json(
-      {
-        error: `No user found matching tech: ${payload.assignedToEmail || payload.assignedToName}`,
-      },
-      { status: 404 },
-    );
-  }
+  const techProfiles = Array.from(resolvedProfiles.values());
+  const assigneeIds = techProfiles.map((p) => p.id);
+  // First resolved profile (if any) acts as the `createdBy` so `jobs.created_by`
+  // still points at a real person for audit. If nothing resolved, createdBy
+  // will be null (which the column allows).
+  const primaryTech = techProfiles[0] ?? null;
 
   // 5. Template lookup (optional)
   let templateRow: { id: string; name: string } | undefined;
@@ -167,11 +188,11 @@ export async function POST(request: Request) {
     const [job] = await tx
       .insert(jobs)
       .values({
-        assignedTo: techProfile!.id,
-        // n8n is acting on behalf of the assignee — treat them as creator.
-        // Avoids needing a separate system-user identity and keeps `jobs.created_by`
-        // pointing at a real person for audit.
-        createdBy: techProfile!.id,
+        assignees: assigneeIds,
+        // n8n is acting on behalf of the (first) assignee — treat them as
+        // creator so `jobs.created_by` still points at a real person for
+        // audit. If no tech was resolved, createdBy is null.
+        createdBy: primaryTech?.id ?? null,
         title: payload.title.trim(),
         customerName: payload.customer.name.trim() || null,
         customerEmail: payload.customer.email.trim() || null,
@@ -200,11 +221,11 @@ export async function POST(request: Request) {
       status: newJob.status,
       duplicate: false,
       url: buildJobUrl(request, newJob.id),
-      assignedTo: {
-        id: techProfile.id,
-        fullName: techProfile.fullName,
-        email: techProfile.email,
-      },
+      assignees: techProfiles.map((p) => ({
+        id: p.id,
+        fullName: p.fullName,
+        email: p.email,
+      })),
       templateApplied: templateRow
         ? { id: templateRow.id, name: templateRow.name, itemCount: templateItems.length }
         : null,

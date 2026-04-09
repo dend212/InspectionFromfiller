@@ -35,31 +35,60 @@ const addressSchema = z
 
 // POST /api/webhooks/jobs/create --------------------------------------------
 
-export const jobsWebhookCreateSchema = z
-  .object({
-    externalId: z.string().min(1, "externalId is required"),
-    title: z.string().min(1, "title is required"),
+/**
+ * Normalize an assignee lookup field. Accepts:
+ *   - undefined / null        → []
+ *   - ""                      → []
+ *   - "a@b.c"                 → ["a@b.c"]
+ *   - "a@b.c, c@d.e"          → ["a@b.c", "c@d.e"]
+ *   - ["a@b.c", "c@d.e"]      → ["a@b.c", "c@d.e"]
+ *
+ * This lets n8n send either a single string, a comma-separated list, or an
+ * explicit array — all three shapes work without the caller having to pick.
+ */
+const assigneeLookupField = z.preprocess((v) => {
+  if (v === undefined || v === null) return [];
+  if (Array.isArray(v)) {
+    return v
+      .filter((x) => typeof x === "string")
+      .map((x) => (x as string).trim())
+      .filter(Boolean);
+  }
+  if (typeof v === "string") {
+    return v
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  }
+  return [];
+}, z.array(z.string()));
 
-    // At least one must be provided — validated by .refine below.
-    assignedToEmail: z.string().optional().default(""),
-    assignedToName: z.string().optional().default(""),
+export const jobsWebhookCreateSchema = z.object({
+  externalId: z.string().min(1, "externalId is required"),
+  title: z.string().min(1, "title is required"),
 
-    // Optional template selector. If both are provided, templateId wins.
-    templateId: z.string().uuid().optional().nullable(),
-    templateName: z.string().optional().default(""),
+  // Either field may carry a single string, a comma-separated list, or an
+  // explicit string[]. Zero entries is allowed — it creates an unassigned
+  // job that any field tech can pick up.
+  //
+  // Backward compat: the old single-string `assignedToEmail` /
+  // `assignedToName` payload still works because the preprocessor accepts
+  // strings.
+  assignedToEmail: assigneeLookupField.optional().default([]),
+  assignedToName: assigneeLookupField.optional().default([]),
 
-    customer: customerSchema,
-    serviceAddress: addressSchema,
+  // Optional template selector. If both are provided, templateId wins.
+  templateId: z.string().uuid().optional().nullable(),
+  templateName: z.string().optional().default(""),
 
-    // ISO 8601 timestamp, optional.
-    scheduledFor: z.string().optional().default(""),
-    // Pre-seed general notes the tech will see on the dashboard.
-    initialNotes: z.string().optional().default(""),
-  })
-  .refine((v) => v.assignedToEmail.trim() || v.assignedToName.trim(), {
-    message: "assignedToEmail or assignedToName is required",
-    path: ["assignedToEmail"],
-  });
+  customer: customerSchema,
+  serviceAddress: addressSchema,
+
+  // ISO 8601 timestamp, optional.
+  scheduledFor: z.string().optional().default(""),
+  // Pre-seed general notes the tech will see on the dashboard.
+  initialNotes: z.string().optional().default(""),
+});
 
 export type JobsWebhookCreatePayload = z.infer<typeof jobsWebhookCreateSchema>;
 

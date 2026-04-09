@@ -23,13 +23,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const [job] = await db
-    .select({ assignedTo: jobs.assignedTo })
+    .select({ assignees: jobs.assignees })
     .from(jobs)
     .where(eq(jobs.id, id))
     .limit(1);
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
-  const { allowed } = await checkJobAccess(supabase, user.id, job.assignedTo);
+  const { allowed } = await checkJobAccess(supabase, user.id, job.assignees);
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const result = await finalizeJobById(id);

@@ -1,10 +1,11 @@
 "use client";
 
-import { Sparkles, Trash2, Upload, Video } from "lucide-react";
+import { Mail, Sparkles, Trash2, Upload, Video, X } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { SendJobSummaryDialog } from "@/components/jobs/send-job-summary-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -22,8 +23,8 @@ interface JobDetail {
   id: string;
   title: string;
   status: "open" | "in_progress" | "completed";
-  assignedTo: string;
-  assigneeName: string | null;
+  assignees: string[];
+  assigneeNames: string[];
   customerName: string | null;
   customerEmail: string | null;
   customerPhone: string | null;
@@ -68,6 +69,11 @@ interface JobDetailViewProps {
   items: ChecklistItem[];
   media: MediaRow[];
   latestSummaryToken: string | null;
+  /**
+   * Full list of profile ids that could be assigned (all users). Used to
+   * render the assignee picker for admin/office_staff. Empty for field techs.
+   */
+  assignableTechs: Array<{ id: string; fullName: string }>;
 }
 
 const STATUS_LABELS: Record<"open" | "in_progress" | "completed", string> = {
@@ -82,6 +88,7 @@ export function JobDetailView({
   items: initialItems,
   media: initialMedia,
   latestSummaryToken: initialLatestSummaryToken,
+  assignableTechs,
 }: JobDetailViewProps) {
   const router = useRouter();
   const [job, setJob] = useState(initialJob);
@@ -92,6 +99,40 @@ export function JobDetailView({
   const [latestSummaryToken, setLatestSummaryToken] = useState(initialLatestSummaryToken);
   const [isPending, startTransition] = useTransition();
   const rewrite = useJobNoteRewrite();
+
+  const canEditAssignees = role === "admin" || role === "office_staff";
+  const techLookup = new Map(assignableTechs.map((t) => [t.id, t.fullName] as const));
+
+  // Send-summary-email dialog state
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
+
+  // Persist an updated assignees list to the server and reflect it locally.
+  const updateAssignees = async (nextAssignees: string[]) => {
+    const res = await fetch(`/api/jobs/${job.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignees: nextAssignees }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error ?? "Failed to update assignees");
+      return;
+    }
+    setJob((j) => ({
+      ...j,
+      assignees: nextAssignees,
+      assigneeNames: nextAssignees.map((id) => techLookup.get(id) ?? "Unknown"),
+    }));
+    toast.success("Assignees updated");
+  };
+
+  const addAssigneeById = (id: string) => {
+    if (!id || job.assignees.includes(id)) return;
+    void updateAssignees([...job.assignees, id]);
+  };
+  const removeAssigneeById = (id: string) => {
+    void updateAssignees(job.assignees.filter((a) => a !== id));
+  };
 
   // Sync server-driven fields back into local state when router.refresh() re-runs
   // the parent server component. We deliberately do NOT sync generalNotes /
@@ -478,9 +519,52 @@ export function JobDetailView({
             {job.customerName || "No customer"} ·{" "}
             {[job.serviceAddress, job.city, job.state].filter(Boolean).join(", ") || "No address"}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Assigned to {job.assigneeName ?? "—"}
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-sm">
+            <span className="text-muted-foreground">Assigned to:</span>
+            {job.assignees.length === 0 ? (
+              <span className="italic text-muted-foreground">Unassigned — any tech</span>
+            ) : (
+              job.assignees.map((id, i) => (
+                <span
+                  key={id}
+                  className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary"
+                >
+                  {job.assigneeNames[i] ?? techLookup.get(id) ?? "Unknown"}
+                  {canEditAssignees && (
+                    <button
+                      type="button"
+                      onClick={() => removeAssigneeById(id)}
+                      className="rounded-full p-0.5 hover:bg-primary/20"
+                      aria-label="Remove assignee"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  )}
+                </span>
+              ))
+            )}
+            {canEditAssignees &&
+              assignableTechs.filter((t) => !job.assignees.includes(t.id)).length > 0 && (
+                <select
+                  value=""
+                  onChange={(e) => {
+                    addAssigneeById(e.target.value);
+                    e.currentTarget.value = "";
+                  }}
+                  className="h-7 rounded-md border bg-background px-2 text-xs"
+                  aria-label="Add assignee"
+                >
+                  <option value="">+ Add tech</option>
+                  {assignableTechs
+                    .filter((t) => !job.assignees.includes(t.id))
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.fullName}
+                      </option>
+                    ))}
+                </select>
+              )}
+          </div>
         </div>
         <div className="flex flex-col items-end gap-2">
           <span
@@ -690,19 +774,44 @@ export function JobDetailView({
           )}
         </div>
         {latestSummaryToken && (
-          <p className="text-sm text-muted-foreground">
-            Public link:{" "}
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span>Public link:</span>
             <a
               href={`/jobs/summary/${latestSummaryToken}`}
               target="_blank"
               rel="noreferrer"
-              className="text-primary underline"
+              className="break-all text-primary underline"
             >
               /jobs/summary/{latestSummaryToken}
             </a>
-          </p>
+            {isPrivileged && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSendDialogOpen(true)}
+                className="ml-1"
+              >
+                <Mail className="mr-1.5 size-3.5" />
+                Send to customer
+              </Button>
+            )}
+          </div>
         )}
       </section>
+
+      {latestSummaryToken && isPrivileged && (
+        <SendJobSummaryDialog
+          jobId={job.id}
+          jobTitle={job.title}
+          customerEmail={job.customerEmail}
+          serviceAddressLine={
+            [job.serviceAddress, job.city, job.state].filter(Boolean).join(", ") || null
+          }
+          summaryUrl={`${typeof window !== "undefined" ? window.location.origin : ""}/jobs/summary/${latestSummaryToken}`}
+          open={sendDialogOpen}
+          onOpenChange={setSendDialogOpen}
+        />
+      )}
     </div>
   );
 }

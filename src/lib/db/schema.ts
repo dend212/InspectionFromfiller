@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   integer,
@@ -125,7 +125,6 @@ export const inspectionSummaries = pgTable("inspection_summaries", {
 export const profilesRelations = relations(profiles, ({ many }) => ({
   inspections: many(inspections),
   roles: many(userRoles),
-  assignedJobs: many(jobs, { relationName: "jobs_assignee" }),
   createdJobs: many(jobs, { relationName: "jobs_creator" }),
 }));
 
@@ -211,12 +210,15 @@ export const checklistTemplateItems = pgTable("checklist_template_items", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Jobs — top-level record for a general service visit
+// Jobs — top-level record for a general service visit.
+//
+// `assignees` is a uuid[] of profile ids (tech assignees). An empty array
+// means "unassigned / open to any field tech". Admins and office_staff always
+// have full access regardless of the array contents. See
+// checkJobAccess() in src/lib/supabase/auth-helpers.ts.
 export const jobs = pgTable("jobs", {
   id: uuid("id").defaultRandom().primaryKey(),
-  assignedTo: uuid("assigned_to")
-    .references(() => profiles.id)
-    .notNull(),
+  assignees: uuid("assignees").array().notNull().default(sql`'{}'::uuid[]`),
   createdBy: uuid("created_by").references(() => profiles.id),
   status: jobStatusEnum("status").default("open").notNull(),
   title: text("title").notNull(),
@@ -287,6 +289,19 @@ export const jobMedia = pgTable("job_media", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Customer-facing email send history for jobs. Mirrors inspection_emails
+// and powers the "Previously sent" list in the send-summary dialog.
+export const jobEmails = pgTable("job_emails", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  jobId: uuid("job_id")
+    .references(() => jobs.id, { onDelete: "cascade" })
+    .notNull(),
+  recipientEmail: text("recipient_email").notNull(),
+  subject: text("subject").notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
+  sentBy: uuid("sent_by").references(() => profiles.id),
+});
+
 // Public tokenized customer-facing summary pages for jobs
 export const jobSummaries = pgTable("job_summaries", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -317,11 +332,9 @@ export const checklistTemplateItemsRelations = relations(checklistTemplateItems,
 }));
 
 export const jobsRelations = relations(jobs, ({ one, many }) => ({
-  assignee: one(profiles, {
-    fields: [jobs.assignedTo],
-    references: [profiles.id],
-    relationName: "jobs_assignee",
-  }),
+  // NOTE: assignees is a uuid[] with no FK — there's no single-record
+  // "assignee" relation. Callers must fetch profile names separately via
+  // `inArray(profiles.id, job.assignees)`.
   creator: one(profiles, {
     fields: [jobs.createdBy],
     references: [profiles.id],
@@ -334,6 +347,18 @@ export const jobsRelations = relations(jobs, ({ one, many }) => ({
   checklistItems: many(jobChecklistItems),
   media: many(jobMedia),
   summaries: many(jobSummaries),
+  emails: many(jobEmails),
+}));
+
+export const jobEmailsRelations = relations(jobEmails, ({ one }) => ({
+  job: one(jobs, {
+    fields: [jobEmails.jobId],
+    references: [jobs.id],
+  }),
+  sender: one(profiles, {
+    fields: [jobEmails.sentBy],
+    references: [profiles.id],
+  }),
 }));
 
 export const jobChecklistItemsRelations = relations(jobChecklistItems, ({ one, many }) => ({

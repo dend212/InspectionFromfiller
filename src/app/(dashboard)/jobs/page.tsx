@@ -1,6 +1,8 @@
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { Map as MapIcon } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { DeleteJobButton } from "@/components/jobs/delete-job-button";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/db";
 import { jobs, profiles } from "@/lib/db/schema";
@@ -14,6 +16,13 @@ const STATUS_LABELS: Record<"open" | "in_progress" | "completed", string> = {
   in_progress: "In Progress",
   completed: "Completed",
 };
+
+function formatAssignees(names: string[]): string {
+  if (names.length === 0) return "Unassigned";
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]}, ${names[1]}`;
+  return `${names[0]} +${names.length - 1}`;
+}
 
 function StatusBadge({ status }: { status: "open" | "in_progress" | "completed" }) {
   const styles: Record<typeof status, string> = {
@@ -49,7 +58,14 @@ export default async function JobsPage({
   const offset = (pageNum - 1) * PAGE_SIZE;
 
   const conditions = [];
-  if (role === "field_tech") conditions.push(eq(jobs.assignedTo, user.id));
+  if (role === "field_tech") {
+    // Field techs see jobs they're assigned to plus any unassigned jobs.
+    const visCond = or(
+      sql`cardinality(${jobs.assignees}) = 0`,
+      sql`${user.id}::uuid = ANY(${jobs.assignees})`,
+    );
+    if (visCond) conditions.push(visCond);
+  }
   if (status && status !== "all") {
     if (["open", "in_progress", "completed"].includes(status)) {
       conditions.push(eq(jobs.status, status as "open" | "in_progress" | "completed"));
@@ -66,7 +82,7 @@ export default async function JobsPage({
   }
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const rows = await db
+  const rawRows = await db
     .select({
       id: jobs.id,
       title: jobs.title,
@@ -77,14 +93,27 @@ export default async function JobsPage({
       state: jobs.state,
       zip: jobs.zip,
       updatedAt: jobs.updatedAt,
-      assigneeName: profiles.fullName,
+      assignees: jobs.assignees,
     })
     .from(jobs)
-    .leftJoin(profiles, eq(profiles.id, jobs.assignedTo))
     .where(where)
     .orderBy(desc(jobs.updatedAt))
     .limit(PAGE_SIZE)
     .offset(offset);
+
+  // Resolve assignee display names in one round-trip, preserve order per row.
+  const allAssigneeIds = Array.from(new Set(rawRows.flatMap((r) => r.assignees)));
+  const assigneeProfiles = allAssigneeIds.length
+    ? await db
+        .select({ id: profiles.id, fullName: profiles.fullName })
+        .from(profiles)
+        .where(inArray(profiles.id, allAssigneeIds))
+    : [];
+  const nameById = new Map(assigneeProfiles.map((p) => [p.id, p.fullName] as const));
+  const rows = rawRows.map((r) => ({
+    ...r,
+    assigneeNames: r.assignees.map((id) => nameById.get(id) ?? "Unknown"),
+  }));
 
   const [{ total }] = await db
     .select({ total: sql<number>`count(*)::int` })
@@ -92,16 +121,26 @@ export default async function JobsPage({
     .where(where);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  const canDelete = role === "admin" || role === "office_staff";
+
   return (
     <div className="max-w-6xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Jobs</h1>
           <p className="text-muted-foreground text-sm">General service visits and non-ADEQ work.</p>
         </div>
-        <Button asChild>
-          <Link href="/jobs/new">New Job</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/jobs/map">
+              <MapIcon className="mr-1.5 size-4" />
+              Map view
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/jobs/new">New Job</Link>
+          </Button>
+        </div>
       </div>
 
       <form className="flex flex-wrap gap-2" method="get">
@@ -132,42 +171,94 @@ export default async function JobsPage({
           No jobs match these filters.
         </div>
       ) : (
-        <div className="rounded-lg border">
-          <table className="w-full text-sm">
-            <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3">Title</th>
-                <th className="px-4 py-3">Customer</th>
-                <th className="px-4 py-3">Address</th>
-                <th className="px-4 py-3">Assignee</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((j) => (
-                <tr key={j.id} className="border-b last:border-0 hover:bg-muted/20">
-                  <td className="px-4 py-3 font-medium">
-                    <Link href={`/jobs/${j.id}`} className="text-primary hover:underline">
+        <>
+          {/* Mobile: stacked cards */}
+          <div className="space-y-3 md:hidden">
+            {rows.map((j) => (
+              <div key={j.id} className="rounded-lg border bg-card p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/jobs/${j.id}`}
+                      className="block truncate font-semibold text-primary hover:underline"
+                    >
                       {j.title}
                     </Link>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{j.customerName || "—"}</td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {[j.serviceAddress, j.city, j.state].filter(Boolean).join(", ") || "—"}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{j.assigneeName || "—"}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={j.status as "open" | "in_progress" | "completed"} />
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {j.updatedAt.toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    {j.customerName && (
+                      <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                        {j.customerName}
+                      </p>
+                    )}
+                  </div>
+                  <StatusBadge status={j.status as "open" | "in_progress" | "completed"} />
+                </div>
+                {(j.serviceAddress || j.city) && (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {[j.serviceAddress, j.city, j.state].filter(Boolean).join(", ")}
+                  </p>
+                )}
+                <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="truncate">
+                      <span className="text-muted-foreground/70">Tech: </span>
+                      {formatAssignees(j.assigneeNames)}
+                    </p>
+                    <p>Updated {j.updatedAt.toLocaleDateString()}</p>
+                  </div>
+                  {canDelete && <DeleteJobButton jobId={j.id} jobTitle={j.title} />}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tablet/desktop: table */}
+          <div className="hidden overflow-hidden rounded-lg border md:block">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3">Title</th>
+                    <th className="px-4 py-3">Customer</th>
+                    <th className="px-4 py-3">Address</th>
+                    <th className="px-4 py-3">Assignee</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Updated</th>
+                    {canDelete && <th className="w-12 px-4 py-3 text-right">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((j) => (
+                    <tr key={j.id} className="border-b last:border-0 hover:bg-muted/20">
+                      <td className="px-4 py-3 font-medium">
+                        <Link href={`/jobs/${j.id}`} className="text-primary hover:underline">
+                          {j.title}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{j.customerName || "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {[j.serviceAddress, j.city, j.state].filter(Boolean).join(", ") || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {formatAssignees(j.assigneeNames)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={j.status as "open" | "in_progress" | "completed"} />
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {j.updatedAt.toLocaleDateString()}
+                      </td>
+                      {canDelete && (
+                        <td className="px-4 py-3 text-right">
+                          <DeleteJobButton jobId={j.id} jobTitle={j.title} />
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
 
       {totalPages > 1 && (

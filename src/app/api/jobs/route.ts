@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
@@ -16,11 +16,15 @@ import { createClient } from "@/lib/supabase/server";
  * GET /api/jobs
  * List jobs visible to the current user. Supports:
  *   ?status=open|in_progress|completed
- *   ?assignedTo=<uuid>           (admin/office_staff only)
+ *   ?assignedTo=<uuid>           (admin/office_staff only — filter to jobs
+ *                                 including that assignee)
+ *   ?unassigned=true             (admin/office_staff only — only jobs with
+ *                                 an empty assignees array)
  *   ?q=<substring>               (title / customer name match)
  *   ?page=1&pageSize=20
  *
- * field_tech automatically sees only their own jobs; admin/office_staff see all.
+ * field_tech sees jobs where they are in `assignees` OR `assignees` is empty
+ * (unassigned jobs are open to any tech). admin/office_staff see all.
  */
 const PAGE_SIZE = 20;
 
@@ -37,6 +41,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const status = url.searchParams.get("status") as "open" | "in_progress" | "completed" | null;
   const assignedToParam = url.searchParams.get("assignedTo");
+  const unassignedOnly = url.searchParams.get("unassigned") === "true";
   const q = url.searchParams.get("q")?.trim() || "";
   const page = Math.max(1, Number.parseInt(url.searchParams.get("page") ?? "1", 10));
   const pageSize = Math.min(
@@ -45,11 +50,18 @@ export async function GET(request: Request) {
   );
 
   const conditions = [];
-  // Role-aware visibility
+  // Role-aware visibility.
   if (role === "field_tech") {
-    conditions.push(eq(jobs.assignedTo, user.id));
+    // Field techs see their own jobs + any unassigned (open-to-all) jobs.
+    const orCond = or(
+      sql`cardinality(${jobs.assignees}) = 0`,
+      sql`${user.id}::uuid = ANY(${jobs.assignees})`,
+    );
+    if (orCond) conditions.push(orCond);
+  } else if (unassignedOnly) {
+    conditions.push(sql`cardinality(${jobs.assignees}) = 0`);
   } else if (assignedToParam) {
-    conditions.push(eq(jobs.assignedTo, assignedToParam));
+    conditions.push(sql`${assignedToParam}::uuid = ANY(${jobs.assignees})`);
   }
   if (status) conditions.push(eq(jobs.status, status));
   if (q) {
@@ -68,8 +80,7 @@ export async function GET(request: Request) {
       id: jobs.id,
       title: jobs.title,
       status: jobs.status,
-      assignedTo: jobs.assignedTo,
-      assigneeName: profiles.fullName,
+      assignees: jobs.assignees,
       customerName: jobs.customerName,
       serviceAddress: jobs.serviceAddress,
       city: jobs.city,
@@ -81,11 +92,25 @@ export async function GET(request: Request) {
       completedAt: jobs.completedAt,
     })
     .from(jobs)
-    .leftJoin(profiles, eq(profiles.id, jobs.assignedTo))
     .where(where)
     .orderBy(desc(jobs.updatedAt))
     .limit(pageSize)
     .offset((page - 1) * pageSize);
+
+  // Resolve assignee display names in a single follow-up query.
+  const allAssigneeIds = Array.from(new Set(rows.flatMap((r) => r.assignees)));
+  const assigneeProfiles = allAssigneeIds.length
+    ? await db
+        .select({ id: profiles.id, fullName: profiles.fullName })
+        .from(profiles)
+        .where(inArray(profiles.id, allAssigneeIds))
+    : [];
+  const nameById = new Map(assigneeProfiles.map((p) => [p.id, p.fullName] as const));
+
+  const rowsWithNames = rows.map((r) => ({
+    ...r,
+    assigneeNames: r.assignees.map((id) => nameById.get(id) ?? "Unknown").filter(Boolean),
+  }));
 
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -93,7 +118,7 @@ export async function GET(request: Request) {
     .where(where);
 
   return NextResponse.json({
-    jobs: rows,
+    jobs: rowsWithNames,
     pagination: { page, pageSize, total: count, totalPages: Math.ceil(count / pageSize) },
   });
 }
@@ -104,11 +129,16 @@ export async function GET(request: Request) {
  * job_checklist_items. Any authenticated user with a role may create.
  *
  * Body: {
- *   title, assignedTo, templateId?,
+ *   title,
+ *   assignees?: string[],   // profile ids; empty/omitted = unassigned (open to all techs)
+ *   templateId?,
  *   customerName?, customerEmail?, customerPhone?,
  *   serviceAddress?, city?, state?, zip?,
  *   scheduledFor?: ISO string
  * }
+ *
+ * For backwards compatibility, `assignedTo` (single string) is still accepted
+ * and normalized into a single-element `assignees` array.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -122,6 +152,7 @@ export async function POST(request: Request) {
 
   let body: {
     title?: string;
+    assignees?: unknown;
     assignedTo?: string;
     templateId?: string | null;
     customerName?: string;
@@ -142,25 +173,48 @@ export async function POST(request: Request) {
   const title = body.title?.trim();
   if (!title) return NextResponse.json({ error: "Title is required" }, { status: 400 });
 
-  // If no assignee specified, default to the creator.
-  const assignedTo = body.assignedTo?.trim() || user.id;
+  // Normalize the assignees input to a deduped string[] of trimmed uuids.
+  const rawAssignees: unknown = Array.isArray(body.assignees)
+    ? body.assignees
+    : body.assignedTo
+      ? [body.assignedTo]
+      : [];
+  const assigneesInput = Array.from(
+    new Set(
+      (rawAssignees as unknown[])
+        .filter((v): v is string => typeof v === "string")
+        .map((v) => v.trim())
+        .filter(Boolean),
+    ),
+  );
 
-  // field_tech can only assign jobs to themselves; admin/office_staff can assign anyone.
-  if (role === "field_tech" && assignedTo !== user.id) {
-    return NextResponse.json(
-      { error: "Field techs can only create jobs assigned to themselves" },
-      { status: 403 },
-    );
+  // Field techs can only leave it unassigned (empty) or assign it to themselves.
+  if (role === "field_tech") {
+    if (
+      assigneesInput.length > 1 ||
+      (assigneesInput.length === 1 && assigneesInput[0] !== user.id)
+    ) {
+      return NextResponse.json(
+        { error: "Field techs can only create jobs assigned to themselves or unassigned" },
+        { status: 403 },
+      );
+    }
   }
 
-  // Verify assignee exists
-  const [assignee] = await db
-    .select({ id: profiles.id })
-    .from(profiles)
-    .where(eq(profiles.id, assignedTo))
-    .limit(1);
-  if (!assignee) {
-    return NextResponse.json({ error: "Assignee not found" }, { status: 400 });
+  // Verify every referenced assignee exists in profiles.
+  if (assigneesInput.length > 0) {
+    const existing = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(inArray(profiles.id, assigneesInput));
+    const foundIds = new Set(existing.map((p) => p.id));
+    const missing = assigneesInput.filter((id) => !foundIds.has(id));
+    if (missing.length) {
+      return NextResponse.json(
+        { error: `Assignee(s) not found: ${missing.join(", ")}` },
+        { status: 400 },
+      );
+    }
   }
 
   // If template provided, verify it exists (and load items in same trip)
@@ -203,7 +257,7 @@ export async function POST(request: Request) {
     const [job] = await tx
       .insert(jobs)
       .values({
-        assignedTo,
+        assignees: assigneesInput,
         createdBy: user.id,
         title,
         customerName: body.customerName?.trim() || null,

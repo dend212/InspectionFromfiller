@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jobChecklistItems, jobMedia, jobSummaries, jobs, profiles } from "@/lib/db/schema";
@@ -8,9 +8,9 @@ import { verifyJobsWebhookAuth } from "@/lib/jobs/webhook-auth";
  * GET /api/webhooks/jobs/[externalId]
  *
  * Lets n8n poll for the current state of a job it created. Returns the
- * full lifecycle state: status, assignee, customer summary, PDF paths,
- * tokenized public URL (if one has been generated), media counts, and
- * checklist summary. This lets the upstream CRM mirror our state back
+ * full lifecycle state: status, assignees array, customer summary, PDF
+ * paths, tokenized public URL (if one has been generated), media counts,
+ * and checklist summary. This lets the upstream CRM mirror our state back
  * without us needing outbound webhooks.
  *
  * Auth: same Bearer token as the create route.
@@ -33,7 +33,7 @@ export async function GET(
       externalId: jobs.externalId,
       title: jobs.title,
       status: jobs.status,
-      assignedTo: jobs.assignedTo,
+      assignees: jobs.assignees,
       customerSummary: jobs.customerSummary,
       finalizedPdfPath: jobs.finalizedPdfPath,
       customerPdfPath: jobs.customerPdfPath,
@@ -50,11 +50,18 @@ export async function GET(
     return NextResponse.json({ error: `No job with externalId: ${externalId}` }, { status: 404 });
   }
 
-  const [assignee] = await db
-    .select({ id: profiles.id, fullName: profiles.fullName, email: profiles.email })
-    .from(profiles)
-    .where(eq(profiles.id, job.assignedTo))
-    .limit(1);
+  const assigneeProfiles = job.assignees.length
+    ? await db
+        .select({ id: profiles.id, fullName: profiles.fullName, email: profiles.email })
+        .from(profiles)
+        .where(inArray(profiles.id, job.assignees))
+    : [];
+  // Preserve the order from the stored array so the first-listed tech is
+  // still the first element in the response.
+  const profileById = new Map(assigneeProfiles.map((p) => [p.id, p] as const));
+  const assignees = job.assignees
+    .map((id) => profileById.get(id))
+    .filter((x): x is { id: string; fullName: string; email: string } => x !== undefined);
 
   const items = await db
     .select({
@@ -99,9 +106,7 @@ export async function GET(
     externalId: job.externalId,
     title: job.title,
     status: job.status,
-    assignedTo: assignee
-      ? { id: assignee.id, fullName: assignee.fullName, email: assignee.email }
-      : null,
+    assignees,
     customerSummary: job.customerSummary,
     finalizedPdfPath: job.finalizedPdfPath,
     customerPdfPath: job.customerPdfPath,

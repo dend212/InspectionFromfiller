@@ -1,13 +1,16 @@
 "use client";
 
-import { Check, Loader2 } from "lucide-react";
+import { ArrowRight, Check, ListChecks, Loader2, Users } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SignaturePad } from "@/components/inspection/signature-pad";
 import { Button } from "@/components/ui/button";
+import { useUserRole } from "@/hooks/use-user-role";
 
 export default function SettingsPage() {
+  const { role } = useUserRole();
   const [savedSignature, setSavedSignature] = useState<string | null>(null);
   const [pendingSignature, setPendingSignature] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,7 +66,8 @@ export default function SettingsPage() {
         <div>
           <h2 className="text-lg font-semibold">Inspector Signature</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Draw your signature below. It will be automatically applied to all finalized inspection PDFs.
+            Draw your signature below. It will be automatically applied to all finalized inspection
+            PDFs.
           </p>
         </div>
 
@@ -96,15 +100,58 @@ export default function SettingsPage() {
 
             {pendingSignature && (
               <Button onClick={handleSave} disabled={saving} className="w-full">
-                {saving ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
+                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Save Signature
               </Button>
             )}
           </>
         )}
       </div>
+
+      {role === "admin" && (
+        <div className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">Admin Tools</h2>
+            <p className="text-sm text-muted-foreground">Manage checklist templates and users.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Link
+              href="/admin/checklist-templates"
+              className="group flex items-start gap-3 rounded-lg border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/40"
+            >
+              <div className="mt-0.5 rounded-md bg-primary/10 p-2 text-primary">
+                <ListChecks className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 font-semibold">
+                  Checklist Templates
+                  <ArrowRight className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Create and edit reusable checklist templates for jobs.
+                </p>
+              </div>
+            </Link>
+            <Link
+              href="/admin/users"
+              className="group flex items-start gap-3 rounded-lg border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/40"
+            >
+              <div className="mt-0.5 rounded-md bg-primary/10 p-2 text-primary">
+                <Users className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 font-semibold">
+                  Manage Users
+                  <ArrowRight className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Invite team members, set roles, and remove access.
+                </p>
+              </div>
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

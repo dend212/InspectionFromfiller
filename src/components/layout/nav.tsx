@@ -8,6 +8,7 @@ import {
   FilePlus,
   LayoutDashboard,
   ListChecks,
+  Map as MapIcon,
   Settings,
   Users,
 } from "lucide-react";
@@ -26,6 +27,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Settings,
   Briefcase,
   ListChecks,
+  Map: MapIcon,
 };
 
 export function Nav() {
@@ -36,7 +38,10 @@ export function Nav() {
     return (
       <nav className="hidden lg:flex w-60 flex-col gap-2 bg-sidebar p-5 pt-6">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={`skeleton-${i}`} className="h-10 rounded-lg bg-sidebar-accent/50 animate-pulse" />
+          <div
+            key={`skeleton-${i}`}
+            className="h-10 rounded-lg bg-sidebar-accent/50 animate-pulse"
+          />
         ))}
       </nav>
     );
@@ -61,7 +66,7 @@ export function Nav() {
           item.href === "/"
             ? pathname === "/"
             : pathname === item.href ||
-              (pathname.startsWith(item.href + "/") &&
+              (pathname.startsWith(`${item.href}/`) &&
                 !visibleItems.some(
                   (other) =>
                     other !== item &&

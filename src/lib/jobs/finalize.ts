@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { jobChecklistItems, jobMedia, jobs, profiles } from "@/lib/db/schema";
 import { buildJobReportPdf } from "@/lib/pdf/job-report";
@@ -75,11 +75,15 @@ export async function finalizeJobById(jobId: string): Promise<FinalizeJobResult>
     };
   }
 
-  const [assignee] = await db
-    .select({ fullName: profiles.fullName })
-    .from(profiles)
-    .where(eq(profiles.id, job.assignedTo))
-    .limit(1);
+  const assigneeProfiles = job.assignees.length
+    ? await db
+        .select({ id: profiles.id, fullName: profiles.fullName })
+        .from(profiles)
+        .where(inArray(profiles.id, job.assignees))
+    : [];
+  // Preserve insertion order from the array
+  const nameById = new Map(assigneeProfiles.map((p) => [p.id, p.fullName] as const));
+  const assigneeNames = job.assignees.map((aid) => nameById.get(aid) ?? "Unknown");
 
   // Forward-looking snapshot so the PDF cover page says COMPLETED
   const completedAt = new Date();
@@ -92,14 +96,14 @@ export async function finalizeJobById(jobId: string): Promise<FinalizeJobResult>
       job: jobForReport,
       items,
       media,
-      assigneeName: assignee?.fullName ?? null,
+      assigneeNames,
       audience: "staff",
     });
     customerBytes = await buildJobReportPdf({
       job: jobForReport,
       items,
       media,
-      assigneeName: assignee?.fullName ?? null,
+      assigneeNames,
       audience: "customer",
     });
   } catch (err) {

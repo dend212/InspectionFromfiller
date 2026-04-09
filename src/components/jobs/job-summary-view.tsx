@@ -32,7 +32,7 @@ interface JobSummaryViewProps {
     completedAt: string | null;
     customerSummary: string;
   };
-  assigneeName: string | null;
+  assigneeNames: string[];
   items: JobSummaryItem[];
   media: JobSummaryMedia[];
   hasPdf: boolean;
@@ -58,14 +58,23 @@ function StatusChip({ status }: { status: "pending" | "done" | "skipped" }) {
   );
 }
 
+function formatTechList(names: string[]): string | null {
+  if (names.length === 0) return null;
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} & ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]}`;
+}
+
 export function JobSummaryView({
   token,
+  expiresAt,
   job,
-  assigneeName,
+  assigneeNames,
   items,
   media,
   hasPdf,
 }: JobSummaryViewProps) {
+  const techLabel = formatTechList(assigneeNames);
   const addressLine = [job.city, job.state, job.zip].filter(Boolean).join(" ");
   const completedDate = job.completedAt
     ? new Date(job.completedAt).toLocaleDateString("en-US", {
@@ -74,6 +83,11 @@ export function JobSummaryView({
         year: "numeric",
       })
     : null;
+  const formattedExpiry = new Date(expiresAt).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 
   const generalMedia = media.filter((m) => m.bucket === "general");
   const mediaByItem = new Map<string, JobSummaryMedia[]>();
@@ -85,7 +99,7 @@ export function JobSummaryView({
   }
 
   return (
-    <div className="min-h-svh bg-slate-50">
+    <div className="flex min-h-svh flex-col bg-slate-50">
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-4xl items-start justify-between gap-6 px-6 py-10">
           <div className="min-w-0 flex-1">
@@ -102,10 +116,12 @@ export function JobSummaryView({
               </p>
             )}
             <div className="mt-6 flex flex-wrap gap-x-8 gap-y-2 text-sm">
-              {assigneeName && (
+              {techLabel && (
                 <div>
-                  <span className="text-slate-500">Technician: </span>
-                  <span className="font-medium text-slate-900">{assigneeName}</span>
+                  <span className="text-slate-500">
+                    {assigneeNames.length > 1 ? "Technicians: " : "Technician: "}
+                  </span>
+                  <span className="font-medium text-slate-900">{techLabel}</span>
                 </div>
               )}
               {completedDate && (
@@ -127,7 +143,7 @@ export function JobSummaryView({
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-6 py-10 space-y-10">
+      <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10 space-y-10">
         {/* Customer summary paragraph */}
         <section className="rounded-xl border bg-white p-6 shadow-sm">
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Summary</h2>
@@ -322,8 +338,9 @@ export function JobSummaryView({
               {COMPANY_CONTACT.phone}
             </a>
           </div>
-          <p className="mt-4 text-[11px] text-slate-400">
-            This link is valid for viewing and will expire automatically.
+          <p className="mt-4 text-xs text-slate-500">
+            This link expires {formattedExpiry}. Please download your report and save any photos or
+            videos before then.
           </p>
         </div>
       </footer>

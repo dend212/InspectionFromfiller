@@ -1,7 +1,17 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { CheckSquare, ClipboardList, FilePlus, LayoutDashboard, Settings, Users } from "lucide-react";
+import {
+  Briefcase,
+  CheckSquare,
+  ClipboardList,
+  FilePlus,
+  LayoutDashboard,
+  ListChecks,
+  Map as MapIcon,
+  Settings,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -16,6 +26,9 @@ const ICON_MAP: Record<string, LucideIcon> = {
   CheckSquare,
   Users,
   Settings,
+  Briefcase,
+  ListChecks,
+  Map: MapIcon,
 };
 
 interface MobileNavProps {
@@ -49,7 +62,18 @@ export function MobileNav({ open, onOpenChange }: MobileNavProps) {
           </div>
           {visibleItems.map((item) => {
             const Icon = item.icon ? ICON_MAP[item.icon] : null;
-            const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            const isActive =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname === item.href ||
+                  (pathname.startsWith(`${item.href}/`) &&
+                    !visibleItems.some(
+                      (other) =>
+                        other !== item &&
+                        other.href !== "/" &&
+                        other.href.length > item.href.length &&
+                        pathname.startsWith(other.href),
+                    ));
 
             return (
               <Link
