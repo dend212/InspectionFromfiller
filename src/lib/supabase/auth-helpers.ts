@@ -39,3 +39,26 @@ export async function checkInspectionAccess(
   const isPrivileged = role === "admin" || role === "office_staff";
   return { allowed: isPrivileged, role };
 }
+
+/**
+ * Check if the current user is the assignee of a job or has a privileged role.
+ * Mirrors checkInspectionAccess. Used by all /api/jobs/[id] routes.
+ */
+export async function checkJobAccess(
+  supabase: SupabaseClient,
+  userId: string,
+  assignedTo: string,
+): Promise<{ allowed: boolean; role: AppRole | null }> {
+  const role = await getUserRole(supabase);
+  if (userId === assignedTo) {
+    return { allowed: true, role };
+  }
+  const isPrivileged = role === "admin" || role === "office_staff";
+  return { allowed: isPrivileged, role };
+}
+
+/** Shorthand: is the current user admin? */
+export async function isAdmin(supabase: SupabaseClient): Promise<boolean> {
+  const role = await getUserRole(supabase);
+  return role === "admin";
+}

@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   integer,
   jsonb,
   pgEnum,
@@ -124,6 +125,8 @@ export const inspectionSummaries = pgTable("inspection_summaries", {
 export const profilesRelations = relations(profiles, ({ many }) => ({
   inspections: many(inspections),
   roles: many(userRoles),
+  assignedJobs: many(jobs, { relationName: "jobs_assignee" }),
+  createdJobs: many(jobs, { relationName: "jobs_creator" }),
 }));
 
 export const userRolesRelations = relations(userRoles, ({ one }) => ({
@@ -168,6 +171,202 @@ export const inspectionSummariesRelations = relations(inspectionSummaries, ({ on
   }),
   creator: one(profiles, {
     fields: [inspectionSummaries.createdBy],
+    references: [profiles.id],
+  }),
+}));
+
+// =========================================================================
+// Jobs Module — general (non-ADEQ) service visits and pump jobs
+// =========================================================================
+
+// Job status enum — simpler flow than inspections
+export const jobStatusEnum = pgEnum("job_status", ["open", "in_progress", "completed"]);
+
+// Discriminator for job media — either attached to a checklist item or general
+export const jobMediaBucketEnum = pgEnum("job_media_bucket", ["checklist_item", "general"]);
+
+// Checklist templates (admin-managed library)
+export const checklistTemplates = pgTable("checklist_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdBy: uuid("created_by").references(() => profiles.id),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Items inside a checklist template
+export const checklistTemplateItems = pgTable("checklist_template_items", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  templateId: uuid("template_id")
+    .references(() => checklistTemplates.id, { onDelete: "cascade" })
+    .notNull(),
+  title: text("title").notNull(),
+  instructions: text("instructions"),
+  requiredPhotoCount: integer("required_photo_count").default(0).notNull(),
+  requiresNote: boolean("requires_note").default(false).notNull(),
+  isRequired: boolean("is_required").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Jobs — top-level record for a general service visit
+export const jobs = pgTable("jobs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  assignedTo: uuid("assigned_to")
+    .references(() => profiles.id)
+    .notNull(),
+  createdBy: uuid("created_by").references(() => profiles.id),
+  status: jobStatusEnum("status").default("open").notNull(),
+  title: text("title").notNull(),
+  // Customer + service address (simplified vs. inspections)
+  customerName: text("customer_name"),
+  customerEmail: text("customer_email"),
+  customerPhone: varchar("customer_phone", { length: 20 }),
+  serviceAddress: text("service_address"),
+  city: text("city"),
+  state: varchar("state", { length: 2 }).default("AZ"),
+  zip: varchar("zip", { length: 10 }),
+  // Notes
+  generalNotes: text("general_notes"),
+  customerSummary: text("customer_summary"), // AI-generated final paragraph
+  // Template traceability (informational; snapshot in job_checklist_items is authoritative)
+  sourceTemplateId: uuid("source_template_id").references(() => checklistTemplates.id),
+  // PDF artifacts
+  finalizedPdfPath: text("finalized_pdf_path"),
+  customerPdfPath: text("customer_pdf_path"),
+  // Scheduling + lifecycle timestamps
+  scheduledFor: timestamp("scheduled_for"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Per-job snapshot of checklist items — edits here never touch the template
+export const jobChecklistItems = pgTable("job_checklist_items", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  jobId: uuid("job_id")
+    .references(() => jobs.id, { onDelete: "cascade" })
+    .notNull(),
+  title: text("title").notNull(),
+  instructions: text("instructions"),
+  requiredPhotoCount: integer("required_photo_count").default(0).notNull(),
+  requiresNote: boolean("requires_note").default(false).notNull(),
+  isRequired: boolean("is_required").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  // "pending" | "done" | "skipped" — plain text to avoid another enum
+  status: text("status").default("pending").notNull(),
+  note: text("note"),
+  completedAt: timestamp("completed_at"),
+  completedBy: uuid("completed_by").references(() => profiles.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Media attached to a job — either pinned to a checklist item or a general bucket
+export const jobMedia = pgTable("job_media", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  jobId: uuid("job_id")
+    .references(() => jobs.id, { onDelete: "cascade" })
+    .notNull(),
+  checklistItemId: uuid("checklist_item_id").references(() => jobChecklistItems.id, {
+    onDelete: "cascade",
+  }),
+  bucket: jobMediaBucketEnum("bucket").notNull(),
+  type: text("type").notNull(), // "photo" | "video" (photo-only at launch)
+  storagePath: text("storage_path").notNull(),
+  description: text("description"),
+  // Only meaningful for general-bucket rows; checklist rows always render as visible
+  visibleToCustomer: boolean("visible_to_customer").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  uploadedBy: uuid("uploaded_by").references(() => profiles.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Public tokenized customer-facing summary pages for jobs
+export const jobSummaries = pgTable("job_summaries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  jobId: uuid("job_id")
+    .references(() => jobs.id, { onDelete: "cascade" })
+    .notNull(),
+  token: varchar("token", { length: 32 }).notNull().unique(),
+  customerSummary: text("customer_summary").notNull(),
+  createdBy: uuid("created_by").references(() => profiles.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
+// Relations
+export const checklistTemplatesRelations = relations(checklistTemplates, ({ one, many }) => ({
+  creator: one(profiles, {
+    fields: [checklistTemplates.createdBy],
+    references: [profiles.id],
+  }),
+  items: many(checklistTemplateItems),
+}));
+
+export const checklistTemplateItemsRelations = relations(checklistTemplateItems, ({ one }) => ({
+  template: one(checklistTemplates, {
+    fields: [checklistTemplateItems.templateId],
+    references: [checklistTemplates.id],
+  }),
+}));
+
+export const jobsRelations = relations(jobs, ({ one, many }) => ({
+  assignee: one(profiles, {
+    fields: [jobs.assignedTo],
+    references: [profiles.id],
+    relationName: "jobs_assignee",
+  }),
+  creator: one(profiles, {
+    fields: [jobs.createdBy],
+    references: [profiles.id],
+    relationName: "jobs_creator",
+  }),
+  sourceTemplate: one(checklistTemplates, {
+    fields: [jobs.sourceTemplateId],
+    references: [checklistTemplates.id],
+  }),
+  checklistItems: many(jobChecklistItems),
+  media: many(jobMedia),
+  summaries: many(jobSummaries),
+}));
+
+export const jobChecklistItemsRelations = relations(jobChecklistItems, ({ one, many }) => ({
+  job: one(jobs, {
+    fields: [jobChecklistItems.jobId],
+    references: [jobs.id],
+  }),
+  completer: one(profiles, {
+    fields: [jobChecklistItems.completedBy],
+    references: [profiles.id],
+  }),
+  media: many(jobMedia),
+}));
+
+export const jobMediaRelations = relations(jobMedia, ({ one }) => ({
+  job: one(jobs, {
+    fields: [jobMedia.jobId],
+    references: [jobs.id],
+  }),
+  checklistItem: one(jobChecklistItems, {
+    fields: [jobMedia.checklistItemId],
+    references: [jobChecklistItems.id],
+  }),
+  uploader: one(profiles, {
+    fields: [jobMedia.uploadedBy],
+    references: [profiles.id],
+  }),
+}));
+
+export const jobSummariesRelations = relations(jobSummaries, ({ one }) => ({
+  job: one(jobs, {
+    fields: [jobSummaries.jobId],
+    references: [jobs.id],
+  }),
+  creator: one(profiles, {
+    fields: [jobSummaries.createdBy],
     references: [profiles.id],
   }),
 }));
