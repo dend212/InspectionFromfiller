@@ -2,7 +2,6 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jobChecklistItems, jobMedia, jobs } from "@/lib/db/schema";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { checkJobAccess } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
 
@@ -53,7 +52,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "storagePath is required" }, { status: 400 });
   }
   if (bucket !== "checklist_item" && bucket !== "general") {
-    return NextResponse.json({ error: "bucket must be 'checklist_item' or 'general'" }, { status: 400 });
+    return NextResponse.json(
+      { error: "bucket must be 'checklist_item' or 'general'" },
+      { status: 400 },
+    );
   }
 
   let checklistItemId: string | null = null;
@@ -67,15 +69,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const [item] = await db
       .select({ id: jobChecklistItems.id })
       .from(jobChecklistItems)
-      .where(
-        and(eq(jobChecklistItems.id, body.checklistItemId), eq(jobChecklistItems.jobId, id)),
-      )
+      .where(and(eq(jobChecklistItems.id, body.checklistItemId), eq(jobChecklistItems.jobId, id)))
       .limit(1);
     if (!item) {
-      return NextResponse.json(
-        { error: "Checklist item not found on this job" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Checklist item not found on this job" }, { status: 400 });
     }
     checklistItemId = body.checklistItemId;
   }

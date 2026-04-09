@@ -35,11 +35,7 @@ export async function GET(request: Request) {
   if (!role) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const url = new URL(request.url);
-  const status = url.searchParams.get("status") as
-    | "open"
-    | "in_progress"
-    | "completed"
-    | null;
+  const status = url.searchParams.get("status") as "open" | "in_progress" | "completed" | null;
   const assignedToParam = url.searchParams.get("assignedTo");
   const q = url.searchParams.get("q")?.trim() || "";
   const page = Math.max(1, Number.parseInt(url.searchParams.get("page") ?? "1", 10));
@@ -57,14 +53,12 @@ export async function GET(request: Request) {
   }
   if (status) conditions.push(eq(jobs.status, status));
   if (q) {
-    conditions.push(
-      // biome-ignore lint/style/noNonNullAssertion: drizzle or() always has at least one arg
-      or(
-        ilike(jobs.title, `%${q}%`),
-        ilike(jobs.customerName, `%${q}%`),
-        ilike(jobs.customerEmail, `%${q}%`),
-      )!,
+    const orCondition = or(
+      ilike(jobs.title, `%${q}%`),
+      ilike(jobs.customerName, `%${q}%`),
+      ilike(jobs.customerEmail, `%${q}%`),
     );
+    if (orCondition) conditions.push(orCondition);
   }
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;

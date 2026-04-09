@@ -30,17 +30,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
     return NextResponse.json({ error: "Report not available" }, { status: 404 });
   }
 
-  const sanitized = job.title.trim().replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-_]/g, "");
+  const sanitized = job.title
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9-_]/g, "");
   const downloadName = `${sanitized || "service-visit"}.pdf`;
   const admin = createAdminClient();
   const { data, error } = await admin.storage
     .from("inspection-media")
     .createSignedUrl(job.customerPdfPath, 3600, { download: downloadName });
   if (error || !data) {
-    return NextResponse.json(
-      { error: error?.message ?? "Failed to sign URL" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: error?.message ?? "Failed to sign URL" }, { status: 500 });
   }
   // Redirect so the client can click the link directly
   return NextResponse.redirect(data.signedUrl, { status: 302 });

@@ -19,10 +19,12 @@ type JobChecklistItemInsert = InferInsertModel<typeof jobChecklistItems>;
  */
 export function mapTemplateItemsToJobItems(
   jobId: string,
-  templateItems: Array<Pick<
-    TemplateItem,
-    "title" | "instructions" | "requiredPhotoCount" | "requiresNote" | "isRequired" | "sortOrder"
-  >>,
+  templateItems: Array<
+    Pick<
+      TemplateItem,
+      "title" | "instructions" | "requiredPhotoCount" | "requiresNote" | "isRequired" | "sortOrder"
+    >
+  >,
 ): JobChecklistItemInsert[] {
   return templateItems
     .slice()

@@ -39,6 +39,18 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["admin", "office_staff"],
   },
   {
+    label: "Jobs",
+    href: "/jobs",
+    icon: "Briefcase",
+    roles: ["admin", "field_tech", "office_staff"],
+  },
+  {
+    label: "Checklist Templates",
+    href: "/admin/checklist-templates",
+    icon: "ListChecks",
+    roles: ["admin"],
+  },
+  {
     label: "Manage Users",
     href: "/admin/users",
     icon: "Users",

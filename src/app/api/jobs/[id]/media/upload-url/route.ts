@@ -68,10 +68,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .where(and(eq(jobChecklistItems.id, checklistItemId), eq(jobChecklistItems.jobId, id)))
       .limit(1);
     if (!item) {
-      return NextResponse.json(
-        { error: "Checklist item not found on this job" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Checklist item not found on this job" }, { status: 400 });
     }
   }
 

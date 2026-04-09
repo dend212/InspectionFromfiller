@@ -115,7 +115,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   for (const f of stringFields) {
     if (body[f] !== undefined) {
       const v = body[f];
-      updates[f] = typeof v === "string" ? (v.trim() || null) : null;
+      updates[f] = typeof v === "string" ? v.trim() || null : null;
     }
   }
   if (body.scheduledFor !== undefined) {

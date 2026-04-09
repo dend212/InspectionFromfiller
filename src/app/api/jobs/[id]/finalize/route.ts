@@ -65,9 +65,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     }
     const count = photoCountByItem.get(item.id) ?? 0;
     if (count < item.requiredPhotoCount) {
-      failures.push(
-        `"${item.title}" requires ${item.requiredPhotoCount} photo(s), has ${count}`,
-      );
+      failures.push(`"${item.title}" requires ${item.requiredPhotoCount} photo(s), has ${count}`);
     }
   }
 
@@ -124,12 +122,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       { status: 500 },
     );
   }
-  const customerUpload = await admin.storage
-    .from(BUCKET)
-    .upload(customerPath, customerBytes, {
-      contentType: "application/pdf",
-      upsert: true,
-    });
+  const customerUpload = await admin.storage.from(BUCKET).upload(customerPath, customerBytes, {
+    contentType: "application/pdf",
+    upsert: true,
+  });
   if (customerUpload.error) {
     return NextResponse.json(
       { error: `Customer PDF upload failed: ${customerUpload.error.message}` },

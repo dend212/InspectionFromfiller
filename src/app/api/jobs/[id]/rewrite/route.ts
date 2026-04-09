@@ -1,9 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import {
-  rewriteJobNotes,
-  type JobRewriteType,
-} from "@/lib/ai/rewrite-job-notes";
+import { type JobRewriteType, rewriteJobNotes } from "@/lib/ai/rewrite-job-notes";
 import { db } from "@/lib/db";
 import { jobChecklistItems, jobs } from "@/lib/db/schema";
 import { checkJobAccess } from "@/lib/supabase/auth-helpers";

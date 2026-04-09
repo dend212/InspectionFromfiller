@@ -31,7 +31,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Job has not been finalized" }, { status: 400 });
   }
 
-  const sanitized = job.title.trim().replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-_]/g, "");
+  const sanitized = job.title
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9-_]/g, "");
   const downloadName = `${sanitized || "service-visit"}${
     variant === "customer" ? "" : "-staff"
   }.pdf`;

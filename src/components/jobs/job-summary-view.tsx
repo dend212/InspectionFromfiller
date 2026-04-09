@@ -89,9 +89,7 @@ export function JobSummaryView({
             Service Visit Report
           </p>
           <h1 className="mt-2 text-3xl font-bold text-slate-900">{job.title}</h1>
-          {job.customerName && (
-            <p className="mt-2 text-lg text-slate-600">{job.customerName}</p>
-          )}
+          {job.customerName && <p className="mt-2 text-lg text-slate-600">{job.customerName}</p>}
           {(job.serviceAddress || addressLine) && (
             <p className="text-sm text-slate-500">
               {job.serviceAddress}
@@ -119,9 +117,7 @@ export function JobSummaryView({
       <main className="mx-auto max-w-4xl px-6 py-10 space-y-10">
         {/* Customer summary paragraph */}
         <section className="rounded-xl border bg-white p-6 shadow-sm">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">
-            Summary
-          </h2>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Summary</h2>
           <p className="mt-3 whitespace-pre-wrap text-slate-800 leading-relaxed">
             {job.customerSummary}
           </p>
@@ -140,34 +136,23 @@ export function JobSummaryView({
         {/* Checklist items */}
         {items.length > 0 && (
           <section>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">
-              Checklist
-            </h2>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Checklist</h2>
             <div className="mt-4 space-y-4">
               {items.map((item) => {
                 const photos = mediaByItem.get(item.id) ?? [];
                 return (
-                  <div
-                    key={item.id}
-                    className="rounded-xl border bg-white p-6 shadow-sm"
-                  >
+                  <div key={item.id} className="rounded-xl border bg-white p-6 shadow-sm">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <h3 className="text-lg font-semibold text-slate-900">
-                          {item.title}
-                        </h3>
+                        <h3 className="text-lg font-semibold text-slate-900">{item.title}</h3>
                         {item.instructions && (
-                          <p className="mt-1 text-sm italic text-slate-500">
-                            {item.instructions}
-                          </p>
+                          <p className="mt-1 text-sm italic text-slate-500">{item.instructions}</p>
                         )}
                       </div>
                       <StatusChip status={item.status} />
                     </div>
                     {item.note && (
-                      <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">
-                        {item.note}
-                      </p>
+                      <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{item.note}</p>
                     )}
                     {photos.length > 0 && (
                       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -234,9 +219,7 @@ export function JobSummaryView({
                       />
                     </div>
                     {p.description && (
-                      <p className="px-2 py-1 text-[11px] text-slate-600">
-                        {p.description}
-                      </p>
+                      <p className="px-2 py-1 text-[11px] text-slate-600">{p.description}</p>
                     )}
                   </a>
                 ) : null,

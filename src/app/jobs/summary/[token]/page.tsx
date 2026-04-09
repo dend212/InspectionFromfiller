@@ -1,9 +1,9 @@
 import { asc, eq } from "drizzle-orm";
+import { JobSummaryView } from "@/components/jobs/job-summary-view";
+import { SummaryExpired } from "@/components/summary/summary-expired";
 import { db } from "@/lib/db";
 import { jobChecklistItems, jobMedia, jobSummaries, jobs, profiles } from "@/lib/db/schema";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SummaryExpired } from "@/components/summary/summary-expired";
-import { JobSummaryView } from "@/components/jobs/job-summary-view";
 
 interface JobSummaryPageProps {
   params: Promise<{ token: string }>;
@@ -43,9 +43,7 @@ export default async function JobSummaryPage({ params }: JobSummaryPageProps) {
     .orderBy(asc(jobMedia.sortOrder), asc(jobMedia.createdAt));
 
   // Filter: checklist photos always visible; general photos only if flagged
-  const visibleMedia = allMedia.filter(
-    (m) => m.bucket === "checklist_item" || m.visibleToCustomer,
-  );
+  const visibleMedia = allMedia.filter((m) => m.bucket === "checklist_item" || m.visibleToCustomer);
 
   const admin = createAdminClient();
   const mediaWithUrls = await Promise.all(

@@ -1,7 +1,16 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { CheckSquare, ClipboardList, FilePlus, LayoutDashboard, Settings, Users } from "lucide-react";
+import {
+  Briefcase,
+  CheckSquare,
+  ClipboardList,
+  FilePlus,
+  LayoutDashboard,
+  ListChecks,
+  Settings,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useUserRole } from "@/hooks/use-user-role";
@@ -15,6 +24,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   CheckSquare,
   Users,
   Settings,
+  Briefcase,
+  ListChecks,
 };
 
 export function Nav() {

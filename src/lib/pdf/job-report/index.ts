@@ -19,13 +19,20 @@
  * Checklist-item photos are ALWAYS included (they are required evidence).
  */
 
-import { PDFDocument, type PDFFont, type PDFImage, type PDFPage, StandardFonts, rgb } from "pdf-lib";
-import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  PDFDocument,
+  type PDFFont,
+  type PDFImage,
+  type PDFPage,
+  rgb,
+  StandardFonts,
+} from "pdf-lib";
 import type {
   jobChecklistItems as jobChecklistItemsTable,
   jobMedia as jobMediaTable,
   jobs as jobsTable,
 } from "@/lib/db/schema";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchImageBytesForPdf } from "./image-embed";
 
 type JobRow = typeof jobsTable.$inferSelect;
@@ -150,13 +157,8 @@ function drawDivider(cursor: Cursor): Cursor {
   return cursor;
 }
 
-function drawSectionHeading(
-  doc: PDFDocument,
-  cursor: Cursor,
-  fonts: Fonts,
-  text: string,
-): Cursor {
-  let c = ensureSpace(doc, cursor, 30);
+function drawSectionHeading(doc: PDFDocument, cursor: Cursor, fonts: Fonts, text: string): Cursor {
+  const c = ensureSpace(doc, cursor, 30);
   c.y -= 4;
   c.page.drawText(text, { x: MARGIN, y: c.y - 14, size: 14, font: fonts.bold, color: C.brand });
   c.y -= 18;
@@ -178,7 +180,7 @@ function drawLabeledField(
   value: string | null | undefined,
 ): Cursor {
   if (!value) return cursor;
-  let c = ensureSpace(doc, cursor, 16);
+  const c = ensureSpace(doc, cursor, 16);
   c.page.drawText(`${label}:`, {
     x: MARGIN,
     y: c.y - 10,
@@ -198,14 +200,9 @@ function drawLabeledField(
 }
 
 function drawStatusChip(page: PDFPage, fonts: Fonts, x: number, y: number, status: string) {
-  const label =
-    status === "done" ? "DONE" : status === "skipped" ? "SKIPPED" : "PENDING";
+  const label = status === "done" ? "DONE" : status === "skipped" ? "SKIPPED" : "PENDING";
   const color =
-    status === "done"
-      ? C.statusDone
-      : status === "skipped"
-        ? C.statusSkipped
-        : C.statusPending;
+    status === "done" ? C.statusDone : status === "skipped" ? C.statusSkipped : C.statusPending;
   const textW = fonts.bold.widthOfTextAtSize(label, 8);
   const padX = 6;
   const padY = 3;
@@ -572,14 +569,7 @@ export async function buildJobReportPdf(input: JobReportInput): Promise<Uint8Arr
   let cursor = newPage(doc);
   cursor = buildJobInfoSection(doc, cursor, fonts, input);
 
-  cursor = buildChecklistSection(
-    doc,
-    cursor,
-    fonts,
-    input.items,
-    imageMap,
-    mediaByItem,
-  );
+  cursor = buildChecklistSection(doc, cursor, fonts, input.items, imageMap, mediaByItem);
 
   if (input.job.generalNotes?.trim()) {
     cursor = drawSectionHeading(doc, cursor, fonts, "General Notes");
