@@ -1,4 +1,6 @@
+import { Mail, Phone } from "lucide-react";
 import Image from "next/image";
+import { COMPANY_CONTACT, INSPECTOR_DEFAULTS } from "@/lib/constants/inspection";
 
 interface JobSummaryItem {
   id: string;
@@ -85,33 +87,43 @@ export function JobSummaryView({
   return (
     <div className="min-h-svh bg-slate-50">
       <header className="border-b bg-white">
-        <div className="mx-auto max-w-4xl px-6 py-10">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Service Visit Report
-          </p>
-          <h1 className="mt-2 text-3xl font-bold text-slate-900">{job.title}</h1>
-          {job.customerName && <p className="mt-2 text-lg text-slate-600">{job.customerName}</p>}
-          {(job.serviceAddress || addressLine) && (
-            <p className="text-sm text-slate-500">
-              {job.serviceAddress}
-              {job.serviceAddress && addressLine ? ", " : ""}
-              {addressLine}
+        <div className="mx-auto flex max-w-4xl items-start justify-between gap-6 px-6 py-10">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Service Visit Report
             </p>
-          )}
-          <div className="mt-6 flex flex-wrap gap-x-8 gap-y-2 text-sm">
-            {assigneeName && (
-              <div>
-                <span className="text-slate-500">Technician: </span>
-                <span className="font-medium text-slate-900">{assigneeName}</span>
-              </div>
+            <h1 className="mt-2 text-3xl font-bold text-slate-900">{job.title}</h1>
+            {job.customerName && <p className="mt-2 text-lg text-slate-600">{job.customerName}</p>}
+            {(job.serviceAddress || addressLine) && (
+              <p className="text-sm text-slate-500">
+                {job.serviceAddress}
+                {job.serviceAddress && addressLine ? ", " : ""}
+                {addressLine}
+              </p>
             )}
-            {completedDate && (
-              <div>
-                <span className="text-slate-500">Completed: </span>
-                <span className="font-medium text-slate-900">{completedDate}</span>
-              </div>
-            )}
+            <div className="mt-6 flex flex-wrap gap-x-8 gap-y-2 text-sm">
+              {assigneeName && (
+                <div>
+                  <span className="text-slate-500">Technician: </span>
+                  <span className="font-medium text-slate-900">{assigneeName}</span>
+                </div>
+              )}
+              {completedDate && (
+                <div>
+                  <span className="text-slate-500">Completed: </span>
+                  <span className="font-medium text-slate-900">{completedDate}</span>
+                </div>
+              )}
+            </div>
           </div>
+          <Image
+            src="/sewertime-logo.png"
+            alt="SewerTime Septic"
+            width={160}
+            height={53}
+            className="shrink-0"
+            priority
+          />
         </div>
       </header>
 
@@ -280,9 +292,39 @@ export function JobSummaryView({
         )}
       </main>
 
-      <footer className="border-t bg-white">
-        <div className="mx-auto max-w-4xl px-6 py-6 text-center text-xs text-slate-500">
-          This link is valid for viewing and will expire automatically.
+      <footer className="mt-10 border-t bg-white">
+        <div className="mx-auto max-w-4xl px-6 py-8 text-center">
+          <Image
+            src="/sewertime-logo.png"
+            alt="SewerTime Septic"
+            width={140}
+            height={46}
+            className="mx-auto"
+          />
+          <p className="mt-3 text-sm font-semibold text-slate-700">{INSPECTOR_DEFAULTS.company}</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {INSPECTOR_DEFAULTS.companyAddress}, {INSPECTOR_DEFAULTS.companyCity},{" "}
+            {INSPECTOR_DEFAULTS.companyState} {INSPECTOR_DEFAULTS.companyZip}
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm">
+            <a
+              href={`mailto:${COMPANY_CONTACT.email}`}
+              className="inline-flex items-center gap-1.5 text-slate-700 hover:text-slate-900 hover:underline"
+            >
+              <Mail className="size-3.5" />
+              {COMPANY_CONTACT.email}
+            </a>
+            <a
+              href={`tel:+1${COMPANY_CONTACT.phone.replace(/\D/g, "")}`}
+              className="inline-flex items-center gap-1.5 text-slate-700 hover:text-slate-900 hover:underline"
+            >
+              <Phone className="size-3.5" />
+              {COMPANY_CONTACT.phone}
+            </a>
+          </div>
+          <p className="mt-4 text-[11px] text-slate-400">
+            This link is valid for viewing and will expire automatically.
+          </p>
         </div>
       </footer>
     </div>

@@ -506,8 +506,9 @@ export function JobDetailView({
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Checklist</h2>
         {items.length === 0 && (
-          <p className="text-sm italic text-muted-foreground">
-            No checklist items. (Create a template first, or add ad-hoc items from the API.)
+          <p className="rounded-lg border border-dashed bg-muted/30 p-4 text-sm italic text-muted-foreground">
+            No checklist for this job. You can still add general photos, videos, and notes in the
+            sections below and finalize when you're done.
           </p>
         )}
         <div className="space-y-3">
