@@ -233,6 +233,9 @@ export const jobs = pgTable("jobs", {
   customerSummary: text("customer_summary"), // AI-generated final paragraph
   // Template traceability (informational; snapshot in job_checklist_items is authoritative)
   sourceTemplateId: uuid("source_template_id").references(() => checklistTemplates.id),
+  // External idempotency key for webhook-created jobs (e.g. Workiz job id forwarded by n8n).
+  // Nullable + partial unique index in SQL so dashboard-created jobs don't need one.
+  externalId: text("external_id"),
   // PDF artifacts
   finalizedPdfPath: text("finalized_pdf_path"),
   customerPdfPath: text("customer_pdf_path"),
