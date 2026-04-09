@@ -87,19 +87,29 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .where(eq(profiles.id, job.assignedTo))
     .limit(1);
 
-  // Build both variants
+  // Build both variants with a forward-looking snapshot of the job: the PDF
+  // cover page labels the status as "completed" even though the DB update
+  // happens after the PDF is generated and uploaded. Mutating `job` in place
+  // keeps the shape compatible with buildJobReportPdf without extra plumbing.
+  const completedAt = new Date();
+  const jobForReport = {
+    ...job,
+    status: "completed" as const,
+    completedAt,
+  };
+
   let staffBytes: Uint8Array;
   let customerBytes: Uint8Array;
   try {
     staffBytes = await buildJobReportPdf({
-      job,
+      job: jobForReport,
       items,
       media,
       assigneeName: assignee?.fullName ?? null,
       audience: "staff",
     });
     customerBytes = await buildJobReportPdf({
-      job,
+      job: jobForReport,
       items,
       media,
       assigneeName: assignee?.fullName ?? null,
@@ -137,12 +147,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     );
   }
 
-  // Transition to completed
+  // Transition to completed — reuse the same completedAt instant the PDF was stamped with
   const [updated] = await db
     .update(jobs)
     .set({
       status: "completed",
-      completedAt: new Date(),
+      completedAt,
       finalizedPdfPath: staffPath,
       customerPdfPath: customerPath,
     })

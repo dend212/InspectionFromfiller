@@ -3,7 +3,7 @@
 import { Sparkles, Trash2, Upload, Video } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -92,6 +92,23 @@ export function JobDetailView({
   const [latestSummaryToken, setLatestSummaryToken] = useState(initialLatestSummaryToken);
   const [isPending, startTransition] = useTransition();
   const rewrite = useJobNoteRewrite();
+
+  // Sync server-driven fields back into local state when router.refresh() re-runs
+  // the parent server component. We deliberately do NOT sync generalNotes /
+  // customerSummary so that text the tech is currently typing isn't clobbered —
+  // those fields only update when the tech clicks Save or an AI rewrite returns.
+  useEffect(() => {
+    setMedia(initialMedia);
+  }, [initialMedia]);
+  useEffect(() => {
+    setItems(initialItems);
+  }, [initialItems]);
+  useEffect(() => {
+    setJob(initialJob);
+  }, [initialJob]);
+  useEffect(() => {
+    setLatestSummaryToken(initialLatestSummaryToken);
+  }, [initialLatestSummaryToken]);
 
   const isCompleted = job.status === "completed";
   const isPrivileged = role === "admin" || role === "office_staff";
@@ -719,6 +736,11 @@ function ChecklistItemCard({
 }) {
   const [note, setNote] = useState(item.note ?? "");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync back when the parent re-sends item.note (e.g. after an AI rewrite)
+  useEffect(() => {
+    setNote(item.note ?? "");
+  }, [item.note]);
 
   // Only photos count toward requiredPhotoCount (finalize gate is photo-only)
   const photoCount = media.filter((m) => m.type === "photo").length;
