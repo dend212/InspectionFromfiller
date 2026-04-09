@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -155,12 +156,22 @@ export function NewJobForm({ templates, assignees, currentUser, role }: NewJobFo
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="serviceAddress">Service address</Label>
-            <Input
-              id="serviceAddress"
-              value={form.serviceAddress}
-              onChange={(e) => update({ serviceAddress: e.target.value })}
-              className="mt-1.5"
-            />
+            <div className="mt-1.5">
+              <AddressAutocomplete
+                id="serviceAddress"
+                value={form.serviceAddress}
+                onChange={(text) => update({ serviceAddress: text })}
+                onPlaceSelected={({ street, city, state, zip }) =>
+                  update({
+                    serviceAddress: street,
+                    city: city || form.city,
+                    state: state || form.state,
+                    zip: zip || form.zip,
+                  })
+                }
+                placeholder="Start typing an address…"
+              />
+            </div>
           </div>
           <div>
             <Label htmlFor="city">City</Label>
