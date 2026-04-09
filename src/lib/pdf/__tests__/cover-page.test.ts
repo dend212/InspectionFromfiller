@@ -1,59 +1,17 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PDFDocument } from "pdf-lib";
-
-// ---------------------------------------------------------------------------
-// Mock loadPublicFile before importing the module under test.
-// vi.mock is hoisted, so we cannot reference top-level variables in the factory.
-// Instead we build the PNG inline inside the factory.
-// ---------------------------------------------------------------------------
-
-vi.mock("@/lib/pdf/load-public-file", () => {
-  // Minimal 1x1 white PNG (inline to avoid hoisting issues)
-  const png = new Uint8Array([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-    0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-    0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
-    0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41,
-    0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
-    0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,
-    0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
-    0x44, 0xae, 0x42, 0x60, 0x82,
-  ]);
-  return {
-    loadPublicFile: vi.fn().mockResolvedValue(
-      png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
-    ),
-  };
-});
-
+import { describe, expect, it } from "vitest";
 import { buildCoverPage } from "@/lib/pdf/cover-page";
-import { loadPublicFile } from "@/lib/pdf/load-public-file";
+import { getSewertimeLogoBytes } from "@/lib/pdf/sewertime-logo";
 
 // ---------------------------------------------------------------------------
 // Tests
+//
+// The cover page reads the logo from the inlined base64 module
+// (sewertime-logo.ts) so no mocking is required — the real logo bytes are
+// always available in every runtime.
 // ---------------------------------------------------------------------------
 
 describe("buildCoverPage", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    // Re-set the default mock since clearAllMocks wipes implementations
-    const png = new Uint8Array([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-      0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
-      0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41,
-      0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
-      0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,
-      0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
-      0x44, 0xae, 0x42, 0x60, 0x82,
-    ]);
-    vi.mocked(loadPublicFile).mockResolvedValue(
-      png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
-    );
-  });
-
   it("returns a Uint8Array", async () => {
     const result = await buildCoverPage();
     expect(result).toBeInstanceOf(Uint8Array);
@@ -81,19 +39,25 @@ describe("buildCoverPage", () => {
     expect(height).toBe(792);
   });
 
-  it("calls loadPublicFile with the logo path", async () => {
-    await buildCoverPage();
-    expect(loadPublicFile).toHaveBeenCalledWith("/sewertime-logo.png");
+  it("exposes the inlined logo as a non-empty PNG byte array", () => {
+    const bytes = getSewertimeLogoBytes();
+    expect(bytes).toBeInstanceOf(Uint8Array);
+    // PNG signature: 89 50 4e 47 0d 0a 1a 0a
+    expect(bytes[0]).toBe(0x89);
+    expect(bytes[1]).toBe(0x50);
+    expect(bytes[2]).toBe(0x4e);
+    expect(bytes[3]).toBe(0x47);
+    // The real logo is 11,477 bytes; allow a wide floor so a future
+    // asset swap doesn't fail this test unnecessarily.
+    expect(bytes.length).toBeGreaterThan(1000);
   });
 
-  it("throws when logo file loading fails", async () => {
-    vi.mocked(loadPublicFile).mockRejectedValueOnce(new Error("File not found"));
-    await expect(buildCoverPage()).rejects.toThrow("File not found");
-  });
-
-  it("produces a PDF with non-trivial size (has content)", async () => {
+  it("produces a PDF large enough to contain the embedded logo", async () => {
     const result = await buildCoverPage();
-    // A blank page PDF is ~500 bytes; a cover page with logo, text, etc. should be larger
-    expect(result.length).toBeGreaterThan(500);
+    // A blank PDF is ~500 bytes; with an embedded 11KB PNG plus text,
+    // the output should be well above 5KB. This is how we know the logo
+    // actually landed in the PDF — pdf-lib would otherwise throw on
+    // embedPng failure, but a size assertion catches silent regressions.
+    expect(result.length).toBeGreaterThan(5000);
   });
 });

@@ -7,8 +7,8 @@
  * Uses pdf-lib with standard Helvetica fonts.
  */
 
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { loadPublicFile } from "./load-public-file";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { getSewertimeLogoBytes } from "./sewertime-logo";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -31,7 +31,12 @@ SewerTime Septic expressly disclaims any and all warranties — whether expresse
 // Text wrapping helper
 // ---------------------------------------------------------------------------
 
-function wrapText(text: string, font: ReturnType<typeof Object>, fontSize: number, maxWidth: number): string[] {
+function wrapText(
+  text: string,
+  font: ReturnType<typeof Object>,
+  fontSize: number,
+  maxWidth: number,
+): string[] {
   const paragraphs = text.split("\n");
   const lines: string[] = [];
 
@@ -81,16 +86,15 @@ export async function buildCoverPage(): Promise<Uint8Array> {
   const helveticaBold = await doc.embedFont(StandardFonts.HelveticaBold);
 
   // --- Logo ---
-  const logoBytes = await loadPublicFile("/sewertime-logo.png");
-  const logoImage = await doc.embedPng(new Uint8Array(logoBytes instanceof ArrayBuffer ? logoBytes : logoBytes));
+  // Bytes come from a base64-inlined module so this works reliably in
+  // Vercel serverless functions, where public/ isn't bundled into the
+  // Lambda runtime. See src/lib/pdf/sewertime-logo.ts.
+  const logoImage = await doc.embedPng(getSewertimeLogoBytes());
 
   // Scale logo to fit within ~400px wide, centered
   const maxLogoWidth = 400;
   const maxLogoHeight = 200;
-  const logoScale = Math.min(
-    maxLogoWidth / logoImage.width,
-    maxLogoHeight / logoImage.height,
-  );
+  const logoScale = Math.min(maxLogoWidth / logoImage.width, maxLogoHeight / logoImage.height);
   const logoDrawWidth = logoImage.width * logoScale;
   const logoDrawHeight = logoImage.height * logoScale;
   const logoX = (PAGE_WIDTH - logoDrawWidth) / 2;
@@ -135,7 +139,8 @@ export async function buildCoverPage(): Promise<Uint8Array> {
   const titleWidth = helveticaBold.widthOfTextAtSize(disclaimerTitle, disclaimerTitleSize);
 
   const wrappedLines = wrapText(DISCLAIMER, helvetica, disclaimerFontSize, disclaimerMaxWidth);
-  const totalDisclaimerHeight = wrappedLines.length * disclaimerLineHeight + disclaimerTitleSize + 10;
+  const totalDisclaimerHeight =
+    wrappedLines.length * disclaimerLineHeight + disclaimerTitleSize + 10;
   const disclaimerStartY = 40 + totalDisclaimerHeight;
 
   page.drawText(disclaimerTitle, {

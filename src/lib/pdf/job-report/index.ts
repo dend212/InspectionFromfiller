@@ -33,7 +33,7 @@ import type {
   jobs as jobsTable,
 } from "@/lib/db/schema";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { loadPublicFile } from "../load-public-file";
+import { getSewertimeLogoBytes } from "../sewertime-logo";
 import { fetchImageBytesForPdf } from "./image-embed";
 
 const COMPANY_NAME = "SewerTime Septic";
@@ -621,14 +621,15 @@ export async function buildJobReportPdf(input: JobReportInput): Promise<Uint8Arr
     italic: await doc.embedFont(StandardFonts.HelveticaOblique),
   };
 
-  // Embed the SewerTime logo for branding. Fail soft if unavailable — a
-  // missing asset should never prevent the report from generating.
+  // Embed the SewerTime logo for branding. The bytes come from a
+  // base64-inlined module (sewertime-logo.ts) so this works identically in
+  // local dev, Vercel serverless, and Edge runtimes. Still guarded so a
+  // corrupt logo can't take down report generation.
   let logo: PDFImage | null = null;
   try {
-    const logoBytes = await loadPublicFile("/sewertime-logo.png");
-    logo = await doc.embedPng(new Uint8Array(logoBytes));
+    logo = await doc.embedPng(getSewertimeLogoBytes());
   } catch (err) {
-    console.error("Failed to load SewerTime logo for job report:", err);
+    console.error("Failed to embed SewerTime logo for job report:", err);
   }
 
   // Partition media by bucket; filter general by audience visibility.
