@@ -2,17 +2,30 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { inspections } from "@/lib/db/schema";
-import { checkInspectionAccess } from "@/lib/supabase/auth-helpers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { checkInspectionAccess } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
 
 /**
  * POST /api/inspections/[id]/media/upload-url
- * Generate a presigned upload URL for direct client-to-storage uploads.
- * This avoids routing file bytes through the API (no body size or memory issues).
  *
- * Body: { fileName: string, type: "photo" | "video", label?: string }
- * Returns: { signedUrl: string, token: string, storagePath: string }
+ * Authorizes a direct client-to-storage upload and returns the server-generated
+ * object path. File bytes never pass through the API (no body size or memory
+ * issues).
+ *
+ * - Photos (`type=photo`) use Supabase signed upload URLs — the route returns
+ *   `{ signedUrl, token, storagePath }` and the client calls
+ *   `uploadToSignedUrl`. Signed uploads bypass storage RLS.
+ * - Videos (`type=video`) use the TUS resumable protocol for large files,
+ *   progress tracking, and network-drop recovery. The route returns just
+ *   `{ storagePath }`; the client uploads with its own user JWT directly to
+ *   the Supabase `/storage/v1/upload/resumable` endpoint. Storage RLS
+ *   (migration 0010) allows authenticated users to insert into the
+ *   `inspection-media` bucket; path is the server-generated UUID so it
+ *   cannot be guessed.
+ *
+ * Body:    { fileName: string, type: "photo" | "video", label?: string }
+ * Returns: { storagePath: string, signedUrl?: string, token?: string }
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -57,6 +70,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const section = label ?? type;
   const storagePath = `${id}/${section}/${crypto.randomUUID()}.${ext}`;
 
+  // Videos use TUS resumable upload from the browser; no signed URL needed.
+  // Authorization is enforced by this route + storage.objects RLS (0010).
+  if (type === "video") {
+    return NextResponse.json({ storagePath });
+  }
+
+  // Photos use signed upload URLs (bypass RLS, simpler small-file path).
   const admin = createAdminClient();
   const { data, error } = await admin.storage
     .from("inspection-media")

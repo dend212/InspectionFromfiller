@@ -27,8 +27,12 @@ const {
   });
 
   return {
-    mockGetUser, mockGetSession, mockCreateClient, mockCreateAdminClient,
-    mockDbSelect, mockCreateSignedUploadUrl,
+    mockGetUser,
+    mockGetSession,
+    mockCreateClient,
+    mockCreateAdminClient,
+    mockDbSelect,
+    mockCreateSignedUploadUrl,
   };
 });
 
@@ -58,11 +62,11 @@ vi.mock("@/lib/supabase/auth-helpers", () => ({
   checkInspectionAccess: vi.fn().mockResolvedValue({ allowed: true, role: "field_tech" }),
 }));
 
+import { checkInspectionAccess } from "@/lib/supabase/auth-helpers";
 // ---------------------------------------------------------------------------
 // Import handler
 // ---------------------------------------------------------------------------
 import { POST } from "../route";
-import { checkInspectionAccess } from "@/lib/supabase/auth-helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -85,7 +89,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockGetUser.mockResolvedValue({ data: { user: USER } });
   mockDbSelect.mockResolvedValue([{ inspectorId: USER.id }]);
-  (checkInspectionAccess as ReturnType<typeof vi.fn>).mockResolvedValue({ allowed: true, role: "field_tech" });
+  (checkInspectionAccess as ReturnType<typeof vi.fn>).mockResolvedValue({
+    allowed: true,
+    role: "field_tech",
+  });
   mockCreateSignedUploadUrl.mockResolvedValue({
     data: { signedUrl: "https://upload.url", token: "tok123" },
     error: null,
@@ -98,19 +105,31 @@ beforeEach(() => {
 describe("POST /api/inspections/[id]/media/upload-url", () => {
   it("returns 401 when not authenticated", async () => {
     mockGetUser.mockResolvedValueOnce({ data: { user: null } });
-    const res = await POST(makeRequest({ fileName: "photo.jpg", type: "photo" }), makeParams("insp-1"));
+    const res = await POST(
+      makeRequest({ fileName: "photo.jpg", type: "photo" }),
+      makeParams("insp-1"),
+    );
     expect(res.status).toBe(401);
   });
 
   it("returns 404 when inspection not found", async () => {
     mockDbSelect.mockResolvedValueOnce([]);
-    const res = await POST(makeRequest({ fileName: "photo.jpg", type: "photo" }), makeParams("insp-1"));
+    const res = await POST(
+      makeRequest({ fileName: "photo.jpg", type: "photo" }),
+      makeParams("insp-1"),
+    );
     expect(res.status).toBe(404);
   });
 
   it("returns 403 when user has no access", async () => {
-    (checkInspectionAccess as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ allowed: false, role: "field_tech" });
-    const res = await POST(makeRequest({ fileName: "photo.jpg", type: "photo" }), makeParams("insp-1"));
+    (checkInspectionAccess as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      allowed: false,
+      role: "field_tech",
+    });
+    const res = await POST(
+      makeRequest({ fileName: "photo.jpg", type: "photo" }),
+      makeParams("insp-1"),
+    );
     expect(res.status).toBe(403);
   });
 
@@ -148,7 +167,22 @@ describe("POST /api/inspections/[id]/media/upload-url", () => {
     expect(json.storagePath).toContain("video/");
   });
 
-  it("returns 500 when signed URL creation fails", async () => {
+  it("returns only storagePath for videos (no signed URL) for TUS upload", async () => {
+    const res = await POST(
+      makeRequest({ fileName: "clip.mov", type: "video", label: "video" }),
+      makeParams("insp-1"),
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.storagePath).toContain("insp-1/video/");
+    expect(json.storagePath).toMatch(/\.mov$/);
+    expect(json.signedUrl).toBeUndefined();
+    expect(json.token).toBeUndefined();
+    // Video path must not even hit createSignedUploadUrl — saves a round-trip.
+    expect(mockCreateSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 when signed URL creation fails (photos)", async () => {
     mockCreateSignedUploadUrl.mockResolvedValueOnce({
       data: null,
       error: { message: "Bucket not found" },
