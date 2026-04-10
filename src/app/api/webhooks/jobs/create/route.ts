@@ -8,6 +8,7 @@ import {
   jobs,
   profiles,
 } from "@/lib/db/schema";
+import { logJobActivity } from "@/lib/jobs/activity";
 import { mapTemplateItemsToJobItems } from "@/lib/jobs/apply-template";
 import { verifyJobsWebhookAuth } from "@/lib/jobs/webhook-auth";
 import { jobsWebhookCreateSchema } from "@/lib/validators/jobs-webhook";
@@ -213,6 +214,25 @@ export async function POST(request: Request) {
     }
 
     return job;
+  });
+
+  await logJobActivity({
+    jobId: newJob.id,
+    eventType: "job.created",
+    actorId: primaryTech?.id ?? null,
+    summary: `Job "${newJob.title}" created via webhook${
+      assigneeIds.length > 0
+        ? ` · assigned to ${techProfiles.map((p) => p.fullName).join(", ")}`
+        : " (unassigned)"
+    }${templateRow ? ` · template "${templateRow.name}"` : ""}`,
+    metadata: {
+      source: "webhook",
+      externalId: payload.externalId,
+      title: newJob.title,
+      assigneeCount: assigneeIds.length,
+      templateId: templateRow?.id ?? null,
+      templateName: templateRow?.name ?? null,
+    },
   });
 
   return NextResponse.json(

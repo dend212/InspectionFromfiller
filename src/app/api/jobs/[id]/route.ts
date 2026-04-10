@@ -2,6 +2,7 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jobChecklistItems, jobMedia, jobs, profiles } from "@/lib/db/schema";
+import { logJobActivity } from "@/lib/jobs/activity";
 import { checkJobAccess, getUserRole } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
 
@@ -91,7 +92,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const [existing] = await db
-    .select({ id: jobs.id, assignees: jobs.assignees, status: jobs.status })
+    .select({
+      id: jobs.id,
+      assignees: jobs.assignees,
+      status: jobs.status,
+      generalNotes: jobs.generalNotes,
+      customerSummary: jobs.customerSummary,
+    })
     .from(jobs)
     .where(eq(jobs.id, id))
     .limit(1);
@@ -190,6 +197,71 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const [updated] = await db.update(jobs).set(updates).where(eq(jobs.id, id)).returning();
+
+  // --- Activity log entries (fire-and-forget, never block the response) ---
+  if (updates.status !== undefined && updates.status !== existing.status) {
+    const next = updates.status as "open" | "in_progress" | "completed";
+    const isReopen = existing.status === "completed" && next === "in_progress";
+    await logJobActivity({
+      jobId: id,
+      eventType: isReopen ? "job.reopened" : "job.status_changed",
+      actorId: user.id,
+      summary: isReopen
+        ? "Reopened the job back to In Progress"
+        : `Status changed from ${existing.status} to ${next}`,
+      metadata: { from: existing.status, to: next },
+    });
+  }
+
+  if (updates.assignees !== undefined) {
+    const beforeIds = new Set(existing.assignees);
+    const afterIds = new Set(updates.assignees as string[]);
+    const added = [...afterIds].filter((x) => !beforeIds.has(x));
+    const removed = [...beforeIds].filter((x) => !afterIds.has(x));
+    if (added.length > 0 || removed.length > 0) {
+      // Resolve names for a friendlier summary.
+      const allChanged = [...added, ...removed];
+      const nameRows =
+        allChanged.length > 0
+          ? await db
+              .select({ id: profiles.id, fullName: profiles.fullName })
+              .from(profiles)
+              .where(inArray(profiles.id, allChanged))
+          : [];
+      const nameById = new Map(nameRows.map((r) => [r.id, r.fullName] as const));
+      const addedNames = added.map((pid) => nameById.get(pid) ?? "Unknown");
+      const removedNames = removed.map((pid) => nameById.get(pid) ?? "Unknown");
+      const parts: string[] = [];
+      if (addedNames.length > 0) parts.push(`Added ${addedNames.join(", ")}`);
+      if (removedNames.length > 0) parts.push(`Removed ${removedNames.join(", ")}`);
+      await logJobActivity({
+        jobId: id,
+        eventType: "job.assignees_changed",
+        actorId: user.id,
+        summary: parts.join(" · "),
+        metadata: { added, removed, addedNames, removedNames },
+      });
+    }
+  }
+
+  // Notes / customer summary edits — one combined event so the timeline
+  // isn't noisy when a tech saves both fields together.
+  const notesChanged =
+    updates.generalNotes !== undefined && updates.generalNotes !== existing.generalNotes;
+  const summaryChanged =
+    updates.customerSummary !== undefined && updates.customerSummary !== existing.customerSummary;
+  if (notesChanged || summaryChanged) {
+    const which: string[] = [];
+    if (notesChanged) which.push("General notes");
+    if (summaryChanged) which.push("Customer summary");
+    await logJobActivity({
+      jobId: id,
+      eventType: "job.notes_updated",
+      actorId: user.id,
+      summary: `${which.join(" and ")} updated`,
+      metadata: { fields: which },
+    });
+  }
 
   return NextResponse.json({ job: updated });
 }

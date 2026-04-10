@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { db } from "@/lib/db";
 import { jobEmails, jobSummaries, jobs } from "@/lib/db/schema";
+import { logJobActivity } from "@/lib/jobs/activity";
 import { getUserRole } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
 
@@ -138,6 +139,17 @@ SewerTime Septic`;
     .update(jobs)
     .set({ customerEmail: recipientEmail, updatedAt: new Date() })
     .where(eq(jobs.id, id));
+
+  await logJobActivity({
+    jobId: id,
+    eventType: "summary.email_sent",
+    actorId: user.id,
+    summary: `Sent summary link to ${recipientEmail}`,
+    metadata: {
+      recipientEmail,
+      subject,
+    },
+  });
 
   return NextResponse.json({
     success: true,

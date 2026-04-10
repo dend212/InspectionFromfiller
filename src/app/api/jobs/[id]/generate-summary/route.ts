@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jobSummaries, jobs } from "@/lib/db/schema";
+import { logJobActivity } from "@/lib/jobs/activity";
 import { getUserRole } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
 
@@ -74,6 +75,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "";
   const summaryUrl = `${baseUrl}/jobs/summary/${token}`;
+
+  await logJobActivity({
+    jobId: id,
+    eventType: "summary.link_created",
+    actorId: user.id,
+    summary: `Generated a public customer summary link (expires ${expiresAt.toLocaleDateString()})`,
+    metadata: {
+      summaryId: summary.id,
+      expiresAt: summary.expiresAt,
+    },
+  });
 
   return NextResponse.json({
     summaryId: summary.id,

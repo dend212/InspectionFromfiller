@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jobChecklistItems, jobs } from "@/lib/db/schema";
+import { logJobActivity } from "@/lib/jobs/activity";
 import { checkJobAccess } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
 
@@ -30,6 +31,21 @@ export async function PATCH(
 
   const { allowed } = await checkJobAccess(supabase, user.id, job.assignees);
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  // Load current item state so we can detect meaningful transitions
+  // (status change, note added) for the activity log.
+  const [existingItem] = await db
+    .select({
+      title: jobChecklistItems.title,
+      status: jobChecklistItems.status,
+      note: jobChecklistItems.note,
+    })
+    .from(jobChecklistItems)
+    .where(and(eq(jobChecklistItems.id, itemId), eq(jobChecklistItems.jobId, id)))
+    .limit(1);
+  if (!existingItem) {
+    return NextResponse.json({ error: "Checklist item not found" }, { status: 404 });
+  }
 
   let body: {
     title?: string;
@@ -93,6 +109,39 @@ export async function PATCH(
     return NextResponse.json({ error: "Checklist item not found" }, { status: 404 });
   }
 
+  // Prefer a dedicated event for status transitions so the timeline highlights
+  // "Done" / "Skipped" checkpoints, and fall back to a generic edit event
+  // for pure title / note / instruction updates.
+  const statusChanged = updates.status !== undefined && updates.status !== existingItem.status;
+  if (statusChanged) {
+    await logJobActivity({
+      jobId: id,
+      eventType: "checklist.item_status_changed",
+      actorId: user.id,
+      summary: `"${existingItem.title}" → ${updates.status}`,
+      metadata: {
+        itemId,
+        title: existingItem.title,
+        from: existingItem.status,
+        to: updates.status,
+      },
+    });
+  } else {
+    const which: string[] = [];
+    if (updates.title !== undefined && updates.title !== existingItem.title) which.push("title");
+    if (updates.note !== undefined && updates.note !== existingItem.note) which.push("note");
+    if (updates.instructions !== undefined) which.push("instructions");
+    if (which.length > 0) {
+      await logJobActivity({
+        jobId: id,
+        eventType: "checklist.item_updated",
+        actorId: user.id,
+        summary: `Updated ${which.join(", ")} on "${existingItem.title}"`,
+        metadata: { itemId, title: existingItem.title, fields: which },
+      });
+    }
+  }
+
   return NextResponse.json({ item: updated });
 }
 
@@ -125,11 +174,19 @@ export async function DELETE(
   const [deleted] = await db
     .delete(jobChecklistItems)
     .where(and(eq(jobChecklistItems.id, itemId), eq(jobChecklistItems.jobId, id)))
-    .returning({ id: jobChecklistItems.id });
+    .returning({ id: jobChecklistItems.id, title: jobChecklistItems.title });
 
   if (!deleted) {
     return NextResponse.json({ error: "Checklist item not found" }, { status: 404 });
   }
+
+  await logJobActivity({
+    jobId: id,
+    eventType: "checklist.item_deleted",
+    actorId: user.id,
+    summary: `Removed checklist item "${deleted.title}"`,
+    metadata: { itemId: deleted.id, title: deleted.title },
+  });
 
   return NextResponse.json({ success: true });
 }

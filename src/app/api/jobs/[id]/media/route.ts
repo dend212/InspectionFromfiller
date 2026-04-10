@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jobChecklistItems, jobMedia, jobs } from "@/lib/db/schema";
+import { logJobActivity } from "@/lib/jobs/activity";
 import { checkJobAccess } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
 
@@ -94,6 +95,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       uploadedBy: user.id,
     })
     .returning();
+
+  await logJobActivity({
+    jobId: id,
+    eventType: "media.added",
+    actorId: user.id,
+    summary: `Added ${type}${bucket === "checklist_item" ? " to a checklist item" : " to general media"}`,
+    metadata: {
+      mediaId: inserted.id,
+      type,
+      bucket,
+      checklistItemId,
+    },
+  });
 
   return NextResponse.json({ media: inserted });
 }

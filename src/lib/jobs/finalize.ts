@@ -1,6 +1,7 @@
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { jobChecklistItems, jobMedia, jobs, profiles } from "@/lib/db/schema";
+import { logJobActivity } from "@/lib/jobs/activity";
 import { buildJobReportPdf } from "@/lib/pdf/job-report";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -26,10 +27,24 @@ export type FinalizeJobResult =
  * Runs all the completion gates, builds the two PDF variants, uploads
  * them to Supabase Storage, and flips `jobs.status` to "completed".
  * Does NOT do authorization — callers are responsible for that.
+ *
+ * If the job is already in "completed" status, finalize runs in
+ * regenerate-PDF mode: it rebuilds the PDFs with the current job state
+ * and overwrites the storage objects. The activity log distinguishes
+ * between first finalize and PDF regeneration.
+ *
+ * @param jobId  The job to finalize.
+ * @param actorId Profile id of the user triggering finalize, or null for
+ *                system-initiated finalize (n8n webhook). Used only for the
+ *                activity log entry.
  */
-export async function finalizeJobById(jobId: string): Promise<FinalizeJobResult> {
+export async function finalizeJobById(
+  jobId: string,
+  actorId: string | null = null,
+): Promise<FinalizeJobResult> {
   const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId)).limit(1);
   if (!job) return { ok: false, status: 404, error: "Job not found" };
+  const wasAlreadyCompleted = job.status === "completed";
 
   const items = await db
     .select()
@@ -150,6 +165,22 @@ export async function finalizeJobById(jobId: string): Promise<FinalizeJobResult>
       customerPdfPath: customerPath,
     })
     .where(eq(jobs.id, jobId));
+
+  await logJobActivity({
+    jobId,
+    eventType: "job.finalized",
+    actorId,
+    summary: wasAlreadyCompleted
+      ? "Regenerated customer + staff PDFs from the current job state"
+      : "Marked job complete and generated customer + staff PDFs",
+    metadata: {
+      regenerated: wasAlreadyCompleted,
+      finalizedPdfPath: staffPath,
+      customerPdfPath: customerPath,
+      itemCount: items.length,
+      mediaCount: media.length,
+    },
+  });
 
   return {
     ok: true,

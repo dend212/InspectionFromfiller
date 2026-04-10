@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { JobActivityTimeline } from "@/components/jobs/job-activity-timeline";
 import { SendJobSummaryDialog } from "@/components/jobs/send-job-summary-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -153,7 +154,10 @@ export function JobDetailView({
 
   const isCompleted = job.status === "completed";
   const isPrivileged = role === "admin" || role === "office_staff";
-  const canFinalize = !isCompleted;
+  // Completion is now a status-only change — it does not lock the job.
+  // Assigned techs and admins can still edit every field after finalize,
+  // and re-running finalize just regenerates the PDF.
+  const canFinalize = true;
 
   const mediaByItem = new Map<string, MediaRow[]>();
   const generalMedia: MediaRow[] = [];
@@ -476,7 +480,33 @@ export function JobDetailView({
         }
         return;
       }
-      toast.success("Job finalized");
+      toast.success(isCompleted ? "PDF regenerated" : "Job finalized");
+      router.refresh();
+    });
+  };
+
+  const handleReopen = () => {
+    if (
+      !confirm(
+        "Reopen this job and flip it back to in progress? The PDFs will remain available until finalize is run again.",
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const res = await fetch(`/api/jobs/${job.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "in_progress" }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error ?? "Failed to reopen job");
+        return;
+      }
+      const { job: updated } = await res.json();
+      setJob((j) => ({ ...j, status: updated.status }));
+      toast.success("Job reopened");
       router.refresh();
     });
   };
@@ -602,7 +632,7 @@ export function JobDetailView({
               item={item}
               jobId={job.id}
               media={mediaByItem.get(item.id) ?? []}
-              disabled={isCompleted}
+              disabled={false}
               onPatch={(patch) => patchItem(item.id, patch)}
               onDelete={() => deleteItem(item.id)}
               onUploadFile={(file) => uploadFile(file, "checklist_item", item.id)}
@@ -626,12 +656,12 @@ export function JobDetailView({
               size="sm"
               variant="outline"
               onClick={handleRewriteGeneralNotes}
-              disabled={rewrite.isGenerating || isCompleted}
+              disabled={rewrite.isGenerating}
             >
               <Sparkles className="size-3.5 mr-1.5" />
               Rewrite with AI
             </Button>
-            <Button size="sm" onClick={saveNotes} disabled={isCompleted}>
+            <Button size="sm" onClick={saveNotes}>
               Save notes
             </Button>
           </div>
@@ -640,7 +670,6 @@ export function JobDetailView({
           value={generalNotes}
           onChange={(e) => setGeneralNotes(e.target.value)}
           rows={5}
-          disabled={isCompleted}
           placeholder="Free-form notes about the visit that don't belong to a specific checklist item."
         />
       </section>
@@ -651,11 +680,11 @@ export function JobDetailView({
           <h2 className="text-lg font-semibold">General Photos & Videos</h2>
           <div className="flex gap-2">
             <GeneralPhotoUploadButton
-              disabled={isCompleted}
+              disabled={false}
               onFile={(file) => uploadFile(file, "general")}
             />
             <VideoUploadButton
-              disabled={isCompleted}
+              disabled={false}
               onFile={(file, onProgress) => uploadVideoFile(file, "general", undefined, onProgress)}
             />
           </div>
@@ -694,7 +723,6 @@ export function JobDetailView({
                   <Checkbox
                     id={`visible-${m.id}`}
                     checked={m.visibleToCustomer}
-                    disabled={isCompleted}
                     onCheckedChange={(v) => toggleVisible(m.id, !!v)}
                   />
                   <Label
@@ -704,16 +732,14 @@ export function JobDetailView({
                     Show to customer
                   </Label>
                 </div>
-                {!isCompleted && (
-                  <button
-                    type="button"
-                    onClick={() => deleteMedia(m.id)}
-                    className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 group-hover:opacity-100"
-                    aria-label="Delete"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => deleteMedia(m.id)}
+                  className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 group-hover:opacity-100"
+                  aria-label="Delete"
+                >
+                  <Trash2 className="size-3" />
+                </button>
               </div>
             ))}
           </div>
@@ -729,12 +755,12 @@ export function JobDetailView({
               size="sm"
               variant="outline"
               onClick={handleGenerateCustomerSummary}
-              disabled={rewrite.isGenerating || isCompleted}
+              disabled={rewrite.isGenerating}
             >
               <Sparkles className="size-3.5 mr-1.5" />
               Generate from checklist
             </Button>
-            <Button size="sm" onClick={saveNotes} disabled={isCompleted}>
+            <Button size="sm" onClick={saveNotes}>
               Save
             </Button>
           </div>
@@ -743,7 +769,6 @@ export function JobDetailView({
           value={customerSummary}
           onChange={(e) => setCustomerSummary(e.target.value)}
           rows={5}
-          disabled={isCompleted}
           placeholder="The polished customer-facing paragraph shown on the tokenized summary page."
         />
       </section>
@@ -751,10 +776,28 @@ export function JobDetailView({
       {/* Finalize + share */}
       <section className="rounded-xl border bg-card p-6 space-y-4">
         <h2 className="text-lg font-semibold">Finalize & Share</h2>
+        {isCompleted && (
+          <p className="text-sm text-muted-foreground">
+            This job is marked complete. Assigned techs and admins can still edit every section —
+            re-run finalize to regenerate the PDFs, or use Reopen to flip the status back to in
+            progress.
+          </p>
+        )}
         <div className="flex flex-wrap gap-2">
           {canFinalize && (
             <Button onClick={handleFinalize} disabled={isPending}>
-              {isPending ? "Finalizing…" : "Finalize job"}
+              {isPending
+                ? isCompleted
+                  ? "Regenerating…"
+                  : "Finalizing…"
+                : isCompleted
+                  ? "Regenerate PDF"
+                  : "Finalize job"}
+            </Button>
+          )}
+          {isCompleted && isPrivileged && (
+            <Button variant="outline" onClick={handleReopen} disabled={isPending}>
+              Reopen job
             </Button>
           )}
           {job.finalizedPdfPath && (
@@ -798,6 +841,10 @@ export function JobDetailView({
           </div>
         )}
       </section>
+
+      {/* Activity timeline — admin/office/tech all see it; rebuilds whenever
+          the job snapshot changes so recent edits show up immediately. */}
+      <JobActivityTimeline jobId={job.id} refreshKey={items.length + media.length} />
 
       {latestSummaryToken && isPrivileged && (
         <SendJobSummaryDialog

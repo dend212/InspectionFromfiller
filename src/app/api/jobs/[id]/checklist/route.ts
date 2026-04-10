@@ -2,6 +2,7 @@ import { eq, max } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jobChecklistItems, jobs } from "@/lib/db/schema";
+import { logJobActivity } from "@/lib/jobs/activity";
 import { checkJobAccess } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
 
@@ -67,6 +68,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       status: "pending",
     })
     .returning();
+
+  await logJobActivity({
+    jobId: id,
+    eventType: "checklist.item_added",
+    actorId: user.id,
+    summary: `Added checklist item "${title}"`,
+    metadata: { itemId: item.id, title },
+  });
 
   return NextResponse.json({ item });
 }

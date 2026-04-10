@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jobMedia, jobs } from "@/lib/db/schema";
+import { logJobActivity } from "@/lib/jobs/activity";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkJobAccess } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
@@ -77,6 +78,24 @@ export async function PATCH(
     .where(and(eq(jobMedia.id, mediaId), eq(jobMedia.jobId, id)))
     .returning();
 
+  // Visibility toggles are the only field on this route worth logging —
+  // description/sortOrder changes would just be noise in the timeline.
+  if (body.visibleToCustomer !== undefined && body.visibleToCustomer !== media.visibleToCustomer) {
+    await logJobActivity({
+      jobId: id,
+      eventType: "media.visibility_changed",
+      actorId: user.id,
+      summary: body.visibleToCustomer
+        ? `Made a ${media.type} visible to the customer`
+        : `Hid a ${media.type} from the customer`,
+      metadata: {
+        mediaId,
+        type: media.type,
+        visibleToCustomer: body.visibleToCustomer,
+      },
+    });
+  }
+
   return NextResponse.json({ media: updated });
 }
 
@@ -116,6 +135,18 @@ export async function DELETE(
   await admin.storage.from("inspection-media").remove([media.storagePath]);
 
   await db.delete(jobMedia).where(eq(jobMedia.id, mediaId));
+
+  await logJobActivity({
+    jobId: id,
+    eventType: "media.removed",
+    actorId: user.id,
+    summary: `Removed a ${media.type}${media.bucket === "checklist_item" ? " from a checklist item" : " from general media"}`,
+    metadata: {
+      mediaId,
+      type: media.type,
+      bucket: media.bucket,
+    },
+  });
 
   return NextResponse.json({ success: true });
 }

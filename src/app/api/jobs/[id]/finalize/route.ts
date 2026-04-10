@@ -32,7 +32,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const { allowed } = await checkJobAccess(supabase, user.id, job.assignees);
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const result = await finalizeJobById(id);
+  const result = await finalizeJobById(id, user.id);
   if (!result.ok) {
     const body: Record<string, unknown> = { error: result.error };
     if ("details" in result) body.details = result.details;

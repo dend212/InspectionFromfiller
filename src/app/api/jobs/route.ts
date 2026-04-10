@@ -8,6 +8,7 @@ import {
   jobs,
   profiles,
 } from "@/lib/db/schema";
+import { logJobActivity } from "@/lib/jobs/activity";
 import { mapTemplateItemsToJobItems } from "@/lib/jobs/apply-template";
 import { getUserRole } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
@@ -278,6 +279,24 @@ export async function POST(request: Request) {
     }
 
     return job;
+  });
+
+  await logJobActivity({
+    jobId: result.id,
+    eventType: "job.created",
+    actorId: user.id,
+    summary: `Job "${result.title}" created${
+      assigneesInput.length > 0
+        ? ` with ${assigneesInput.length} assignee${assigneesInput.length === 1 ? "" : "s"}`
+        : " (unassigned)"
+    }${templateRow ? ` from template` : ""}`,
+    metadata: {
+      title: result.title,
+      assigneeCount: assigneesInput.length,
+      templateId: templateRow?.id ?? null,
+      templateItemCount: templateItems.length,
+      customerName: result.customerName,
+    },
   });
 
   return NextResponse.json({ job: result });

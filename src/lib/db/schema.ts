@@ -289,6 +289,23 @@ export const jobMedia = pgTable("job_media", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Append-only activity log per job. Every meaningful event (creation,
+// status change, assignee change, checklist / media edits, finalize,
+// reopen, summary link, summary email) inserts one row here via the
+// logJobActivity() helper. Metadata is a JSONB blob so new event types
+// don't require schema changes. Rendered as a timeline in the detail view.
+export const jobActivity = pgTable("job_activity", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  jobId: uuid("job_id")
+    .references(() => jobs.id, { onDelete: "cascade" })
+    .notNull(),
+  eventType: text("event_type").notNull(),
+  actorId: uuid("actor_id").references(() => profiles.id),
+  summary: text("summary").notNull(),
+  metadata: jsonb("metadata").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // Customer-facing email send history for jobs. Mirrors inspection_emails
 // and powers the "Previously sent" list in the send-summary dialog.
 export const jobEmails = pgTable("job_emails", {
@@ -348,6 +365,18 @@ export const jobsRelations = relations(jobs, ({ one, many }) => ({
   media: many(jobMedia),
   summaries: many(jobSummaries),
   emails: many(jobEmails),
+  activity: many(jobActivity),
+}));
+
+export const jobActivityRelations = relations(jobActivity, ({ one }) => ({
+  job: one(jobs, {
+    fields: [jobActivity.jobId],
+    references: [jobs.id],
+  }),
+  actor: one(profiles, {
+    fields: [jobActivity.actorId],
+    references: [profiles.id],
+  }),
 }));
 
 export const jobEmailsRelations = relations(jobEmails, ({ one }) => ({
