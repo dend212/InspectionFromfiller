@@ -87,16 +87,21 @@ export async function generateReport(
 
   // Step 6: Embed signature image
   if (signatureDataUrl) {
-    await embedSignature(doc, form, signatureDataUrl);
+    await embedSignature(doc, form, signatureDataUrl, !!formData.includeAlternativePages);
   }
 
-  // Step 7: Auto-fill signature dates with current date
+  // Step 7: Auto-fill signature dates with current date.
+  // Pages 2 and 6 always get a date; pages 7-8 only when the alt-system pages are included.
   const today = new Date();
   const month = String(today.getMonth() + 1).padStart(2, "0");
   const day = String(today.getDate()).padStart(2, "0");
   const year = today.getFullYear();
   const dateStr = `${month}/${day}/${year}`;
-  for (const dateFieldName of ["conventionalSignatureDate", "cesspoolSignatureDate"]) {
+  const dateFieldNames = ["conventionalSignatureDate", "cesspoolSignatureDate"];
+  if (formData.includeAlternativePages) {
+    dateFieldNames.push("conventionalSignatureDate2", "altSystemInspectorDate");
+  }
+  for (const dateFieldName of dateFieldNames) {
     try {
       form.getTextField(dateFieldName).setText(dateStr);
     } catch {
@@ -147,12 +152,15 @@ export async function generateReport(
 // ---------------------------------------------------------------------------
 
 /**
- * Embeds a signature image at both signature field positions (pages 2 and 6).
+ * Embeds a signature image at every active signature field.
+ * Always: cesspoolSignature (page 2) + conventionalSignature (page 6).
+ * When alt pages are included: also conventionalSignature2 + altSystemInspectorSignature (page 8).
  */
 async function embedSignature(
   doc: PDFDocument,
   form: ReturnType<PDFDocument["getForm"]>,
   signatureDataUrl: string,
+  includeAlternativePages: boolean,
 ): Promise<void> {
   // Convert data URL to bytes
   const base64 = signatureDataUrl.split(",")[1];
@@ -176,10 +184,15 @@ async function embedSignature(
   const SIGNATURE_PAGE_FALLBACK: Record<string, number> = {
     conventionalSignature: 5, // Page 6 of the 9-page template
     cesspoolSignature: 1,     // Page 2 of the 9-page template
+    conventionalSignature2: 7, // Page 8 — alt-system inspector block (repeat conventional sig)
+    altSystemInspectorSignature: 7, // Page 8 — alt-system inspector signature
   };
 
-  // Draw signature at both signature field locations (pages 2 and 6)
+  // Always sign pages 2 and 6. Add page-8 sigs when alt-system pages are included.
   const signatureFieldNames = ["conventionalSignature", "cesspoolSignature"];
+  if (includeAlternativePages) {
+    signatureFieldNames.push("conventionalSignature2", "altSystemInspectorSignature");
+  }
 
   for (const fieldName of signatureFieldNames) {
     try {

@@ -39,6 +39,7 @@ import {
   GP402_SYSTEM_TYPES,
   STEP_LABELS,
 } from "@/lib/constants/inspection";
+import { normalizeIncludeAlternativePages } from "@/lib/inspection-form";
 import { getDefaultFormValues, inspectionFormSchema } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 import { ReviewActions } from "./review-actions";
@@ -122,9 +123,14 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
 
   const isReadOnly = status === "completed";
 
+  // Normalize so the includeAlternativePages flag stays consistent with the
+  // presence of saved alt-system data round-tripping through review.
+  const initialFormValues =
+    normalizeIncludeAlternativePages(inspection.formData) ?? getDefaultFormValues("");
+
   const form = useForm<InspectionFormData>({
     resolver: zodResolver(inspectionFormSchema) as any,
-    defaultValues: inspection.formData ?? getDefaultFormValues(""),
+    defaultValues: initialFormValues,
   });
 
   const facilityName = useWatch({ control: form.control, name: "facilityInfo.facilityName" });

@@ -19,6 +19,7 @@ import { WizardProgress } from "@/components/inspection/wizard-progress";
 import { Form } from "@/components/ui/form";
 import { useAutoSave } from "@/hooks/use-auto-save";
 import { STEP_LABELS } from "@/lib/constants/inspection";
+import { normalizeIncludeAlternativePages } from "@/lib/inspection-form";
 import {
   getDefaultFormValues,
   inspectionFormSchema,
@@ -38,10 +39,16 @@ interface InspectionWizardProps {
 export function InspectionWizard({ inspection }: InspectionWizardProps) {
   const [currentStep, setCurrentStep] = useState(0);
 
+  // If saved alt-system data exists but the top-level includeAlternativePages
+  // flag is missing/false, force the toggle ON so the pages stay editable and
+  // appear in the wizard's page count.
+  const initialFormValues =
+    normalizeIncludeAlternativePages(inspection.formData) ?? getDefaultFormValues("");
+
   const form = useForm<InspectionFormData>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(inspectionFormSchema) as any,
-    defaultValues: inspection.formData ?? getDefaultFormValues(""),
+    defaultValues: initialFormValues,
     mode: "onBlur",
   });
 

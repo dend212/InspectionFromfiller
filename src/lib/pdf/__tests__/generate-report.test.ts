@@ -24,6 +24,10 @@ async function createTemplatePdf(): Promise<ArrayBuffer> {
   form.createTextField("propertyName");
   form.createTextField("conventionalSignatureDate");
   form.createTextField("conventionalPrintedName");
+  // Date fields covered by auto-fill (pages 2, 6, and 8)
+  form.createTextField("cesspoolSignatureDate");
+  form.createTextField("conventionalSignatureDate2");
+  form.createTextField("altSystemInspectorDate");
 
   // Add a checkbox
   form.createCheckBox("qualAdeqCourse");
@@ -350,5 +354,31 @@ describe("generateReport", () => {
     const result = await generateReport(makeMinimalFormData(), null, []);
     expect(result).toBeInstanceOf(Uint8Array);
     expect(buildPhotoPages).not.toHaveBeenCalled();
+  });
+
+  it("keeps alt-system pages (7-8) in the output when includeAlternativePages is true", async () => {
+    const baseline = await PDFDocument.load(await generateReport(makeMinimalFormData(), null));
+    const baselinePageCount = baseline.getPageCount();
+
+    const withAlt = makeMinimalFormData();
+    withAlt.includeAlternativePages = true;
+    const withAltDoc = await PDFDocument.load(await generateReport(withAlt, null));
+
+    // Two additional template pages (7 and 8) survive removal when the flag is true.
+    expect(withAltDoc.getPageCount()).toBe(baselinePageCount + 2);
+  });
+
+  it("does not throw when alt-page sig/date fields are filled with includeAlternativePages=true", async () => {
+    // 1x1 transparent PNG data URL
+    const signatureDataUrl =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
+    const data = makeMinimalFormData();
+    data.includeAlternativePages = true;
+
+    // Should populate dates on pages 2, 6, and both signature blocks on page 8 without throwing.
+    const result = await generateReport(data, signatureDataUrl);
+    expect(result).toBeInstanceOf(Uint8Array);
+    expect(result.length).toBeGreaterThan(0);
   });
 });
