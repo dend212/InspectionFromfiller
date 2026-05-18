@@ -16,7 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
+// NEXT_PUBLIC_APP_URL is the canonical app URL; NEXT_PUBLIC_SITE_URL kept as a
+// legacy alias for environments that haven't been migrated yet.
+const siteUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "";
 
 export function ResetPasswordForm() {
   const router = useRouter();

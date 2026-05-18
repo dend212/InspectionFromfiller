@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { getAppUrl } from "@/lib/app-url";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
@@ -33,7 +34,7 @@ export async function sendSubmissionNotification(
         `Facility: ${facilityName || "Untitled"}`,
         inspectorName ? `Inspector: ${inspectorName}` : "",
         "",
-        `Review it here: ${process.env.NEXT_PUBLIC_APP_URL || "https://sewertime.vercel.app"}/review/${inspectionId}`,
+        `Review it here: ${getAppUrl()}/review/${inspectionId}`,
       ]
         .filter(Boolean)
         .join("\n"),

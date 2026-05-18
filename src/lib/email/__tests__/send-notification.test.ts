@@ -99,10 +99,10 @@ describe("sendSubmissionNotification", () => {
     expect(callArgs.text).not.toContain("Inspector:");
   });
 
-  it("uses default app URL when NEXT_PUBLIC_APP_URL is not set", async () => {
+  it("uses NEXT_PUBLIC_APP_URL when set", async () => {
     process.env.RESEND_API_KEY = "re_test_key";
     process.env.ADMIN_NOTIFICATION_EMAIL = "admin@test.com";
-    delete process.env.NEXT_PUBLIC_APP_URL;
+    process.env.NEXT_PUBLIC_APP_URL = "https://inspections.sewertime.com";
     mockSend.mockResolvedValue({ id: "email-4" });
 
     const sendSubmissionNotification = await loadModule();
@@ -110,7 +110,23 @@ describe("sendSubmissionNotification", () => {
 
     const callArgs = mockSend.mock.calls[0][0];
     expect(callArgs.text).toContain(
-      "https://sewertime.vercel.app/review/insp-1",
+      "https://inspections.sewertime.com/review/insp-1",
+    );
+  });
+
+  it("falls back to NEXT_PUBLIC_SITE_URL when NEXT_PUBLIC_APP_URL is missing", async () => {
+    process.env.RESEND_API_KEY = "re_test_key";
+    process.env.ADMIN_NOTIFICATION_EMAIL = "admin@test.com";
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    process.env.NEXT_PUBLIC_SITE_URL = "https://inspections.sewertime.com";
+    mockSend.mockResolvedValue({ id: "email-5" });
+
+    const sendSubmissionNotification = await loadModule();
+    await sendSubmissionNotification("insp-1", "Facility", null);
+
+    const callArgs = mockSend.mock.calls[0][0];
+    expect(callArgs.text).toContain(
+      "https://inspections.sewertime.com/review/insp-1",
     );
   });
 

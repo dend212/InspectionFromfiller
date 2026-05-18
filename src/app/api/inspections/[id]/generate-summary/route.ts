@@ -1,6 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
+import { getAppUrl } from "@/lib/app-url";
 import { db } from "@/lib/db";
 import { inspections, inspectionSummaries } from "@/lib/db/schema";
 import { getUserRole } from "@/lib/supabase/auth-helpers";
@@ -94,8 +95,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     })
     .returning();
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "";
-  const summaryUrl = `${baseUrl}/summary/${token}`;
+  const summaryUrl = `${getAppUrl(request)}/summary/${token}`;
 
   return NextResponse.json({
     summaryId: summary.id,

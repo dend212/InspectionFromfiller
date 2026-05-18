@@ -1,6 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
+import { getAppUrl } from "@/lib/app-url";
 import { db } from "@/lib/db";
 import { jobEmails, jobSummaries, jobs } from "@/lib/db/schema";
 import { logJobActivity } from "@/lib/jobs/activity";
@@ -78,8 +79,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "";
-  const summaryUrl = `${baseUrl}/jobs/summary/${summary.token}`;
+  const summaryUrl = `${getAppUrl(request)}/jobs/summary/${summary.token}`;
 
   const addressParts = [job.serviceAddress, job.city, job.state].filter(Boolean);
   const addressLine = addressParts.length > 0 ? addressParts.join(", ") : "your property";

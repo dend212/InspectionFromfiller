@@ -8,6 +8,7 @@ import {
   jobs,
   profiles,
 } from "@/lib/db/schema";
+import { getAppUrl } from "@/lib/app-url";
 import { logJobActivity } from "@/lib/jobs/activity";
 import { mapTemplateItemsToJobItems } from "@/lib/jobs/apply-template";
 import { verifyJobsWebhookAuth } from "@/lib/jobs/webhook-auth";
@@ -255,6 +256,5 @@ export async function POST(request: Request) {
 }
 
 function buildJobUrl(request: Request, jobId: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "";
-  return `${base}/jobs/${jobId}`;
+  return `${getAppUrl(request)}/jobs/${jobId}`;
 }

@@ -1,5 +1,6 @@
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { getAppUrl } from "@/lib/app-url";
 import { db } from "@/lib/db";
 import { jobChecklistItems, jobMedia, jobSummaries, jobs, profiles } from "@/lib/db/schema";
 import { verifyJobsWebhookAuth } from "@/lib/jobs/webhook-auth";
@@ -98,8 +99,9 @@ export async function GET(
     .orderBy(desc(jobSummaries.createdAt))
     .limit(1);
 
-  const base = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "";
-  const publicSummaryUrl = summary ? `${base}/jobs/summary/${summary.token}` : null;
+  const publicSummaryUrl = summary
+    ? `${getAppUrl(request)}/jobs/summary/${summary.token}`
+    : null;
 
   return NextResponse.json({
     jobId: job.id,

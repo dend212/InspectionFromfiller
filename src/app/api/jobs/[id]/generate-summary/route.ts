@@ -1,6 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
+import { getAppUrl } from "@/lib/app-url";
 import { db } from "@/lib/db";
 import { jobSummaries, jobs } from "@/lib/db/schema";
 import { logJobActivity } from "@/lib/jobs/activity";
@@ -73,8 +74,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     })
     .returning();
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "";
-  const summaryUrl = `${baseUrl}/jobs/summary/${token}`;
+  const summaryUrl = `${getAppUrl(request)}/jobs/summary/${token}`;
 
   await logJobActivity({
     jobId: id,
