@@ -118,7 +118,7 @@ export async function GET(
     completedAt: job.completedAt,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
-    url: `${base}/jobs/${job.id}`,
+    url: `${getAppUrl(request)}/jobs/${job.id}`,
     mediaCount,
     checklist: items,
   });
