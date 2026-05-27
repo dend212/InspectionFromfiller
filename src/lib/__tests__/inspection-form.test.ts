@@ -24,18 +24,12 @@ describe("hasAlternativeSystemData", () => {
     expect(hasAlternativeSystemData(data)).toBe(false);
   });
 
-  it("returns false for an alternativeSystem subtree containing only defaults from getDefaultFormValues except inspector identity strings", () => {
-    // The default subtree pre-fills inspector name as qualifiedInspector/contactName/altPrintedName/orgResponsible,
-    // which are still considered "data" by the helper — so a clean default subtree is treated as alt data.
-    // We confirm that an explicitly-empty subtree returns false.
-    const data = baseForm();
-    if (data.alternativeSystem) {
-      data.alternativeSystem.qualifiedInspector = "";
-      data.alternativeSystem.contactName = "";
-      data.alternativeSystem.altPrintedName = "";
-      data.alternativeSystem.orgResponsible = "";
-    }
-    expect(hasAlternativeSystemData(data)).toBe(false);
+  it("returns false for an alternativeSystem subtree containing only defaults from getDefaultFormValues", () => {
+    // The default subtree pre-fills inspector identity fields (qualifiedInspector/
+    // contactName/altPrintedName/orgResponsible). Those are auto-populated for every
+    // inspection and are NOT evidence that the tech entered alt-system content, so
+    // the helper must ignore them and return false for a clean default subtree.
+    expect(hasAlternativeSystemData(baseForm())).toBe(false);
   });
 
   it("returns true when a single string field is filled", () => {

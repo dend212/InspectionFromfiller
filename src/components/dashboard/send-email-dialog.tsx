@@ -132,7 +132,7 @@ SewerTime Septic`;
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+      <AlertDialogContent className="max-w-xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <Mail className="size-5" />
@@ -145,7 +145,7 @@ SewerTime Septic`;
           </AlertDialogDescription>
         </AlertDialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           {/* Recipient Email */}
           <div className="space-y-2">
             <Label htmlFor="recipient-email">Recipient Email</Label>
@@ -186,9 +186,9 @@ SewerTime Septic`;
           </div>
 
           {/* Email Preview */}
-          <div className="space-y-2">
+          <div className="space-y-2 min-w-0">
             <Label>Email Preview</Label>
-            <div className="rounded-md border bg-muted/30 p-4 text-sm whitespace-pre-wrap text-muted-foreground">
+            <div className="min-w-0 max-w-full rounded-md border bg-muted/30 p-4 text-sm whitespace-pre-wrap break-all [overflow-wrap:anywhere] text-muted-foreground">
               {previewBody}
             </div>
           </div>
