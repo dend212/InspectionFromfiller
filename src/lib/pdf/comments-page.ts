@@ -10,8 +10,10 @@
  *   - Section heading (bold, 12pt): e.g., "Design Flow Comments"
  *   - Comment body (10pt, left-aligned, multi-line)
  * - Sections stacked vertically with spacing
+ * - Paginates onto additional pages when content (or a single long comment)
+ *   does not fit on one page, so text is never clipped or run off the bottom.
  *
- * Returns a Uint8Array PDF or null if no overflow exists.
+ * Returns a Uint8Array PDF (one or more pages) or null if no overflow exists.
  */
 
 import type { Font, Schema, Template } from "@pdfme/common";
@@ -39,12 +41,6 @@ const LAYOUT = {
   contentStartY: 30,
   sectionHeadingHeight: 7,
   sectionGap: 4,
-  /** Base height per comment section; expands with text length */
-  commentBaseHeight: 40,
-  /** Extra height per 100 chars over base threshold */
-  heightPer100Chars: 8,
-  /** Maximum height for a single comment block before it needs page splitting */
-  maxCommentHeight: 180,
 } as const;
 
 const CONTENT_WIDTH = LAYOUT.pageWidth - LAYOUT.margin * 2;
@@ -75,16 +71,54 @@ async function loadFont(): Promise<Font> {
 // Helpers
 // ---------------------------------------------------------------------------
 
+// Body text metrics (10pt Liberation Sans, lineHeight 1.3) used to paginate.
+const BODY_FONT_SIZE = 10;
+const BODY_LINE_HEIGHT = 1.3;
+/** Vertical advance per wrapped line, in mm (10pt × 1.3 ≈ 4.59mm; rounded up). */
+const LINE_ADVANCE_MM = 4.7;
 /**
- * Calculates an appropriate height for a comment text block
- * based on character count. Uses a heuristic of ~100 chars per
- * additional height increment.
+ * Conservative chars-per-line over CONTENT_WIDTH at 10pt (the real value is
+ * ~105). Under-estimating means the computed line count is an upper bound, so a
+ * body box is always tall enough for what pdfme actually renders and never clips.
  */
-function calculateCommentHeight(text: string): number {
-  const baseHeight = LAYOUT.commentBaseHeight;
-  const extraChars = Math.max(0, text.length - 200);
-  const extraHeight = Math.ceil(extraChars / 100) * LAYOUT.heightPer100Chars;
-  return Math.min(baseHeight + extraHeight, LAYOUT.maxCommentHeight);
+const CHARS_PER_LINE = 88;
+/** Lowest usable Y (mm) before the bottom margin. */
+const PAGE_BOTTOM_Y = BLANK_PAGE.height - LAYOUT.margin;
+
+/**
+ * Greedy word-wrap honoring explicit newlines. Conservative by design (see
+ * CHARS_PER_LINE): the returned line count is an upper bound on what pdfme will
+ * render, so allocating `count × LINE_ADVANCE_MM` of height can never clip.
+ */
+function wrapToLines(text: string, charsPerLine: number): string[] {
+  const out: string[] = [];
+  for (const paragraph of text.split(/\r?\n/)) {
+    if (paragraph.length === 0) {
+      out.push("");
+      continue;
+    }
+    let line = "";
+    for (let word of paragraph.split(/\s+/)) {
+      // Hard-break a single word longer than a full line.
+      while (word.length > charsPerLine) {
+        if (line) {
+          out.push(line);
+          line = "";
+        }
+        out.push(word.slice(0, charsPerLine));
+        word = word.slice(charsPerLine);
+      }
+      const candidate = line ? `${line} ${word}` : word;
+      if (candidate.length > charsPerLine && line) {
+        out.push(line);
+        line = word;
+      } else {
+        line = candidate;
+      }
+    }
+    out.push(line);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,51 +132,55 @@ export interface OverflowSection {
 }
 
 /**
- * Builds a comments overflow page for the ADEQ inspection PDF.
+ * Builds the appended "Inspector Comments" page(s) for the ADEQ inspection PDF.
  *
- * @param overflowSections - Sections with comments that exceeded form field space
- * @returns Uint8Array PDF of comments page, or null if no overflow
+ * Paginates automatically: section blocks flow onto new US-Letter pages when
+ * they no longer fit, and a single long comment is split across pages so text is
+ * never clipped or run off the bottom edge.
+ *
+ * @param overflowSections - Sections whose comments are appended (full text)
+ * @returns Uint8Array PDF (one or more pages), or null if there is nothing to append
  */
 export async function buildCommentsPage(
   overflowSections: OverflowSection[],
 ): Promise<Uint8Array | null> {
   if (overflowSections.length === 0) return null;
 
-  const schemas: Schema[] = [];
+  const pages: Schema[][] = [];
   const input: Record<string, string> = {};
+  let pageIndex = -1;
+  let y = 0;
 
-  // Title: "Inspector Comments (Continued)"
-  schemas.push({
-    name: "commentsTitle",
-    type: "text",
-    position: { x: LAYOUT.margin, y: LAYOUT.titleY },
-    width: CONTENT_WIDTH,
-    height: LAYOUT.titleHeight,
-    fontSize: 14,
-    fontName: "LiberationSansBold",
-    alignment: "center",
-    verticalAlignment: "middle",
-    fontColor: "#000000",
-    backgroundColor: "",
-    lineHeight: 1,
-    characterSpacing: 0,
-  } as Schema);
-  input.commentsTitle = "Inspector Comments (Continued)";
-
-  // Build section blocks
-  let currentY = LAYOUT.contentStartY;
-
-  for (let i = 0; i < overflowSections.length; i++) {
-    const section = overflowSections[i];
-    const headingKey = `commentHeading_${i}`;
-    const bodyKey = `commentBody_${i}`;
-    const commentHeight = calculateCommentHeight(section.text);
-
-    // Section heading
-    schemas.push({
-      name: headingKey,
+  // Page 0 keeps the legacy key "commentsTitle"; continuation pages get unique keys.
+  const startPage = (): void => {
+    pageIndex += 1;
+    pages[pageIndex] = [];
+    const titleKey = pageIndex === 0 ? "commentsTitle" : `commentsTitle_cont_${pageIndex}`;
+    pages[pageIndex].push({
+      name: titleKey,
       type: "text",
-      position: { x: LAYOUT.margin, y: currentY },
+      position: { x: LAYOUT.margin, y: LAYOUT.titleY },
+      width: CONTENT_WIDTH,
+      height: LAYOUT.titleHeight,
+      fontSize: 14,
+      fontName: "LiberationSansBold",
+      alignment: "center",
+      verticalAlignment: "middle",
+      fontColor: "#000000",
+      backgroundColor: "",
+      lineHeight: 1,
+      characterSpacing: 0,
+    } as Schema);
+    input[titleKey] =
+      pageIndex === 0 ? "Inspector Comments (Continued)" : "Inspector Comments (cont.)";
+    y = LAYOUT.contentStartY;
+  };
+
+  const pushHeading = (key: string, label: string): void => {
+    pages[pageIndex].push({
+      name: key,
+      type: "text",
+      position: { x: LAYOUT.margin, y },
       width: CONTENT_WIDTH,
       height: LAYOUT.sectionHeadingHeight,
       fontSize: 12,
@@ -154,37 +192,72 @@ export async function buildCommentsPage(
       lineHeight: 1,
       characterSpacing: 0,
     } as Schema);
-    input[headingKey] = `${section.section} Comments`;
+    input[key] = label;
+    y += LAYOUT.sectionHeadingHeight;
+  };
 
-    currentY += LAYOUT.sectionHeadingHeight;
+  startPage();
 
-    // Comment body
-    schemas.push({
-      name: bodyKey,
-      type: "text",
-      position: { x: LAYOUT.margin, y: currentY },
-      width: CONTENT_WIDTH,
-      height: commentHeight,
-      fontSize: 10,
-      dynamicFontSize: { min: 7, max: 10, fit: "horizontal" },
-      fontName: "LiberationSans",
-      alignment: "left",
-      verticalAlignment: "top",
-      fontColor: "#333333",
-      backgroundColor: "",
-      lineHeight: 1.3,
-      characterSpacing: 0,
-    } as Schema);
-    input[bodyKey] = section.text;
+  // Section-indexed keys (commentHeading_<s> / commentBody_<s>) match the schema
+  // contract relied on elsewhere; continuation chunks get a _<chunk> suffix.
+  for (let s = 0; s < overflowSections.length; s++) {
+    const section = overflowSections[s];
+    const lines = wrapToLines(section.text, CHARS_PER_LINE);
+    const heading = `${section.section} Comments`;
 
-    currentY += commentHeight + LAYOUT.sectionGap;
+    // Break to a new page if the heading plus two body lines won't fit.
+    if (y + LAYOUT.sectionHeadingHeight + LINE_ADVANCE_MM * 2 > PAGE_BOTTOM_Y) {
+      startPage();
+    }
+    pushHeading(`commentHeading_${s}`, heading);
+
+    let remaining = lines;
+    let chunkIndex = 0;
+    while (remaining.length > 0) {
+      if (chunkIndex > 0) {
+        // Body spilled past the page bottom — continue on a fresh page.
+        startPage();
+        pushHeading(`commentHeading_${s}_cont_${chunkIndex}`, `${heading} (cont.)`);
+      }
+
+      const linesThatFit = Math.max(1, Math.floor((PAGE_BOTTOM_Y - y) / LINE_ADVANCE_MM));
+      const take = Math.min(remaining.length, linesThatFit);
+      const chunk = remaining.slice(0, take);
+      remaining = remaining.slice(take);
+
+      const bodyKey = chunkIndex === 0 ? `commentBody_${s}` : `commentBody_${s}_${chunkIndex}`;
+      const bodyHeight = take * LINE_ADVANCE_MM;
+      pages[pageIndex].push({
+        name: bodyKey,
+        type: "text",
+        position: { x: LAYOUT.margin, y },
+        width: CONTENT_WIDTH,
+        height: bodyHeight,
+        fontSize: BODY_FONT_SIZE,
+        fontName: "LiberationSans",
+        alignment: "left",
+        verticalAlignment: "top",
+        fontColor: "#333333",
+        backgroundColor: "",
+        lineHeight: BODY_LINE_HEIGHT,
+        characterSpacing: 0,
+      } as Schema);
+      // When the whole comment fits a single chunk, store the original text and
+      // let pdfme wrap it (no content alteration). Only genuinely split bodies
+      // carry the explicit line breaks computed by wrapToLines.
+      input[bodyKey] =
+        chunkIndex === 0 && remaining.length === 0 ? section.text : chunk.join("\n");
+      y += bodyHeight;
+      chunkIndex++;
+    }
+
+    y += LAYOUT.sectionGap;
   }
 
-  // Generate single-page PDF
   const font = await loadFont();
   const template: Template = {
     basePdf: BLANK_PAGE,
-    schemas: [schemas],
+    schemas: pages,
   };
 
   const pdf = await generate({

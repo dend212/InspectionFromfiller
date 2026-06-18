@@ -20,7 +20,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ChevronDown } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { AlertTriangle, ChevronDown } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -61,6 +62,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
   const sellerAddress = useWatch({ control: form.control, name: "facilityInfo.sellerAddress" });
   const sellerCity = useWatch({ control: form.control, name: "facilityInfo.sellerCity" });
   const facilityType = useWatch({ control: form.control, name: "facilityInfo.facilityType" });
+  const isCesspool = useWatch({ control: form.control, name: "facilityInfo.isCesspool" });
   const hasAdeqCourse = useWatch({ control: form.control, name: "facilityInfo.hasAdeqCourse" });
   const isProfessionalEngineer = useWatch({ control: form.control, name: "facilityInfo.isProfessionalEngineer" });
   const isRegisteredSanitarian = useWatch({ control: form.control, name: "facilityInfo.isRegisteredSanitarian" });
@@ -490,6 +492,49 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
               </FormItem>
             )}
           />
+
+          {isCesspool === "yes" && (
+            <div className="sm:col-span-2 rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-700/60 dark:bg-amber-950/30">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="w-full space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                      Cesspool / cesspit -- remaining pages will be voided
+                    </p>
+                    <p className="text-xs text-amber-800/90 dark:text-amber-300/90">
+                      On the generated report (not in the app), the remaining
+                      inspection pages are crossed out with a red X. The comments
+                      below are appended to the report just like regular inspector
+                      comments. Attached photos are still included as normal.
+                    </p>
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="facilityInfo.cesspoolComments"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-base">Cesspool / Cesspit Comments</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            value={field.value ?? ""}
+                            rows={4}
+                            className="min-h-[48px] bg-background"
+                            placeholder="Describe the cesspool/cesspit findings. These comments are appended to the report's Inspector Comments page."
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Appended to the report's Inspector Comments page.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 

@@ -17,7 +17,7 @@
  * 9. Merge all PDFs into single output: cover -> form -> comments -> photos
  */
 
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
 import { buildCommentsPage } from "@/lib/pdf/comments-page";
 import { buildCoverPage } from "@/lib/pdf/cover-page";
@@ -119,6 +119,15 @@ export async function generateReport(
   if (!formData.includeAlternativePages) {
     doc.removePage(7); // Page 8: Alt System Disposal Works + second signature
     doc.removePage(6); // Page 7: Alternative System
+  }
+
+  // Step 9.5: Cesspool/cesspit void overlay. When the system is a cesspool, the
+  // conventional inspection does not apply — cross out every remaining page with
+  // a red X on the GENERATED report only (the app's form is untouched). Pages 0-1
+  // (instructions + the cesspool determination/signature on Page 2) stay clean.
+  // Photos and the comments page are appended separately and are unaffected.
+  if (formData.facilityInfo?.isCesspool === "yes") {
+    await drawCesspoolVoidOverlay(doc);
   }
 
   // Step 10: Save the filled form (now 6 pages)
@@ -254,5 +263,85 @@ async function embedSignature(
     } catch {
       // Already removed or doesn't exist
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cesspool/cesspit void overlay
+// ---------------------------------------------------------------------------
+
+/**
+ * First (0-indexed) form page to void when a cesspool is found.
+ * In the saved form PDF: index 0 = ADEQ instructions, index 1 = Page 2 (property
+ * /inspector + cesspool determination + cesspool signature — must stay valid).
+ * Everything from index 2 onward (Sections 1–4.1 conventional inspection, plus
+ * any retained alternative-system pages) is the "remainder" that gets crossed out.
+ */
+const CESSPOOL_VOID_START_PAGE_INDEX = 2;
+
+/**
+ * Draws a red X (plus a centered "CESSPOOL / CESSPIT — SEE INSPECTOR COMMENTS"
+ * caption) across every page from {@link CESSPOOL_VOID_START_PAGE_INDEX} to the
+ * end of the document. Drawn after flatten + page removal so the marks are part
+ * of the page content and survive the final merge (copyPages). Render-only — the
+ * app's editable form never shows the X.
+ */
+async function drawCesspoolVoidOverlay(doc: PDFDocument): Promise<void> {
+  const pages = doc.getPages();
+  if (pages.length <= CESSPOOL_VOID_START_PAGE_INDEX) return;
+
+  const font = await doc.embedFont(StandardFonts.HelveticaBold);
+  const red = rgb(0.78, 0.12, 0.12);
+  const margin = 36;
+  const thickness = 6;
+  const label = "CESSPOOL / CESSPIT — SEE INSPECTOR COMMENTS";
+  const fontSize = 13;
+
+  for (let i = CESSPOOL_VOID_START_PAGE_INDEX; i < pages.length; i++) {
+    const page = pages[i];
+    const { width, height } = page.getSize();
+
+    // Diagonal red X, corner to corner (inset by a margin).
+    page.drawLine({
+      start: { x: margin, y: margin },
+      end: { x: width - margin, y: height - margin },
+      thickness,
+      color: red,
+      opacity: 0.85,
+    });
+    page.drawLine({
+      start: { x: margin, y: height - margin },
+      end: { x: width - margin, y: margin },
+      thickness,
+      color: red,
+      opacity: 0.85,
+    });
+
+    // Centered caption on a white pill so it stays legible over the X.
+    const textWidth = font.widthOfTextAtSize(label, fontSize);
+    const padX = 14;
+    const padY = 9;
+    const boxWidth = textWidth + padX * 2;
+    const boxHeight = fontSize + padY * 2;
+    const boxX = (width - boxWidth) / 2;
+    const boxY = (height - boxHeight) / 2;
+
+    page.drawRectangle({
+      x: boxX,
+      y: boxY,
+      width: boxWidth,
+      height: boxHeight,
+      color: rgb(1, 1, 1),
+      borderColor: red,
+      borderWidth: 2,
+      opacity: 0.92,
+    });
+    page.drawText(label, {
+      x: boxX + padX,
+      y: boxY + padY,
+      size: fontSize,
+      font,
+      color: red,
+    });
   }
 }

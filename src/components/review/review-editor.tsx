@@ -134,6 +134,7 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
   });
 
   const facilityName = useWatch({ control: form.control, name: "facilityInfo.facilityName" });
+  const isCesspool = useWatch({ control: form.control, name: "facilityInfo.isCesspool" });
   const { generatePdf, pdfData, isGenerating, error, clearPdf } = usePdfGeneration();
 
   // Finalized PDF state — for showing the exact server-generated PDF
@@ -446,6 +447,18 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
                 {renderButtonGroup("facilityInfo.recordsAvailable", "Records Available", YES_NO_OPTIONS)}
                 {renderButtonGroup("facilityInfo.isCesspool", "Is Cesspool", YES_NO_OPTIONS)}
               </div>
+
+              {isCesspool === "yes" && (
+                <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-950/30">
+                  <p className="mb-2 text-xs text-amber-800/90 dark:text-amber-300/90">
+                    Cesspool / cesspit selected -- remaining pages are voided with a red X on
+                    the generated report; these comments are appended to the Inspector Comments page.
+                  </p>
+                  {renderTextField("facilityInfo.cesspoolComments", "Cesspool / Cesspit Comments", {
+                    textarea: true,
+                  })}
+                </div>
+              )}
 
               <div className="mt-4 border-t pt-4">
                 <p className="mb-3 text-xs font-semibold uppercase text-muted-foreground">

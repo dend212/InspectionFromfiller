@@ -135,6 +135,7 @@ function makeMinimalFormData(): InspectionFormData {
       hasOtherRecords: false,
       otherRecordsDescription: "",
       isCesspool: "",
+      cesspoolComments: "",
       waterSource: "",
       wellDistance: "",
       wastewaterSource: "",
@@ -333,6 +334,47 @@ describe("generateReport", () => {
         }),
       ]),
     );
+  });
+
+  it("draws the cesspool void overlay without throwing and preserves page count", async () => {
+    const baseline = await PDFDocument.load(await generateReport(makeMinimalFormData(), null));
+    const baselinePageCount = baseline.getPageCount();
+
+    const cesspool = makeMinimalFormData();
+    cesspool.facilityInfo.isCesspool = "yes";
+    const result = await generateReport(cesspool, null);
+    const doc = await PDFDocument.load(result);
+
+    // The red X is an overlay — it must not add or remove pages.
+    expect(doc.getPageCount()).toBe(baselinePageCount);
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it("appends a Cesspool comments section when isCesspool=yes with comments", async () => {
+    const data = makeMinimalFormData();
+    data.facilityInfo.isCesspool = "yes";
+    data.facilityInfo.cesspoolComments = "Cesspool with no leach field. Recommend abandonment.";
+
+    await generateReport(data, null);
+    expect(buildCommentsPage).toHaveBeenCalledOnce();
+    expect(buildCommentsPage).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          section: "Cesspool",
+          fieldName: "cesspoolComments",
+        }),
+      ]),
+    );
+  });
+
+  it("does not append a Cesspool comments section when isCesspool=yes but no comments", async () => {
+    const data = makeMinimalFormData();
+    data.facilityInfo.isCesspool = "yes";
+    data.facilityInfo.cesspoolComments = "";
+
+    await generateReport(data, null);
+    // No comment overflow at all -> comments page never requested.
+    expect(buildCommentsPage).not.toHaveBeenCalled();
   });
 
   it("throws when template PDF fails to load", async () => {

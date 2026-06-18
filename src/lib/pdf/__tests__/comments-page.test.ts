@@ -271,4 +271,46 @@ describe("buildCommentsPage", () => {
     const call = mockGenerate.mock.calls[0][0];
     expect(call.inputs[0].commentBody_0).toBe("");
   });
+
+  // --- Pagination (no clipping / run-off) ------------------------------------
+
+  const PAGE_BOTTOM = 279.4 - 15; // page height minus bottom margin (mm)
+
+  it("paginates a single very long comment across multiple pages", async () => {
+    const longText = Array.from({ length: 1500 }, (_, i) => `word${i}`).join(" ");
+    const sections: OverflowSection[] = [
+      { section: "Cesspool", fieldName: "cesspoolComments", text: longText },
+    ];
+    await buildCommentsPage(sections);
+
+    const call = mockGenerate.mock.calls[0][0];
+    // Spans more than one page.
+    expect(call.template.schemas.length).toBeGreaterThan(1);
+    // First chunk plus at least one continuation chunk.
+    expect(call.inputs[0].commentBody_0).toBeDefined();
+    expect(call.inputs[0].commentBody_0_1).toBeDefined();
+    // No body box extends past the usable page bottom.
+    for (const page of call.template.schemas) {
+      for (const schema of page) {
+        expect(schema.position.y + schema.height).toBeLessThanOrEqual(PAGE_BOTTOM + 0.01);
+      }
+    }
+  });
+
+  it("keeps many stacked sections from overflowing a single page", async () => {
+    const sections: OverflowSection[] = Array.from({ length: 12 }, (_, i) => ({
+      section: `Section ${i}`,
+      fieldName: `f${i}`,
+      text: "Lorem ipsum dolor sit amet consectetur ".repeat(6),
+    }));
+    await buildCommentsPage(sections);
+
+    const call = mockGenerate.mock.calls[0][0];
+    expect(call.template.schemas.length).toBeGreaterThan(1);
+    for (const page of call.template.schemas) {
+      for (const schema of page) {
+        expect(schema.position.y + schema.height).toBeLessThanOrEqual(PAGE_BOTTOM + 0.01);
+      }
+    }
+  });
 });

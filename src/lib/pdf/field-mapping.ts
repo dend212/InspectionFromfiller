@@ -140,6 +140,19 @@ export function detectCommentOverflow(data: InspectionFormData): OverflowResult 
     }
   }
 
+  // Cesspool/cesspit comments always flow to the appended comments page when a
+  // cesspool is found — the conventional inspection pages are voided with a red
+  // X, so these comments have nowhere else to live on the form. Appended
+  // regardless of length (no overflow threshold).
+  const cesspoolComments = str(data.facilityInfo?.cesspoolComments);
+  if (data.facilityInfo?.isCesspool === "yes" && cesspoolComments.trim().length > 0) {
+    overflowSections.push({
+      section: "Cesspool",
+      fieldName: "cesspoolComments",
+      text: cesspoolComments,
+    });
+  }
+
   return {
     hasOverflow: overflowSections.length > 0,
     overflowSections,

@@ -64,6 +64,10 @@ export const facilityInfoSchema = z.object({
 
   // Cesspool
   isCesspool: z.enum(["yes", "no", ""]).optional().default(""),
+  // Inspector comments captured when the system is a cesspool/cesspit. Always
+  // appended to the report's Inspector Comments page (the conventional pages are
+  // voided with a red X), regardless of length.
+  cesspoolComments: z.string().optional().default(""),
 
   // Section 1 -- Facility Information subsection
   waterSource: z.string().optional().default(""),
@@ -406,6 +410,7 @@ export const STEP_FIELDS: Record<number, string[]> = {
     "facilityInfo.occupancyType",
     "facilityInfo.septicTankCondition",
     "facilityInfo.disposalWorksCondition",
+    "facilityInfo.cesspoolComments",
   ],
   1: [
     "generalTreatment.systemTypes",
@@ -511,6 +516,7 @@ export function getDefaultFormValues(inspectorName: string) {
       hasOtherRecords: false,
       otherRecordsDescription: "",
       isCesspool: "" as const,
+      cesspoolComments: "",
       waterSource: "",
       wellDistance: "",
       wastewaterSource: "",

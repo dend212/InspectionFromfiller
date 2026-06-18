@@ -79,6 +79,7 @@ function makeEmptyFormData(): InspectionFormData {
       hasOtherRecords: false,
       otherRecordsDescription: "",
       isCesspool: "",
+      cesspoolComments: "",
       waterSource: "",
       wellDistance: "",
       wastewaterSource: "",
@@ -206,6 +207,7 @@ function makeFullFormData(): InspectionFormData {
       hasOtherRecords: true,
       otherRecordsDescription: "Maintenance records",
       isCesspool: "no",
+      cesspoolComments: "",
       waterSource: "private_well",
       wellDistance: "100 ft",
       wastewaterSource: "residential",
@@ -1299,5 +1301,49 @@ describe("detectCommentOverflow", () => {
     data.designFlow.designFlowComments = "Short note";
     const result = mapFormDataToFields(data);
     expect(result.textFields.designFlowComments).toBe("Short note");
+  });
+
+  // --- Cesspool/cesspit comments --------------------------------------------
+
+  it("appends a Cesspool section regardless of length when isCesspool is yes", () => {
+    const data = makeEmptyFormData();
+    data.facilityInfo.isCesspool = "yes";
+    data.facilityInfo.cesspoolComments = "Short cesspool note"; // well under 200 chars
+    const result = detectCommentOverflow(data);
+
+    expect(result.hasOverflow).toBe(true);
+    const cesspool = result.overflowSections.find((s) => s.fieldName === "cesspoolComments");
+    expect(cesspool).toBeDefined();
+    expect(cesspool?.section).toBe("Cesspool");
+    expect(cesspool?.text).toBe("Short cesspool note");
+  });
+
+  it("does not append a Cesspool section when isCesspool is not yes", () => {
+    const data = makeEmptyFormData();
+    data.facilityInfo.isCesspool = "no";
+    data.facilityInfo.cesspoolComments = "Comment that should be ignored";
+    const result = detectCommentOverflow(data);
+
+    expect(result.overflowSections.some((s) => s.fieldName === "cesspoolComments")).toBe(false);
+  });
+
+  it("does not append a Cesspool section when cesspool comments are empty/whitespace", () => {
+    const data = makeEmptyFormData();
+    data.facilityInfo.isCesspool = "yes";
+    data.facilityInfo.cesspoolComments = "   ";
+    const result = detectCommentOverflow(data);
+
+    expect(result.overflowSections.some((s) => s.fieldName === "cesspoolComments")).toBe(false);
+    expect(result.hasOverflow).toBe(false);
+  });
+
+  it("does not write a cesspoolComments inline form field (appendix only)", () => {
+    const data = makeEmptyFormData();
+    data.facilityInfo.isCesspool = "yes";
+    data.facilityInfo.cesspoolComments = "Cesspool found, no leach field present.";
+    const result = mapFormDataToFields(data);
+
+    expect(result.textFields.cesspoolComments).toBeUndefined();
+    expect(result.overflow.overflowSections.some((s) => s.section === "Cesspool")).toBe(true);
   });
 });
