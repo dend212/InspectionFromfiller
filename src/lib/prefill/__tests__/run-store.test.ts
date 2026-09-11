@@ -44,6 +44,7 @@ vi.mock("@/lib/db", () => {
 
 import {
   countRunsInLastHour,
+  createRecordRow,
   createRun,
   failStaleRuns,
   findActiveRun,
@@ -124,5 +125,29 @@ describe("run-store", () => {
   it("listRecordRows returns the rows", async () => {
     mockLimit.mockResolvedValueOnce([{ id: "rec-1" }]);
     expect(await listRecordRows("run-1")).toEqual([{ id: "rec-1" }]);
+  });
+});
+
+describe("createRecordRow", () => {
+  it("inserts the row and returns the new id", async () => {
+    mockReturning.mockResolvedValueOnce([{ id: "rec-1" }]);
+    const row = {
+      inspectionId: "insp-1",
+      runId: "run-1",
+      source: "edms_env",
+      permitNumber: "OW-17-00474",
+      docType: "PERMIT",
+      docDate: "2018-02-08",
+      description: null,
+      pageCount: 21,
+      sizeBytes: 1968056,
+      storagePath: "records/insp-1/rec-1.pdf",
+      selected: true,
+      extractionStatus: "pending",
+      extractionError: null,
+      extracted: null,
+    };
+    await expect(createRecordRow(row)).resolves.toBe("rec-1");
+    expect(mockValues).toHaveBeenCalledWith(row);
   });
 });

@@ -114,3 +114,14 @@ export async function listRecordRows(runId: string): Promise<InspectionRecordRow
     .orderBy(inspectionRecords.createdAt)
     .limit(200);
 }
+
+export type NewInspectionRecordRow = typeof inspectionRecords.$inferInsert;
+
+/** Inserts one stored/skipped/failed permit document row; returns its id */
+export async function createRecordRow(row: NewInspectionRecordRow): Promise<string> {
+  const [created] = await db
+    .insert(inspectionRecords)
+    .values(row)
+    .returning({ id: inspectionRecords.id });
+  return created.id;
+}
