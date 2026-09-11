@@ -118,10 +118,6 @@ export default async function ReviewDetailPage({ params }: { params: Promise<{ i
           formData: inspection.formData as InspectionFormData | null,
           facilityName: inspection.facilityName,
           facilityAddress: inspection.facilityAddress,
-          facilityCity: inspection.facilityCity,
-          facilityCounty: inspection.facilityCounty,
-          createdAt: inspection.createdAt.toISOString(),
-          reviewNotes: inspection.reviewNotes,
           customerEmail: inspection.customerEmail ?? null,
           isFromWorkiz: !!inspection.workizJobId,
         }}

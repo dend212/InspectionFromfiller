@@ -68,13 +68,13 @@ export function SaveStatusBar({ status, lastSaved, onRetry, readOnly }: SaveStat
     content = <span className="text-muted-foreground">Changes save automatically</span>;
   }
 
+  // <output> carries an implicit role="status"; it is inline by default, hence `block`
   return (
-    <div
-      role="status"
+    <output
       aria-live="polite"
-      className="sticky bottom-0 z-20 -mx-4 mt-6 border-t bg-background/95 px-4 py-2 text-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:mx-0 sm:rounded-t-lg"
+      className="sticky bottom-0 z-20 -mx-4 mt-6 block border-t bg-background/95 px-4 py-2 text-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:mx-0 sm:rounded-t-lg"
     >
       {content}
-    </div>
+    </output>
   );
 }

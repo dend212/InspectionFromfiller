@@ -7,7 +7,7 @@ vi.mock("sonner", () => ({
 }));
 
 import { toast } from "sonner";
-import { FinalizeDialog } from "@/components/review/finalize-dialog";
+import { buildFinalizedNote, FinalizeDialog } from "@/components/review/finalize-dialog";
 import { getDefaultFormValues } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 
@@ -23,6 +23,19 @@ function formWithIssues() {
   const d = cleanForm();
   d.facilityInfo.facilityName = "";
   d.septicTank.tanks = [{ lidsRisersPresent: "sideways" } as never];
+  return d;
+}
+
+/** 12 tanks × 5 invalid enums = 60 issues, well past the 2000-char review-notes cap */
+function formWithManyIssues(tankCount = 12) {
+  const d = cleanForm();
+  d.septicTank.tanks = Array.from({ length: tankCount }, () => ({
+    lidsRisersPresent: "x",
+    lidsSecurelyFastened: "x",
+    compromisedTank: "x",
+    effluentFilterPresent: "x",
+    effluentFilterServiced: "x",
+  })) as never;
   return d;
 }
 
@@ -161,6 +174,39 @@ describe("FinalizeDialog", () => {
     );
   });
 
+  it("caps the appended note under the server's 2000-char limit with 60 issues (…and N more)", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", queuedFetch(calls));
+    const onFinalized = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <FinalizeDialog
+        {...baseProps}
+        onFinalized={onFinalized}
+        flush={async () => true}
+        getFormData={formWithManyIssues}
+      />,
+    );
+
+    expect(await screen.findByText(/found 60 issues/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /finalize with issues/i }));
+
+    await waitFor(() => expect(onFinalized).toHaveBeenCalled());
+    expect(calls).toEqual([
+      "PATCH /api/inspections/insp-1/review-notes",
+      "POST /api/inspections/insp-1/finalize",
+    ]);
+    const note: string = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string).append;
+    expect(note.length).toBeLessThanOrEqual(1900);
+    expect(note.startsWith("Finalized with 60 validation issues: Septic Tank › Tank 1 · Lids Risers Present, ")).toBe(true);
+    expect(note).toMatch(/ …and \d+ more$/);
+    // Everything listed plus the "more" count still adds up to 60
+    const [body, moreStr] = note.slice("Finalized with 60 validation issues: ".length).split(" …and ");
+    const listed = body.split(", ").length;
+    const more = Number(moreStr.match(/^(\d+) more$/)![1]);
+    expect(listed + more).toBe(60);
+  });
+
   it("stays open with an error toast when the review-notes PATCH fails", async () => {
     const calls: string[] = [];
     vi.stubGlobal(
@@ -191,5 +237,31 @@ describe("FinalizeDialog", () => {
   it("renders nothing when closed", () => {
     render(<FinalizeDialog {...baseProps} open={false} flush={async () => true} getFormData={cleanForm} />);
     expect(screen.queryByText(/finalize inspection report/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("buildFinalizedNote", () => {
+  const issue = (i: number) => ({ step: 3, path: `septicTank.tanks.${i}.lidsRisersPresent`, message: "bad" });
+
+  it("lists every issue verbatim when the line fits", () => {
+    expect(buildFinalizedNote([issue(0), issue(1)])).toBe(
+      "Finalized with 2 validation issues: Septic Tank › Tank 1 · Lids Risers Present, Septic Tank › Tank 2 · Lids Risers Present",
+    );
+  });
+
+  it("singular wording for one issue", () => {
+    expect(buildFinalizedNote([issue(0)])).toBe(
+      "Finalized with 1 validation issue: Septic Tank › Tank 1 · Lids Risers Present",
+    );
+  });
+
+  it("never exceeds 1900 chars and reports how many were cut", () => {
+    const many = Array.from({ length: 200 }, (_, i) => issue(i));
+    const note = buildFinalizedNote(many);
+    expect(note.length).toBeLessThanOrEqual(1900);
+    const [body, moreStr] = note.slice("Finalized with 200 validation issues: ".length).split(" …and ");
+    const more = Number(moreStr.match(/^(\d+) more$/)![1]);
+    expect(more).toBeGreaterThan(0);
+    expect(body.split(", ").length + more).toBe(200);
   });
 });

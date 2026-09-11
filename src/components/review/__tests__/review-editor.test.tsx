@@ -1,6 +1,6 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 
@@ -51,14 +51,23 @@ vi.mock("@/components/inspection/step-alternative-system", () => ({
   StepAlternativeSystem: stepStub(5, "alternativeSystem.manufacturer"),
 }));
 
-// Actions: expose the jump-to callback so the shell's section/highlight logic can be driven
+// Actions: expose the jump-to callback so the shell's section/highlight logic can be driven,
+// and record every props object so prop identity can be asserted across re-renders
+const reviewActionsProps = vi.fn();
 vi.mock("@/components/review/review-actions", () => ({
-  ReviewActions: ({ status, onJumpToField, flush }: any) => (
+  ReviewActions: (props: any) => {
+    reviewActionsProps(props);
+    const { status, onJumpToField, flush } = props;
+    return (
     <div data-testid="review-actions" data-status={status}>
       <button onClick={() => onJumpToField("septicTank.numberOfTanks", 3)}>Jump to tanks</button>
+      <button onClick={() => onJumpToField("septicTank.tanks.9.lidsRisersPresent", 3)}>
+        Jump to missing tank
+      </button>
       <button onClick={() => flush()}>Flush</button>
     </div>
-  ),
+    );
+  },
 }));
 
 // PDF preview: avoid pdf-lib in jsdom
@@ -96,10 +105,6 @@ function makeInspection(overrides: Partial<Parameters<typeof ReviewEditor>[0]["i
     formData,
     facilityName: "Smith Residence",
     facilityAddress: "123 Main St",
-    facilityCity: "Phoenix",
-    facilityCounty: "Maricopa",
-    createdAt: "2026-09-01T00:00:00.000Z",
-    reviewNotes: null,
     customerEmail: null,
     isFromWorkiz: false,
     ...overrides,
@@ -119,10 +124,30 @@ const media = [
   },
 ];
 
+// jsdom does not implement scrollIntoView; record the receiver of every call
+const scrollIntoView = vi.fn();
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+  Element.prototype.scrollIntoView = scrollIntoView;
 });
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const FAKE_TIMERS: Parameters<typeof vi.useFakeTimers>[0] = {
+  toFake: [
+    "setTimeout",
+    "clearTimeout",
+    "setInterval",
+    "clearInterval",
+    "requestAnimationFrame",
+    "cancelAnimationFrame",
+    "Date",
+  ],
+};
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
@@ -214,8 +239,98 @@ describe("ReviewEditor", () => {
     });
   });
 
+  it("jump-to focuses the control without scrolling, then smooth-scrolls the field last", async () => {
+    const order: string[] = [];
+    const focusSpy = vi
+      .spyOn(HTMLElement.prototype, "focus")
+      .mockImplementation(function (this: HTMLElement, opts?: FocusOptions) {
+        order.push(`focus:${this.getAttribute("aria-label") ?? this.tagName}:${opts?.preventScroll ? "noscroll" : "scroll"}`);
+      });
+    scrollIntoView.mockImplementation(function (this: Element) {
+      order.push(`scroll:${this.getAttribute("data-field-path") ?? this.tagName}`);
+    });
+    try {
+      render(<ReviewEditor inspection={makeInspection()} media={media} />);
+      fireEvent.click(screen.getByRole("button", { name: /jump to tanks/i }));
+      await waitFor(() => expect(order.some((o) => o.startsWith("scroll:"))).toBe(true));
+
+      // The field's input is focused with preventScroll, and the smooth scroll is the last step
+      expect(order).toContain("focus:septicTank.numberOfTanks:noscroll");
+      expect(order.at(-1)).toBe("scroll:septicTank.numberOfTanks");
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: "smooth", block: "center" });
+    } finally {
+      focusSpy.mockRestore();
+      scrollIntoView.mockReset();
+    }
+  });
+
+  it("jump-to falls back to the section header when no field element exists", async () => {
+    const user = userEvent.setup();
+    render(<ReviewEditor inspection={makeInspection()} media={media} />);
+
+    await user.click(screen.getByRole("button", { name: /jump to missing tank/i }));
+
+    // Section opened, header scrolled into view, nothing highlighted
+    await waitFor(() => expect(screen.getByTestId("step-3")).toBeInTheDocument());
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    const header = screen.getByText("Septic Tank").closest("[data-slot=collapsible-trigger]");
+    expect(scrollIntoView.mock.contexts[0]).toBe(header);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: "smooth", block: "start" });
+    expect(header).toHaveFocus();
+    expect(document.querySelector("[data-highlight]")).toBeNull();
+  });
+
+  it("removes the highlight after 2 s, and clears the timer on unmount", async () => {
+    vi.useFakeTimers(FAKE_TIMERS);
+
+    // Normal path: the ring goes away after HIGHLIGHT_MS
+    const first = render(<ReviewEditor inspection={makeInspection()} media={media} />);
+    fireEvent.click(screen.getByRole("button", { name: /jump to tanks/i }));
+    await act(async () => {
+      vi.advanceTimersByTime(50); // two animation frames
+    });
+    const target = document.querySelector('[data-field-path="septicTank.numberOfTanks"]')!;
+    expect(target).toHaveAttribute("data-highlight", "true");
+    await act(async () => {
+      vi.advanceTimersByTime(2100);
+    });
+    expect(target).not.toHaveAttribute("data-highlight");
+    first.unmount();
+
+    // Unmount path: the pending timeout is cleared (no timer left behind) and the
+    // ring is stripped synchronously by the cleanup rather than by a late callback
+    const second = render(<ReviewEditor inspection={makeInspection()} media={media} />);
+    fireEvent.click(screen.getByRole("button", { name: /jump to tanks/i }));
+    await act(async () => {
+      vi.advanceTimersByTime(50);
+    });
+    const detached = document.querySelector('[data-field-path="septicTank.numberOfTanks"]')!;
+    expect(detached).toHaveAttribute("data-highlight", "true");
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    second.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(detached).not.toHaveAttribute("data-highlight");
+  });
+
   it("renders the photo selection with all photos selected by default", () => {
     render(<ReviewEditor inspection={makeInspection()} media={media} />);
     expect(screen.getByText("Photos (1 of 1 selected for the report)")).toBeInTheDocument();
+  });
+
+  it("keeps selectedMediaIds referentially stable across unrelated re-renders", async () => {
+    const user = userEvent.setup();
+    render(<ReviewEditor inspection={makeInspection()} media={media} />);
+    const before = reviewActionsProps.mock.lastCall![0].selectedMediaIds;
+    expect(before).toEqual(["m1"]);
+
+    // Opening a section re-renders the shell but does not touch the selection
+    await user.click(screen.getByText("Septic Tank"));
+    const after = reviewActionsProps.mock.lastCall![0].selectedMediaIds;
+    expect(reviewActionsProps.mock.calls.length).toBeGreaterThan(1);
+    expect(after).toBe(before);
+
+    // Toggling a photo yields a new array
+    await user.click(screen.getByRole("button", { name: /deselect all/i }));
+    expect(reviewActionsProps.mock.lastCall![0].selectedMediaIds).toEqual([]);
   });
 });

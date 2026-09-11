@@ -167,3 +167,45 @@ describe("ReviewSection (controlled + pill)", () => {
     expect(screen.getByText("Uncontrolled body")).toBeVisible();
   });
 });
+
+describe("ReviewSection (keyboard)", () => {
+  it("renders the header trigger as a real button that Enter and Space toggle", async () => {
+    const user = userEvent.setup();
+    render(
+      <ReviewSection title="Keyboard Section" pill={<span>2 issues</span>}>
+        <p>Keyboard body</p>
+      </ReviewSection>,
+    );
+
+    const trigger = screen.getByRole("button", { name: /keyboard section/i });
+    expect(trigger.tagName).toBe("BUTTON");
+    expect(trigger).toHaveAttribute("type", "button");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveAttribute("data-slot", "collapsible-trigger");
+
+    // Reachable by Tab, then Enter opens
+    await user.tab();
+    expect(trigger).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByText("Keyboard body")).toBeVisible();
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+    // Space closes again
+    await user.keyboard(" ");
+    expect(screen.queryByText("Keyboard body")).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("reports Enter on a controlled header through onOpenChange", async () => {
+    const onOpenChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ReviewSection title="Controlled KB" open={false} onOpenChange={onOpenChange}>
+        <p>Body</p>
+      </ReviewSection>,
+    );
+    screen.getByRole("button", { name: /controlled kb/i }).focus();
+    await user.keyboard("{Enter}");
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+  });
+});

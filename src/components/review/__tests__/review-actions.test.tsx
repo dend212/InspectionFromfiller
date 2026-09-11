@@ -6,11 +6,11 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const mockPush = vi.fn();
 const mockRefresh = vi.fn();
+// Stable object, like Next's real useRouter() — a fresh object per render would
+// defeat every useCallback that depends on `router`
+const mockRouter = { push: mockPush, refresh: mockRefresh };
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({
-    push: mockPush,
-    refresh: mockRefresh,
-  }),
+  useRouter: () => mockRouter,
 }));
 
 vi.mock("sonner", () => ({
@@ -161,6 +161,15 @@ describe("ReviewActions", () => {
           selectedMediaIds: ["m1"],
         }),
       );
+    });
+
+    it("passes a referentially stable onFinalized to the FinalizeDialog across re-renders", () => {
+      const { rerender } = render(<ReviewActions {...defaultProps} status="in_review" />);
+      const first = finalizeDialogProps.mock.lastCall![0].onFinalized;
+      rerender(<ReviewActions {...defaultProps} status="in_review" />);
+      const second = finalizeDialogProps.mock.lastCall![0].onFinalized;
+      expect(finalizeDialogProps.mock.calls.length).toBeGreaterThan(1);
+      expect(second).toBe(first);
     });
 
     it("marks the inspection completed and refreshes when the dialog finalizes", async () => {

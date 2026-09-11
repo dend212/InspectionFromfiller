@@ -47,6 +47,29 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   }
 }
 
+/** The review-notes route rejects appends over 2000 chars; keep headroom for the "…and N more" tail */
+const MAX_NOTE_CHARS = 1900;
+
+/**
+ * `Finalized with N validation issues: <Section › Field, …>` — truncated to
+ * MAX_NOTE_CHARS by dropping trailing entries and adding ` …and N more`.
+ * Exported for tests.
+ */
+export function buildFinalizedNote(issues: Array<StepIssue & { step: number }>): string {
+  const labels = issues.map((i) => `${STEP_LABELS[i.step]} › ${humanizeFieldPath(i.path)}`);
+  const prefix = `Finalized with ${issues.length} validation ${
+    issues.length === 1 ? "issue" : "issues"
+  }: `;
+  const full = prefix + labels.join(", ");
+  if (full.length <= MAX_NOTE_CHARS) return full;
+
+  for (let keep = labels.length - 1; keep >= 1; keep--) {
+    const line = `${prefix}${labels.slice(0, keep).join(", ")} …and ${labels.length - keep} more`;
+    if (line.length <= MAX_NOTE_CHARS) return line;
+  }
+  return `${prefix}…and ${labels.length} more`.slice(0, MAX_NOTE_CHARS);
+}
+
 /** Groups issues by step, preserving step order */
 function groupByStep(issues: Array<StepIssue & { step: number }>) {
   const groups = new Map<number, Array<StepIssue & { step: number }>>();
@@ -104,16 +127,10 @@ export function FinalizeDialog({
     setPhase("submitting");
     try {
       if (withIssues) {
-        const list = issues
-          .map((i) => `${STEP_LABELS[i.step]} › ${humanizeFieldPath(i.path)}`)
-          .join(", ");
-        const line = `Finalized with ${issues.length} validation ${
-          issues.length === 1 ? "issue" : "issues"
-        }: ${list}`;
         const notesRes = await fetch(`/api/inspections/${inspectionId}/review-notes`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ append: line }),
+          body: JSON.stringify({ append: buildFinalizedNote(issues) }),
         });
         if (!notesRes.ok) {
           throw new Error(await errorMessage(notesRes, "Failed to record validation issues"));

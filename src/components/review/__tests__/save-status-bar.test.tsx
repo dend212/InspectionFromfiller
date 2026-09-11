@@ -28,3 +28,14 @@ describe("SaveStatusBar", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });
+
+describe("SaveStatusBar (semantics)", () => {
+  it("is an <output> live region (implicit role=status) with aria-live=polite", () => {
+    render(<SaveStatusBar status="idle" lastSaved={null} onRetry={vi.fn()} readOnly={false} />);
+    const bar = screen.getByRole("status");
+    expect(bar.tagName).toBe("OUTPUT");
+    expect(bar).toHaveAttribute("aria-live", "polite");
+    expect(bar).not.toHaveAttribute("role");
+    expect(bar).toHaveTextContent("Changes save automatically");
+  });
+});

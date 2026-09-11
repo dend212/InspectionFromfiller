@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type FieldPath, useForm, useWatch } from "react-hook-form";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
 import { StepAlternativeSystem } from "@/components/inspection/step-alternative-system";
@@ -35,10 +35,6 @@ export interface ReviewEditorProps {
     formData: InspectionFormData | null;
     facilityName: string | null;
     facilityAddress: string | null;
-    facilityCity: string | null;
-    facilityCounty: string | null;
-    createdAt: string;
-    reviewNotes: string | null;
     customerEmail: string | null;
     isFromWorkiz: boolean;
   };
@@ -47,6 +43,11 @@ export interface ReviewEditorProps {
 
 /** How long the jumped-to field keeps its amber ring */
 const HIGHLIGHT_MS = 2000;
+
+/** DOM id of a section's header button (jump-to falls back to it when the field is not rendered) */
+const sectionHeaderId = (index: number) => `review-section-${index}`;
+
+const FOCUSABLE = 'input:not([type="hidden"]), select, textarea, button, [tabindex]:not([tabindex="-1"])';
 
 export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorProps) {
   const [status, setStatus] = useState(inspection.status);
@@ -82,6 +83,8 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
     () => mediaItems.filter((m) => selectedMediaIds.has(m.id)),
     [mediaItems, selectedMediaIds],
   );
+  // Array form for ReviewActions/FinalizeDialog — memoised so it is not a new prop every keystroke
+  const selectedMediaIdList = useMemo(() => Array.from(selectedMediaIds), [selectedMediaIds]);
   const toggleMedia = useCallback((id: string) => {
     setSelectedMediaIds((prev) => {
       const next = new Set(prev);
@@ -106,6 +109,16 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
     [],
   );
 
+  // The active highlight: cleared on the next jump and on unmount
+  const highlightRef = useRef<{ el: HTMLElement; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const clearHighlight = useCallback(() => {
+    if (!highlightRef.current) return;
+    clearTimeout(highlightRef.current.timer);
+    highlightRef.current.el.removeAttribute("data-highlight");
+    highlightRef.current = null;
+  }, []);
+  useEffect(() => clearHighlight, [clearHighlight]);
+
   const jumpToField = useCallback(
     (path: string, stepIndex: number) => {
       setSectionOpen(stepIndex, true);
@@ -113,15 +126,32 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
           const el = document.querySelector<HTMLElement>(`[data-field-path="${path}"]`);
-          if (!el) return;
-          el.scrollIntoView?.({ behavior: "smooth", block: "center" });
+          if (!el) {
+            // Conditionally rendered field / tank index beyond the rendered cards:
+            // land on the section header instead of silently doing nothing
+            const header = document.getElementById(sectionHeaderId(stepIndex));
+            header?.focus({ preventScroll: true });
+            header?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+            return;
+          }
+          clearHighlight();
           el.setAttribute("data-highlight", "true");
-          setTimeout(() => el.removeAttribute("data-highlight"), HIGHLIGHT_MS);
-          form.setFocus(path as FieldPath<InspectionFormData>);
+          highlightRef.current = {
+            el,
+            timer: setTimeout(() => {
+              el.removeAttribute("data-highlight");
+              highlightRef.current = null;
+            }, HIGHLIGHT_MS),
+          };
+          // Focus first, without scrolling, so RHF's setFocus (a no-op on an already
+          // focused control) cannot fire an instant scroll that pre-empts the smooth one
+          el.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: true });
+          form.setFocus(path as FieldPath<InspectionFormData>, { shouldSelect: false });
+          el.scrollIntoView?.({ behavior: "smooth", block: "center" });
         }),
       );
     },
-    [form, setSectionOpen],
+    [form, setSectionOpen, clearHighlight],
   );
 
   const steps = [
@@ -156,7 +186,7 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
           facilityAddress={inspection.facilityAddress}
           customerEmail={inspection.customerEmail}
           isFromWorkiz={inspection.isFromWorkiz}
-          selectedMediaIds={Array.from(selectedMediaIds)}
+          selectedMediaIds={selectedMediaIdList}
           onStatusChange={setStatus}
           flush={flush}
           getFormData={form.getValues}
@@ -168,6 +198,7 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
           {steps.map((step, index) => (
             <ReviewSection
               key={STEP_LABELS[index]}
+              id={sectionHeaderId(index)}
               title={STEP_LABELS[index]}
               open={openSections[index] ?? false}
               onOpenChange={(open) => setSectionOpen(index, open)}

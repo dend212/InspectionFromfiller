@@ -2,7 +2,7 @@
 
 import { CheckCircle, Link2, Loader2, Mail, RotateCcw, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SendEmailDialog } from "@/components/dashboard/send-email-dialog";
 import {
@@ -89,10 +89,11 @@ export function ReviewActions({
       .finally(() => setRecommendationsLoaded(true));
   }, [inspectionId, recommendationsLoaded]);
 
-  const handleFinalized = () => {
+  // Stable: FinalizeDialog receives it as a prop on every render
+  const handleFinalized = useCallback(() => {
     onStatusChange("completed");
     router.refresh();
-  };
+  }, [onStatusChange, router]);
 
   const handleReturnClick = async () => {
     setIsFlushing(true);
