@@ -28,6 +28,7 @@ import {
 } from "@/lib/constants/inspection";
 import { AiCommentButton, CharacterCount } from "@/components/inspection/ai-comment-button";
 import type { SepticTankContext } from "@/lib/ai/rewrite-comments";
+import { createEmptyTank } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 
 /** Deficiency labels matching the schema boolean fields */
@@ -174,46 +175,10 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
     const currentTanks = form.getValues("septicTank.tanks") ?? [];
     if (currentTanks.length === numberOfTanks) return;
 
-    const emptyTank = {
-      liquidLevel: "",
-      primaryScumThickness: "",
-      primarySludgeThickness: "",
-      secondaryScumThickness: "",
-      secondarySludgeThickness: "",
-      liquidLevelNotDetermined: false,
-      tankDimensions: "",
-      tankCapacity: "",
-      capacityBasis: "",
-      capacityNotDeterminedReason: "",
-      tankMaterial: "",
-      tankMaterialOther: "",
-      accessOpenings: "",
-      accessOpeningsOther: "",
-      lidsRisersPresent: "" as "" | "present" | "not_present",
-      lidsSecurelyFastened: "" as "" | "yes" | "no",
-      numberOfCompartments: "",
-      compartmentsOther: "",
-      compromisedTank: "" as "" | "yes" | "no",
-      deficiencyRootInvasion: false,
-      deficiencyExposedRebar: false,
-      deficiencyCracks: false,
-      deficiencyDamagedInlet: false,
-      deficiencyDamagedOutlet: false,
-      deficiencyDamagedLids: false,
-      deficiencyDeterioratingConcrete: false,
-      deficiencyOther: false,
-      baffleMaterial: [] as string[],
-      inletBaffleCondition: [] as string[],
-      outletBaffleCondition: [] as string[],
-      interiorBaffleCondition: [] as string[],
-      effluentFilterPresent: "" as "" | "present" | "not_present",
-      effluentFilterServiced: "" as "" | "serviced" | "not_serviced",
-    };
-
     if (currentTanks.length < numberOfTanks) {
       const newTanks = [...currentTanks];
       for (let i = currentTanks.length; i < numberOfTanks; i++) {
-        newTanks.push({ ...emptyTank });
+        newTanks.push(createEmptyTank());
       }
       form.setValue("septicTank.tanks", newTanks);
     } else {
