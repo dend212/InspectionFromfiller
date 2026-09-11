@@ -60,6 +60,15 @@ describe("provenanceEntrySchema", () => {
     expect(
       provenanceEntrySchema.safeParse({ ...VALID, sourceUrl: "http://example.com" }).success,
     ).toBe(false);
+    // Protocol-relative and newline-smuggled schemes
+    expect(provenanceEntrySchema.safeParse({ ...VALID, sourceUrl: "//evil.com" }).success).toBe(false);
+    expect(
+      provenanceEntrySchema.safeParse({ ...VALID, sourceUrl: "java\nscript:alert(1)" }).success,
+    ).toBe(false);
+    expect(
+      provenanceEntrySchema.safeParse({ ...VALID, sourceUrl: " https://example.com" }).success,
+    ).toBe(false);
+    expect(provenanceEntrySchema.safeParse({ ...VALID, sourceUrl: "/apix/evil" }).success).toBe(false);
     expect(
       provenanceEntrySchema.safeParse({
         ...VALID,

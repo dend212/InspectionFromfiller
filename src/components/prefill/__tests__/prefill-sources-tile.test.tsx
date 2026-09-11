@@ -113,6 +113,34 @@ describe("PrefillSourcesTile", () => {
     expect(screen.getByText(/last run/i)).toBeInTheDocument();
   });
 
+  it("never renders an unsafe stage link (javascript:, protocol-relative, newline-smuggled, http:)", () => {
+    renderTile({
+      run: {
+        ...RUN,
+        stages: {
+          ...RUN.stages,
+          permits: {
+            status: "done",
+            summary: "1 permit found",
+            links: [
+              { label: "Bad js", url: "javascript:alert(1)" },
+              { label: "Bad relative", url: "//evil.com" },
+              { label: "Bad newline", url: "java\nscript:alert(1)" },
+              { label: "Bad http", url: "http://example.com" },
+              { label: "Good", url: "/api/inspections/insp-1/records/rec-1" },
+            ],
+          },
+        },
+      },
+    });
+    const links = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(links).toEqual(["https://mcassessor.maricopa.gov/mcs/?q=219-11-121", "/api/inspections/insp-1/records/rec-1"]);
+    for (const label of ["Bad js", "Bad relative", "Bad newline", "Bad http"]) {
+      expect(screen.queryByRole("link", { name: label })).toBeNull();
+    }
+    expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
+  });
+
   it("renders the Last run time client-only so SSR (UTC) and the browser never disagree", () => {
     // Server pass: no locale-formatted time in the markup (that's what caused the hydration mismatch)
     let html = "";

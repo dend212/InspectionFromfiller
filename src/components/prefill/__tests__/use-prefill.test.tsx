@@ -281,7 +281,20 @@ describe("usePrefill", () => {
       expect(formRef.current?.getValues("facilityInfo.taxParcelNumber")).toBe("219-11-121");
     });
     await waitFor(() => {
-      expect(calls(mock)).toContain("POST /api/inspections/insp-1/prefill/run-3/applied");
+      expect(result.current.prefill.run?.appliedAt).toBeTruthy();
+    });
+    // Applied exactly once (start()'s adopt + no second pass from a poll/mount), with provenance attached
+    expect(calls(mock).filter((c) => c === "POST /api/inspections/insp-1/prefill/run-3/applied")).toHaveLength(1);
+    expect(result.current.prov.provenance["facilityInfo.taxParcelNumber"]).toMatchObject({
+      source: "assessor",
+      state: "prefilled",
+      value: "219-11-121",
+      runId: "run-3",
+    });
+    expect(result.current.prov.provenance["designFlow.numberOfBedrooms"]).toMatchObject({
+      source: "permit",
+      state: "suggested",
+      runId: "run-3",
     });
   });
 
@@ -309,7 +322,20 @@ describe("usePrefill", () => {
       expect(formRef.current?.getValues("facilityInfo.taxParcelNumber")).toBe("219-11-121");
     });
     await waitFor(() => {
-      expect(calls(mock)).toContain("POST /api/inspections/insp-1/prefill/run-1/applied");
+      expect(result.current.prefill.run?.appliedAt).toBeTruthy();
+    });
+    // The awaiting_selection initialRun was never applied; the refetched done run is applied exactly once
+    expect(calls(mock).filter((c) => c === "POST /api/inspections/insp-1/prefill/run-1/applied")).toHaveLength(1);
+    expect(result.current.prov.provenance["facilityInfo.taxParcelNumber"]).toMatchObject({
+      source: "assessor",
+      state: "prefilled",
+      value: "219-11-121",
+      runId: "run-1",
+    });
+    expect(result.current.prov.provenance["designFlow.numberOfBedrooms"]).toMatchObject({
+      source: "permit",
+      state: "suggested",
+      runId: "run-1",
     });
   });
 
