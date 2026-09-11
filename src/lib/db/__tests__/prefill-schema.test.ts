@@ -73,6 +73,13 @@ describe("migration 0015", () => {
     expect(sql).toContain("inspection_records_inspection_idx");
   });
 
+  it("backstops the one-active-run lock with a partial unique index", () => {
+    expect(sql).toContain(
+      "CREATE UNIQUE INDEX IF NOT EXISTS inspection_prefill_runs_one_active_idx",
+    );
+    expect(sql).toContain("WHERE status IN ('queued', 'running')");
+  });
+
   it("enables RLS on both tables with a read policy", () => {
     expect(sql).toContain("ALTER TABLE public.inspection_prefill_runs ENABLE ROW LEVEL SECURITY");
     expect(sql).toContain("ALTER TABLE public.inspection_records ENABLE ROW LEVEL SECURITY");

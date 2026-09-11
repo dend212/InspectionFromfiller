@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS public.inspection_prefill_runs (
 CREATE INDEX IF NOT EXISTS inspection_prefill_runs_inspection_created_idx
   ON public.inspection_prefill_runs (inspection_id, created_at DESC);
 
+-- One active run per inspection (backstop for the route's check-then-act lock)
+CREATE UNIQUE INDEX IF NOT EXISTS inspection_prefill_runs_one_active_idx
+  ON public.inspection_prefill_runs (inspection_id)
+  WHERE status IN ('queued', 'running');
+
 CREATE TABLE IF NOT EXISTS public.inspection_records (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   inspection_id uuid NOT NULL REFERENCES public.inspections(id) ON DELETE CASCADE,

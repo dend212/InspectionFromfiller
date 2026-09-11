@@ -56,12 +56,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "A prefill run is already in progress" }, { status: 409 });
   }
 
-  const runId = await createRun({
-    inspectionId: id,
-    trigger: parsed.data.trigger ?? "manual",
-    input,
-    createdBy: access.userId,
-  });
+  let runId: string;
+  try {
+    runId = await createRun({
+      inspectionId: id,
+      trigger: parsed.data.trigger ?? "manual",
+      input,
+      createdBy: access.userId,
+    });
+  } catch (err) {
+    // Backstop for the check-then-act lock above: a concurrent POST can slip past
+    // findActiveRun before either insert lands, so the partial unique index (migration
+    // 0015) is the actual guarantee — postgres.js surfaces a violation as `code: "23505"`.
+    if (err && typeof err === "object" && "code" in err && err.code === "23505") {
+      return NextResponse.json(
+        { error: "A prefill run is already in progress" },
+        { status: 409 },
+      );
+    }
+    throw err;
+  }
 
   after(() => runPrefill(runId));
 

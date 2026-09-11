@@ -215,6 +215,20 @@ describe("POST /api/inspections/[id]/prefill", () => {
     expect(mockCreateRun).not.toHaveBeenCalled();
   });
 
+  it("returns 409 when createRun hits the one-active-run unique index, without scheduling after()", async () => {
+    mockCreateRun.mockRejectedValueOnce({ code: "23505" });
+    const res = await POST(makeRequest({}), makeParams("insp-1"));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("A prefill run is already in progress");
+    expect(mockAfter).not.toHaveBeenCalled();
+  });
+
+  it("rethrows a non-unique-violation error from createRun", async () => {
+    mockCreateRun.mockRejectedValueOnce(new Error("connection reset"));
+    await expect(POST(makeRequest({}), makeParams("insp-1"))).rejects.toThrow("connection reset");
+    expect(mockAfter).not.toHaveBeenCalled();
+  });
+
   it("lets admins start runs on non-drafts they do not own", async () => {
     mockGetSession.mockResolvedValueOnce({
       data: { session: { access_token: fakeAccessToken({ user_role: "admin" }) } },
