@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 import { type UseFormReturn, useForm } from "react-hook-form";
@@ -55,6 +55,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount before unstubbing fetch — otherwise RTL's own auto-unmount cleanup
+  // fires after the stub is gone and the provider's unmount flush hits real
+  // fetch, logging "[provenance] save failed" noise to stderr.
+  cleanup();
   vi.unstubAllGlobals();
 });
 
@@ -113,6 +117,27 @@ describe("SuggestionChip", () => {
     expect(screen.queryByRole("button", { name: /accept suggestion/i })).toBeNull();
     expect(screen.getByRole("button", { name: "Dismiss suggestion" })).toBeInTheDocument();
     expect(document.querySelector("[data-slot=suggestion-chip]")).toHaveClass("border-amber-300");
+  });
+
+  it("puts the full text in title so a truncated chip is still readable", () => {
+    render(
+      <Harness initial={{ [FIELD]: SUGGESTION }}>
+        <SuggestionChip fieldPath={FIELD} />
+      </Harness>,
+    );
+    expect(screen.getByRole("button", { name: /accept suggestion/i })).toHaveAttribute(
+      "title",
+      suggestionText(SUGGESTION),
+    );
+  });
+
+  it("puts the full warning message in title so a truncated warning chip is still readable", () => {
+    render(
+      <Harness initial={{ "facilityInfo.wastewaterSource": WARNING }}>
+        <SuggestionChip fieldPath="facilityInfo.wastewaterSource" />
+      </Harness>,
+    );
+    expect(screen.getByText(WARNING.explanation)).toHaveAttribute("title", WARNING.explanation);
   });
 
   it("is inert when read-only", () => {

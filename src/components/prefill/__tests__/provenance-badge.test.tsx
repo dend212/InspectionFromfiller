@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 import { useForm } from "react-hook-form";
@@ -55,6 +55,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount before unstubbing fetch — otherwise RTL's own auto-unmount cleanup
+  // fires after the stub is gone and the provider's unmount flush hits real
+  // fetch, logging "[provenance] save failed" noise to stderr.
+  cleanup();
   vi.unstubAllGlobals();
 });
 
@@ -96,6 +100,30 @@ describe("ProvenanceBadge", () => {
     expect(link).toHaveAttribute("href", "/api/inspections/insp-1/records/rec-1#page=1");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("renders an https:// source URL as a link", async () => {
+    const user = userEvent.setup();
+    renderBadge({ ...ENTRY, sourceUrl: "https://mcassessor.maricopa.gov/mcs/?q=219-11-121" });
+    await user.click(screen.getByRole("button", { name: /prefilled from permit records/i }));
+    const link = await screen.findByRole("link", { name: /open source/i });
+    expect(link).toHaveAttribute("href", "https://mcassessor.maricopa.gov/mcs/?q=219-11-121");
+  });
+
+  it("never renders an unsafe sourceUrl as a link, showing the page number as plain text instead", async () => {
+    const user = userEvent.setup();
+    for (const unsafe of [
+      "javascript:alert(1)",
+      "data:text/html,<script>alert(1)</script>",
+      "http://example.com",
+    ]) {
+      const { unmount } = renderBadge({ ...ENTRY, sourceUrl: unsafe });
+      await user.click(screen.getByRole("button", { name: /prefilled from permit records/i }));
+      expect(await screen.findByText("Permit OW-17-00474 · Discharge Authorization p.1")).toBeInTheDocument();
+      expect(screen.queryByRole("link")).toBeNull();
+      expect(screen.getByText("p. 1")).toBeInTheDocument();
+      unmount();
+    }
   });
 
   it("Verify turns the badge into the verified state", async () => {

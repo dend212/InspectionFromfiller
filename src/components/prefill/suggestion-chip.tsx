@@ -39,12 +39,15 @@ export function SuggestionChip({ fieldPath }: SuggestionChipProps) {
       )}
     >
       {isWarning ? (
-        <span className="truncate">{entry.explanation}</span>
+        <span className="truncate" title={entry.explanation}>
+          {entry.explanation}
+        </span>
       ) : (
         <button
           type="button"
           disabled={readOnly}
           aria-label={`Accept suggestion from ${meta.label}: ${formatProvenanceValue(entry.value)}`}
+          title={suggestionText(entry)}
           onClick={() => acceptSuggestion(fieldPath)}
           className="truncate text-left underline-offset-2 hover:underline disabled:no-underline"
         >

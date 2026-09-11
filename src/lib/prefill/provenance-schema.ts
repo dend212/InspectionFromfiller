@@ -4,10 +4,14 @@ import { z } from "zod";
 export const MAX_PROVENANCE_ENTRIES = 500;
 
 /** Rendered as <a href> in the badge popover — only https:// and our own /api/ paths, never javascript:/data:/http: */
+export function isSafeSourceUrl(url: string): boolean {
+  return url.startsWith("https://") || url.startsWith("/api/");
+}
+
 const sourceUrlSchema = z
   .string()
   .max(2048)
-  .refine((u) => u.startsWith("https://") || u.startsWith("/api/"), {
+  .refine(isSafeSourceUrl, {
     message: "sourceUrl must start with https:// or /api/",
   });
 

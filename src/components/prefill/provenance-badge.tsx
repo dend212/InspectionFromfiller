@@ -4,6 +4,7 @@ import { Check, ExternalLink } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { isSafeSourceUrl } from "@/lib/prefill/provenance-schema";
 import { EDITED_DOT_CLASS, SOURCE_META, VERIFIED_DOT_CLASS } from "@/lib/prefill/sources";
 import type { ProvenanceEntry } from "@/lib/prefill/types";
 import { cn } from "@/lib/utils";
@@ -84,7 +85,7 @@ export function ProvenanceBadge({ fieldPath }: ProvenanceBadgeProps) {
             “{entry.evidence}”
           </blockquote>
         )}
-        {entry.sourceUrl && (
+        {entry.sourceUrl && isSafeSourceUrl(entry.sourceUrl) ? (
           <a
             href={entry.sourceUrl}
             target="_blank"
@@ -94,6 +95,8 @@ export function ProvenanceBadge({ fieldPath }: ProvenanceBadgeProps) {
             <ExternalLink className="h-3 w-3" aria-hidden="true" />
             Open source{entry.page ? ` (p. ${entry.page})` : ""}
           </a>
+        ) : (
+          entry.page && <p className="text-muted-foreground">p. {entry.page}</p>
         )}
         {!readOnly && (
           <div className="flex gap-2 pt-1">
