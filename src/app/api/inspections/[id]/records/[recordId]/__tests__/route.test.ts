@@ -10,6 +10,7 @@ const {
   mockSelectInspection,
   mockSelectRecord,
   mockGetRecordSignedUrl,
+  mockWhere,
   state,
 } = vi.hoisted(() => {
   const mockGetUser = vi.fn();
@@ -17,6 +18,7 @@ const {
   const mockSelectInspection = vi.fn();
   const mockSelectRecord = vi.fn();
   const mockGetRecordSignedUrl = vi.fn();
+  const mockWhere = vi.fn();
   const mockCreateClient = vi.fn().mockResolvedValue({
     auth: { getUser: mockGetUser, getSession: mockGetSession },
   });
@@ -27,17 +29,19 @@ const {
     mockSelectInspection,
     mockSelectRecord,
     mockGetRecordSignedUrl,
+    mockWhere,
     state: { selectCall: 0 },
   };
 });
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
 
-// 1st select = inspection lookup, 2nd select = record lookup (both end in .limit(1))
+// 1st select = inspection lookup, 2nd select = record lookup (both end in .limit(1)).
+// `where` is a shared spy so a test can inspect exactly what each query was scoped by.
 vi.mock("@/lib/db", () => {
   const chain = {
     from: vi.fn().mockReturnThis(),
-    where: vi.fn().mockReturnThis(),
+    where: mockWhere.mockReturnThis(),
     limit: vi.fn(() => (++state.selectCall === 1 ? mockSelectInspection() : mockSelectRecord())),
   };
   return { db: { select: vi.fn(() => chain) } };
@@ -65,6 +69,8 @@ vi.mock("@/lib/storage/record-storage", () => ({
 // ---------------------------------------------------------------------------
 // Import handler
 // ---------------------------------------------------------------------------
+import { and, eq } from "drizzle-orm";
+import { inspectionRecords } from "@/lib/db/schema";
 import { checkInspectionAccess } from "@/lib/supabase/auth-helpers";
 import { GET } from "../route";
 
@@ -131,6 +137,17 @@ describe("GET /api/inspections/[id]/records/[recordId]", () => {
     expect(res.headers.get("location")).toBe("https://storage.example/signed/rec-1.pdf?token=abc");
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(mockGetRecordSignedUrl).toHaveBeenCalledWith("records/insp-1/rec-1.pdf", 600);
+  });
+
+  it("scopes the record lookup to both the record id and the inspection id from the URL", async () => {
+    await GET(new Request("http://localhost"), makeParams("insp-1", "rec-1"));
+    // where() call 0 is the inspection lookup; call 1 is the record lookup. This fails
+    // if a refactor ever drops the inspectionId clause, since the actual arg would then
+    // be a bare eq() instead of and(eq(id), eq(inspectionId)).
+    const recordWhereArg = mockWhere.mock.calls[1]?.[0];
+    expect(recordWhereArg).toEqual(
+      and(eq(inspectionRecords.id, "rec-1"), eq(inspectionRecords.inspectionId, "insp-1")),
+    );
   });
 
   it("returns 500 when signing fails", async () => {
