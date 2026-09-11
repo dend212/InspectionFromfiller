@@ -338,6 +338,7 @@ describe("draftRecommendations", () => {
     expect(args.system[0].cache_control).toEqual({ type: "ephemeral" });
     expect(args.system[0].text).toContain("Start every line with \"• \"");
     expect(args.messages).toEqual([{ role: "user", content: formatRecommendationInput(ctx) }]);
+    expect(mockCreate.mock.calls[0][1]).toEqual({ timeout: 20000, maxRetries: 1 });
   });
 
   it("normalises the model output", async () => {

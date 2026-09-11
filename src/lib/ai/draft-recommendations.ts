@@ -181,14 +181,19 @@ export function normalizeRecommendations(raw: string): string {
 export async function draftRecommendations(ctx: RecommendationContext): Promise<string> {
   if (!hasActionableInput(ctx)) return FALLBACK_RECOMMENDATION;
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 300,
-    // cache_control is a silent no-op below Sonnet 4.6's 1024-token minimum; kept so the
-    // prompt caches automatically if it grows (expect cache_read_input_tokens: 0 today).
-    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: formatRecommendationInput(ctx) }],
-  });
+  const response = await anthropic.messages.create(
+    {
+      model: "claude-sonnet-4-6",
+      max_tokens: 300,
+      // cache_control is a silent no-op below Sonnet 4.6's 1024-token minimum; kept so the
+      // prompt caches automatically if it grows (expect cache_read_input_tokens: 0 today).
+      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: formatRecommendationInput(ctx) }],
+    },
+    // A hung or slow call must not block the dialog indefinitely (the textarea is unmounted
+    // while drafting): fail into the 502 path in ≤40s instead of the SDK's 10-minute default.
+    { timeout: 20_000, maxRetries: 1 },
+  );
 
   const textBlock = response.content.find((block) => block.type === "text");
   const text = textBlock && textBlock.type === "text" ? textBlock.text : "";

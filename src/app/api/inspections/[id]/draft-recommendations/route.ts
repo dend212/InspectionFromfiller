@@ -6,6 +6,10 @@ import { inspections } from "@/lib/db/schema";
 import { getUserRole } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
 
+// Bounds the platform's own function timeout to match the model call's 20s timeout (see
+// draft-recommendations.ts) so a hung Anthropic API can't run indefinitely on Vercel.
+export const maxDuration = 30;
+
 /** Simple in-memory rate limiter: inspectionId → timestamps (same shape as rewrite-comments) */
 const draftTimestamps = new Map<string, number[]>();
 const MAX_DRAFTS_PER_HOUR = 5;
