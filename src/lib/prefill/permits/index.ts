@@ -202,7 +202,8 @@ async function storeHits(
     .slice(0, SUMMARY_LIST_LIMIT)
     .map((h) => `${h.candidate.permitNumber} ${h.candidate.docType}`);
   const overflow = ranked.length > SUMMARY_LIST_LIMIT ? ", …" : "";
-  const parts = [`${plural(hits.length, "permit document")} found: ${listed.join(", ")}${overflow}`];
+  const headline = `${plural(hits.length, "permit document")} found: ${listed.join(", ")}${overflow}`;
+  const parts = [headline];
   if (tooLarge > 0) parts.push(`${tooLarge} over 25 MB not downloaded`);
   if (failed > 0) parts.push(`${failed} download failed`);
   if (notDownloaded > 0) parts.push(`${notDownloaded} not downloaded (out of time)`);
@@ -280,8 +281,10 @@ export async function runPermitsStage(
           proposals: [],
           candidates: outcome.hits.map((h) => h.candidate),
         };
-      case "found":
-        return storeHits(outcome.hits, ctx, deps, clock, failedArchivesNote(outcome.failedArchives));
+      case "found": {
+        const note = failedArchivesNote(outcome.failedArchives);
+        return storeHits(outcome.hits, ctx, deps, clock, note);
+      }
     }
   } catch (err) {
     console.error("[prefill/permits] stage crashed:", err);
