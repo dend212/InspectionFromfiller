@@ -76,6 +76,16 @@ describe("POST /api/inspections/[id]/prefill/[runId]/applied", () => {
     expect((await POST(makeRequest(), makeParams("insp-1", "run-1"))).status).toBe(404);
   });
 
+  it("returns 409 unless the run is done (a hand-crafted call must not suppress a later application)", async () => {
+    for (const status of ["queued", "running", "awaiting_selection", "failed"]) {
+      mockLoadRunRow.mockResolvedValueOnce({ id: "run-1", inspectionId: "insp-1", status });
+      const res = await POST(makeRequest(), makeParams("insp-1", "run-1"));
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toBe("Run is not done");
+    }
+    expect(mockMarkApplied).not.toHaveBeenCalled();
+  });
+
   it("marks the run applied", async () => {
     const res = await POST(makeRequest(), makeParams("insp-1", "run-1"));
     expect(res.status).toBe(200);

@@ -44,6 +44,9 @@ describe("assessorProposals", () => {
       });
     }
     expect(proposals[0].provenance.evidence).toBe("OWNER_NAME: JOHN DOE");
+    // County is not read from any parcel attribute — explanation only, no synthetic evidence
+    const county = proposals.find((p) => p.fieldPath === "facilityInfo.facilityCounty");
+    expect(county?.provenance.evidence).toBeUndefined();
   });
 
   it("skips empty values and falls back to the searched APN for the parcel number", () => {

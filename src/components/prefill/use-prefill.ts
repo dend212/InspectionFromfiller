@@ -3,18 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FieldPath, UseFormReturn } from "react-hook-form";
 import { mergeProposals, normalizeFieldPath } from "@/lib/prefill/merge";
+import { ensureTankArrayCapacity } from "@/lib/prefill/tank-capacity";
 import type { PrefillAddress, PrefillRunDTO, PrefillTrigger } from "@/lib/prefill/types";
 import { emptyStages } from "@/lib/prefill/types";
-import { createEmptyTank } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 import { useProvenance } from "./provenance-context";
+
+export { ensureTankArrayCapacity } from "@/lib/prefill/tank-capacity";
 
 export const PREFILL_POLL_MS = 2000;
 
 const ACTIVE_STATUSES: ReadonlySet<string> = new Set(["queued", "running"]);
-
-/** Matches "septicTank.tanks.<index>.<field>" once normalizeFieldPath has turned [i] into .i */
-const TANK_FIELD_RE = /^septicTank\.tanks\.(\d+)\.(.+)$/;
 
 export interface StartPrefillInput {
   apn?: string;
@@ -58,39 +57,6 @@ function placeholderRun(id: string, inspectionId: string, trigger: PrefillTrigge
 }
 
 /**
- * A fill targeting `septicTank.tanks.<i>.<field>` needs the tanks array to be at least
- * `i + 1` long before `form.setValue` can reach it. Grows it with blank tanks (the same
- * shape step-septic-tank.tsx uses) and bumps numberOfTanks to match when it's empty or
- * smaller than the grown length.
- */
-function ensureTankArrayCapacity(form: UseFormReturn<InspectionFormData>, fills: Array<{ fieldPath: string }>): void {
-  let maxIndex = -1;
-  for (const fill of fills) {
-    const match = TANK_FIELD_RE.exec(fill.fieldPath);
-    if (match) {
-      const index = Number.parseInt(match[1], 10);
-      if (index > maxIndex) maxIndex = index;
-    }
-  }
-  if (maxIndex < 0) return;
-
-  const requiredLength = maxIndex + 1;
-  const currentTanks = form.getValues("septicTank.tanks") ?? [];
-  if (currentTanks.length >= requiredLength) return;
-
-  const grown = [...currentTanks];
-  while (grown.length < requiredLength) {
-    grown.push(createEmptyTank());
-  }
-  form.setValue("septicTank.tanks", grown);
-
-  const currentCount = form.getValues("septicTank.numberOfTanks");
-  if (!currentCount || Number.parseInt(currentCount, 10) < requiredLength) {
-    form.setValue("septicTank.numberOfTanks", String(requiredLength));
-  }
-}
-
-/**
  * Starts prefill runs, polls them, and applies finished runs to the form via
  * mergeProposals + the provenance context. Must be used inside ProvenanceProvider.
  */
@@ -114,7 +80,7 @@ export function usePrefill({ inspectionId, form, enabled, initialRun }: UsePrefi
         const { fills, provenance: next } = mergeProposals(form.getValues(), provenanceRef.current, candidate.proposals, {
           runId: candidate.id,
         });
-        ensureTankArrayCapacity(form, fills);
+        ensureTankArrayCapacity(form, fills.map((fill) => fill.fieldPath));
         for (const fill of fills) {
           form.setValue(normalizeFieldPath(fill.fieldPath) as FieldPath<InspectionFormData>, fill.value as never, {
             shouldDirty: true,

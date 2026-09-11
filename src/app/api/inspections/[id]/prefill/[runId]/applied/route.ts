@@ -15,6 +15,10 @@ export async function POST(
   if (!run || run.inspectionId !== id) {
     return NextResponse.json({ error: "Run not found" }, { status: 404 });
   }
+  // Only a finished run can be applied — otherwise a stray call would suppress its later application
+  if (run.status !== "done") {
+    return NextResponse.json({ error: "Run is not done" }, { status: 409 });
+  }
 
   await markRunApplied(runId);
   return NextResponse.json({ ok: true });

@@ -1,10 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
-import type { UseFormReturn } from "react-hook-form";
+import { type UseFormReturn, useForm } from "react-hook-form";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useFormScan } from "@/hooks/use-form-scan";
 import type { ScanResult } from "@/lib/ai/scan-types";
 import { provenancePatchBodySchema } from "@/lib/prefill/provenance-schema";
 import type { FieldProvenance } from "@/lib/prefill/types";
+import { createEmptyTank, getDefaultFormValues } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -90,6 +91,31 @@ describe("useFormScan.applyFields provenance", () => {
     expect(entries["facilityInfo.facilityCity"].value).toBe("");
     // Exactly what PATCH /provenance validates — a single bad entry would reject the whole map
     expect(provenancePatchBodySchema.safeParse({ fieldProvenance: entries }).success).toBe(true);
+  });
+
+  it("grows a real form's tanks array (shared ensureTankArrayCapacity) for a tanks[N] scan field", async () => {
+    const scan: ScanResult = {
+      fields: [{ fieldPath: "septicTank.tanks[1].tankCapacity", value: "1000", confidence: 0.9, source: "Page 2" }],
+      metadata: { pagesProcessed: 1, totalFieldsExtracted: 1, processingTimeMs: 100 },
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(scan) }));
+    const defaults = getDefaultFormValues("Tech") as unknown as InspectionFormData;
+    const { result: formHook } = renderHook(() =>
+      useForm<InspectionFormData>({
+        defaultValues: { ...defaults, septicTank: { ...defaults.septicTank, tanks: [] } },
+      }),
+    );
+    const { result } = renderHook(() => useFormScan());
+
+    act(() => result.current.addUploadedImage({ storagePath: "a.jpg", previewUrl: "blob:a", fileName: "a.jpg" }));
+    await act(() => result.current.startScan("insp-1"));
+    act(() => result.current.applyFields(formHook.current));
+
+    const tanks = formHook.current.getValues("septicTank.tanks");
+    expect(tanks).toHaveLength(2);
+    expect(tanks[0]).toEqual(createEmptyTank());
+    expect(tanks[1]).toEqual({ ...createEmptyTank(), tankCapacity: "1000" });
+    expect(formHook.current.getValues("septicTank.numberOfTanks")).toBe("2");
   });
 
   it("still works without an onProvenance callback", async () => {

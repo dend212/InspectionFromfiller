@@ -8,8 +8,8 @@ import { AUTO_SELECT_CONFIDENCE } from "@/lib/ai/scan-types";
 import type { ExtractedField } from "@/lib/ai/scan-types";
 import { normalizeFieldPath } from "@/lib/prefill/merge";
 import { fieldProvenanceSchema } from "@/lib/prefill/provenance-schema";
+import { ensureTankArrayCapacity } from "@/lib/prefill/tank-capacity";
 import type { FieldProvenance, ProvenanceEntry, ProvenanceValue } from "@/lib/prefill/types";
-import { createEmptyTank } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 
 export type ScanState = "idle" | "uploading" | "scanning" | "reviewing" | "done";
@@ -180,27 +180,16 @@ export function useFormScan(): UseFormScanReturn {
         if (tankMatch) {
           const tankIndex = Number.parseInt(tankMatch[1], 10);
           const tankField = tankMatch[2];
-          const currentTanks = form.getValues("septicTank.tanks") ?? [];
 
-          // Ensure the tanks array is long enough
-          while (currentTanks.length <= tankIndex) {
-            currentTanks.push(createEmptyTank());
-          }
+          // Grow the array (and numberOfTanks) the same way prefill and acceptSuggestion do
+          ensureTankArrayCapacity(form, [field.fieldPath]);
 
-          // Set the field value on the tank object
-          // biome-ignore lint/suspicious/noExplicitAny: Dynamic form path
-          (currentTanks[tankIndex] as any)[tankField] = field.value;
+          // Replace the whole array so the provenance watcher sees one nested change
+          const currentTanks = [...(form.getValues("septicTank.tanks") ?? [])];
+          currentTanks[tankIndex] = { ...currentTanks[tankIndex], [tankField]: field.value };
           form.setValue("septicTank.tanks", currentTanks, {
             shouldDirty: true,
           });
-
-          // Bump numberOfTanks when it's empty or smaller than the array we just grew
-          // (same rule as usePrefill's ensureTankArrayCapacity).
-          const requiredLength = tankIndex + 1;
-          const currentCount = form.getValues("septicTank.numberOfTanks");
-          if (!currentCount || Number.parseInt(currentCount, 10) < requiredLength) {
-            form.setValue("septicTank.numberOfTanks", String(requiredLength));
-          }
         } else {
           // Standard dotted path (e.g., "facilityInfo.facilityName")
           // biome-ignore lint/suspicious/noExplicitAny: Dynamic form path

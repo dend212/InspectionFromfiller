@@ -85,10 +85,19 @@ describe("FormLabel / FormItem provenance integration", () => {
     expect(screen.queryByRole("button", { name: /prefilled from/i })).toBeNull();
   });
 
-  it("appends the badge inside the label for a prefilled field", () => {
+  it("renders the badge as a sibling of the label, not inside it, so the input's name stays clean", () => {
     render(<WithProvenance initial={{ "facilityInfo.facilityName": ENTRY }} />);
     const badge = screen.getByRole("button", { name: "Prefilled from County Assessor, 100% confidence" });
-    expect(badge.closest("label")).toHaveTextContent("Facility name");
+    // Not nested in the <label> (buttons inside labels are invalid HTML and pollute the accessible name)
+    expect(badge.closest("label")).toBeNull();
+    const label = screen.getByText("Facility name").closest("label");
+    expect(label).not.toBeNull();
+    expect(label).toHaveTextContent(/^Facility name$/);
+    // Same inline-flex row as the label
+    expect(badge.parentElement).toBe(label?.parentElement);
+    expect(label?.parentElement).toHaveClass("inline-flex");
+    // The control is announced by its label only
+    expect(screen.getByRole("textbox", { name: "Facility name" })).toBeInTheDocument();
     expect(document.querySelector("[data-slot=suggestion-chip]")).toBeNull();
   });
 

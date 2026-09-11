@@ -100,19 +100,21 @@ function FormLabel({
 }: React.ComponentProps<typeof LabelPrimitive.Root>) {
   const { error, formItemId, name } = useFormField();
 
-  // The badge is a <button>, i.e. interactive content: per the HTML spec clicking it
-  // does not activate the label's control, so it is safe inside the label.
+  // The badge is a <button>: rendered as a sibling of the <label>, not inside it, so
+  // the control's accessible name is only the label text (and the markup stays valid).
   return (
-    <Label
-      data-slot="form-label"
-      data-error={!!error}
-      className={cn("data-[error=true]:text-destructive", className)}
-      htmlFor={formItemId}
-      {...props}
-    >
-      {children}
+    <span className="inline-flex items-center gap-2">
+      <Label
+        data-slot="form-label"
+        data-error={!!error}
+        className={cn("data-[error=true]:text-destructive", className)}
+        htmlFor={formItemId}
+        {...props}
+      >
+        {children}
+      </Label>
       <ProvenanceBadge fieldPath={name} />
-    </Label>
+    </span>
   );
 }
 

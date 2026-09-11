@@ -9,7 +9,7 @@ import {
   useProvenance,
 } from "@/components/prefill/provenance-context";
 import type { FieldProvenance, ProvenanceEntry } from "@/lib/prefill/types";
-import { getDefaultFormValues } from "@/lib/validators/inspection";
+import { createEmptyTank, getDefaultFormValues } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 
 const NOW = "2026-09-11T10:00:00.000Z";
@@ -198,6 +198,26 @@ describe("ProvenanceProvider", () => {
     });
     act(() => result.current.acceptSuggestion("designFlow.numberOfBedrooms"));
     expect(formRef.current?.getValues("designFlow.numberOfBedrooms")).toBe("3");
+    expect(result.current.entry?.state).toBe("prefilled");
+  });
+
+  it("acceptSuggestion grows the tanks array to reach a suggested tank field", () => {
+    const formRef: FormRef = { current: null };
+    const { result } = renderHook(() => useProvenance("septicTank.tanks.1.tankCapacity"), {
+      wrapper: makeWrapper({
+        formRef,
+        tanks: [],
+        initial: {
+          "septicTank.tanks.1.tankCapacity": entry({ state: "suggested", value: "1000", source: "permit" }),
+        },
+      }),
+    });
+    act(() => result.current.acceptSuggestion("septicTank.tanks.1.tankCapacity"));
+    const tanks = formRef.current?.getValues("septicTank.tanks");
+    expect(tanks).toHaveLength(2);
+    expect(tanks?.[0]).toEqual(createEmptyTank());
+    expect(tanks?.[1]).toEqual({ ...createEmptyTank(), tankCapacity: "1000" });
+    expect(formRef.current?.getValues("septicTank.numberOfTanks")).toBe("2");
     expect(result.current.entry?.state).toBe("prefilled");
   });
 

@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { FieldPath, UseFormReturn } from "react-hook-form";
 import { getPath, normalizeFieldPath, valuesEqual } from "@/lib/prefill/merge";
+import { ensureTankArrayCapacity } from "@/lib/prefill/tank-capacity";
 import type { FieldProvenance, ProvenanceEntry } from "@/lib/prefill/types";
 import type { InspectionFormData } from "@/types/inspection";
 
@@ -179,6 +180,8 @@ export function ProvenanceProvider({
         clear(key);
         return;
       }
+      // A suggested tanks.<i>.* field may point past the current array (phase 3 permit proposals)
+      ensureTankArrayCapacity(form, [key]);
       form.setValue(key as FieldPath<InspectionFormData>, current.value as never, {
         shouldDirty: true,
         shouldValidate: true,

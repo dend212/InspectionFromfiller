@@ -18,13 +18,14 @@ export function assessorParcelUrl(apn: string): string {
   return `https://mcassessor.maricopa.gov/mcs/?q=${encodeURIComponent(apn)}`;
 }
 
-const FIELD_MAP: Array<{ fieldPath: string; key: keyof AssessorSummary; attribute: string }> = [
+/** `attribute` is the parcel attribute the value was read from; county is fixed by the source, not read */
+const FIELD_MAP: Array<{ fieldPath: string; key: keyof AssessorSummary; attribute?: string }> = [
   { fieldPath: "facilityInfo.facilityName", key: "ownerName", attribute: "OWNER_NAME" },
   { fieldPath: "facilityInfo.sellerName", key: "ownerName", attribute: "OWNER_NAME" },
   { fieldPath: "facilityInfo.facilityAddress", key: "physicalAddress", attribute: "PHYSICAL_ADDRESS" },
   { fieldPath: "facilityInfo.facilityCity", key: "city", attribute: "PHYSICAL_CITY" },
   { fieldPath: "facilityInfo.facilityZip", key: "zip", attribute: "PHYSICAL_ZIP" },
-  { fieldPath: "facilityInfo.facilityCounty", key: "county", attribute: "COUNTY" },
+  { fieldPath: "facilityInfo.facilityCounty", key: "county" },
   { fieldPath: "facilityInfo.taxParcelNumber", key: "apnFormatted", attribute: "APN_DASH" },
 ];
 
@@ -48,7 +49,7 @@ export function assessorProposals(summary: AssessorSummary, apn: string): Propos
         source: "assessor",
         confidence: 1,
         explanation,
-        evidence: `${attribute}: ${value}`,
+        evidence: attribute ? `${attribute}: ${value}` : undefined,
         sourceUrl,
       },
     });
