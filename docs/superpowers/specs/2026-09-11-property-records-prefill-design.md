@@ -73,7 +73,7 @@ src/components/ui/form.tsx    FormLabel renders <ProvenanceBadge>; FormItem rend
 
 All three stages are independent; each records its own status, summary, error and links on the run. A stage failure never fails the run.
 
-## 4. Data model (migration `0012_prefill_runs_records_provenance.sql`)
+## 4. Data model (migration `0015_prefill_runs_records_provenance.sql`)
 
 ### `inspection_prefill_runs`
 
@@ -134,7 +134,7 @@ type ProvenanceEntry = {
 type FieldProvenance = Record<string /* dotted fieldPath */, ProvenanceEntry>;
 ```
 
-Stored outside `form_data`, so the inspection Zod schema, the scan flow and the PDF pipeline are unaffected. `PATCH /api/inspections/[id]` accepts an optional `fieldProvenance` alongside `formData` (whole-map replace, validated against the type above). Cleared on `DELETE`; untouched by submit/finalize/return/reopen.
+Stored outside `form_data`, so the inspection Zod schema, the scan flow and the PDF pipeline are unaffected. Written through a dedicated `PATCH /api/inspections/[id]/provenance` route (`{ fieldProvenance }`, whole-map replace, validated against the type above) so the existing raw-body `PATCH /api/inspections/[id]` keeps its shape. Cleared on `DELETE`; untouched by submit/finalize/return/reopen.
 
 ## 5. Sources
 
@@ -281,10 +281,11 @@ All routes use the existing JWT-role checks; a user may run prefill on an inspec
 | `/api/inspections/[id]/prefill/[runId]/select` | POST | `{ recordIds: string[] }` → marks records selected, continues extraction via `after()`, run → `running`. |
 | `/api/inspections/[id]/prefill/[runId]/applied` | POST | sets `applied_at`. |
 | `/api/inspections/[id]/records/[recordId]` | GET | `302` to a 10-minute signed URL. Linked with plain `<a target="_blank" rel="noopener">` (never `next/link`, whose prefetch would fire the GET). |
-| `/api/inspections/[id]` | PATCH | additionally accepts `fieldProvenance`. |
+| `/api/inspections/[id]/provenance` | PATCH | `{ fieldProvenance }` — whole-map replace, same access rule as the inspection PATCH. |
+| `/api/inspections/[id]/prefill/latest` | GET | most recent run for the inspection (or `null`) — used on wizard mount. |
 | `/api/webhooks/workiz` | POST | after creating the draft, if an APN is present: insert a `webhook` run and `after(() => runPrefill(runId))`. |
 
-The **client hook** (`use-prefill.ts`) starts runs, polls, and when a run is `done` with `applied_at = null` runs `mergeProposals` against the live react-hook-form values, `setValue`s the fills, updates the provenance context, lets autosave PATCH `formData + fieldProvenance`, then POSTs `/applied`. On wizard mount it fetches the latest run and applies it if unapplied (this is how webhook-triggered runs reach the form).
+The **client hook** (`use-prefill.ts`) starts runs, polls, and when a run is `done` with `applied_at = null` runs `mergeProposals` against the live react-hook-form values, `setValue`s the fills, updates the provenance context, lets autosave PATCH `formData` and the provenance provider PATCH `fieldProvenance`, then POSTs `/applied`. On wizard mount it fetches the latest run and applies it if unapplied (this is how webhook-triggered runs reach the form).
 
 Background execution uses `after()` from `next/server` — never a floating promise (Vercel freezes the function once the response is sent).
 
