@@ -72,3 +72,20 @@ export async function loadLatestRunDTO(inspectionId: string): Promise<PrefillRun
   const records = await listRecordRows(run.id);
   return toPrefillRunDTO(run, records);
 }
+
+/**
+ * Used by the edit page to load the prefill panel's run without letting a DB error crash
+ * the page. Non-draft inspections never show the panel, so the query is skipped entirely.
+ */
+export async function loadLatestRunDTOForDraft(
+  inspectionId: string,
+  status: string,
+): Promise<PrefillRunDTO | null> {
+  if (status !== "draft") return null;
+  try {
+    return await loadLatestRunDTO(inspectionId);
+  } catch (err) {
+    console.error("[prefill] latest run load failed", err);
+    return null;
+  }
+}

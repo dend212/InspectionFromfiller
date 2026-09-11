@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { InspectionWizard } from "@/components/inspection/inspection-wizard";
 import { db } from "@/lib/db";
 import { inspections } from "@/lib/db/schema";
-import { loadLatestRunDTO } from "@/lib/prefill/run-dto";
+import { loadLatestRunDTOForDraft } from "@/lib/prefill/run-dto";
 import type { FieldProvenance } from "@/lib/prefill/types";
 import { createClient } from "@/lib/supabase/server";
 import type { InspectionFormData } from "@/types/inspection";
@@ -59,7 +59,7 @@ export default async function EditInspectionPage({ params }: { params: Promise<{
     }
   }
 
-  const prefillRun = await loadLatestRunDTO(inspection.id);
+  const prefillRun = await loadLatestRunDTOForDraft(inspection.id, inspection.status);
 
   return (
     <div className="mx-auto max-w-3xl">

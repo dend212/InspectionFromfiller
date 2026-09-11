@@ -16,6 +16,7 @@ import type { InspectionRecordRow, PrefillRunRow } from "@/lib/prefill/run-store
 import {
   isAbandonmentDocType,
   loadLatestRunDTO,
+  loadLatestRunDTOForDraft,
   loadRunDTO,
   toInspectionRecordDTO,
   toPrefillRunDTO,
@@ -122,5 +123,31 @@ describe("loadRunDTO / loadLatestRunDTO", () => {
     mockLoadLatestRunRow.mockResolvedValueOnce(RUN);
     const latest = await loadLatestRunDTO("insp-1");
     expect(latest?.id).toBe("run-1");
+  });
+});
+
+describe("loadLatestRunDTOForDraft", () => {
+  it("skips the query entirely for a non-draft inspection", async () => {
+    const result = await loadLatestRunDTOForDraft("insp-1", "submitted");
+    expect(result).toBeNull();
+    expect(mockLoadLatestRunRow).not.toHaveBeenCalled();
+  });
+
+  it("loads the latest run for a draft inspection", async () => {
+    mockLoadLatestRunRow.mockResolvedValueOnce(RUN);
+    const result = await loadLatestRunDTOForDraft("insp-1", "draft");
+    expect(result?.id).toBe("run-1");
+  });
+
+  it("swallows a DB error and returns null instead of throwing", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockLoadLatestRunRow.mockRejectedValueOnce(new Error("connection reset"));
+    const result = await loadLatestRunDTOForDraft("insp-1", "draft");
+    expect(result).toBeNull();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[prefill] latest run load failed",
+      expect.any(Error),
+    );
+    consoleErrorSpy.mockRestore();
   });
 });
