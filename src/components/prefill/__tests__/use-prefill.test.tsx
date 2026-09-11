@@ -4,9 +4,15 @@ import { type UseFormReturn, useForm } from "react-hook-form";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProvenanceProvider, useProvenance } from "@/components/prefill/provenance-context";
 import { PREFILL_POLL_MS, usePrefill } from "@/components/prefill/use-prefill";
+import * as merge from "@/lib/prefill/merge";
 import type { PrefillRunDTO } from "@/lib/prefill/types";
 import { createEmptyTank, getDefaultFormValues } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
+
+vi.mock("@/lib/prefill/merge", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/prefill/merge")>();
+  return { ...actual, mergeProposals: vi.fn(actual.mergeProposals) };
+});
 
 const DONE_RUN: PrefillRunDTO = {
   id: "run-1",
@@ -48,8 +54,18 @@ function installFetch(handler: Handler) {
   const mock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-    const route = handler(method, url, body) ?? { status: 404, body: { error: "no route" } };
-    return { ok: route.status < 400, status: route.status, json: () => Promise.resolve(route.body) };
+    const route =
+      handler(method, url, body) ??
+      // ProvenanceProvider's debounced PATCH runs underneath every test — accept it by default
+      (method === "PATCH" && url.endsWith("/provenance")
+        ? { status: 200, body: { saved: true } }
+        : { status: 404, body: { error: "no route" } });
+    return {
+      ok: route.status < 400,
+      status: route.status,
+      json: () => Promise.resolve(route.body),
+      text: () => Promise.resolve(JSON.stringify(route.body)),
+    };
   });
   vi.stubGlobal("fetch", mock);
   return mock;
@@ -295,6 +311,40 @@ describe("usePrefill", () => {
     await waitFor(() => {
       expect(calls(mock)).toContain("POST /api/inspections/insp-1/prefill/run-1/applied");
     });
+  });
+
+  it("logs, surfaces an error and leaves the run re-appliable when the merge throws", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(merge.mergeProposals).mockImplementationOnce(() => {
+      throw new Error("malformed proposal");
+    });
+    const mock = installFetch((method, url) => {
+      if (method === "POST" && url === "/api/inspections/insp-1/prefill/run-1/select") return { status: 200, body: { ok: true } };
+      if (method === "GET" && url === "/api/inspections/insp-1/prefill/run-1") return { status: 200, body: DONE_RUN };
+      if (method === "POST" && url === "/api/inspections/insp-1/prefill/run-1/applied") return { status: 200, body: { ok: true } };
+      return undefined;
+    });
+    const { result, formRef } = renderPrefill({ initialRun: DONE_RUN });
+
+    await waitFor(() => {
+      expect(result.current.prefill.error).toBe("Could not apply the prefill results — try again");
+    });
+    expect(errorSpy).toHaveBeenCalledWith("[prefill] could not apply run", "run-1", expect.any(Error));
+    expect(formRef.current?.getValues("facilityInfo.taxParcelNumber")).toBe("");
+    expect(calls(mock)).not.toContain("POST /api/inspections/insp-1/prefill/run-1/applied");
+
+    // The same run, seen again (here via the select refetch), applies normally
+    await act(async () => {
+      await result.current.prefill.selectCandidates(["edms_env:000972:PERMIT:"]);
+    });
+    await waitFor(() => {
+      expect(formRef.current?.getValues("facilityInfo.taxParcelNumber")).toBe("219-11-121");
+    });
+    await waitFor(() => {
+      expect(calls(mock).filter((c) => c === "POST /api/inspections/insp-1/prefill/run-1/applied")).toHaveLength(1);
+    });
+    expect(result.current.prefill.error).toBeNull();
+    errorSpy.mockRestore();
   });
 
   it("grows a shorter septicTank.tanks array to fit a fill's tank index (amendment A1)", async () => {

@@ -29,6 +29,7 @@ vi.mock("drizzle-orm", () => ({
   eq: vi.fn((_col: unknown, val: unknown) => ({ _col, val })),
 }));
 
+import { db } from "@/lib/db";
 import { requireInspectionAccess } from "@/lib/prefill/route-access";
 
 function fakeAccessToken(payload: Record<string, unknown>): string {
@@ -51,6 +52,20 @@ beforeEach(() => {
 });
 
 describe("requireInspectionAccess", () => {
+  it("selects formData only for edit access (the polling GETs must not load it)", async () => {
+    await requireInspectionAccess("insp-1", "view");
+    expect(vi.mocked(db.select).mock.calls[0][0]).toEqual({ inspectorId: "inspector_id", status: "status" });
+
+    const edit = await requireInspectionAccess("insp-1", "edit");
+    expect(vi.mocked(db.select).mock.calls[1][0]).toEqual({
+      inspectorId: "inspector_id",
+      status: "status",
+      formData: "form_data",
+    });
+    expect(edit.ok).toBe(true);
+    if (edit.ok) expect(edit.inspection.formData).toEqual({});
+  });
+
   it("returns a 401 response when unauthenticated", async () => {
     mockGetUser.mockResolvedValueOnce({ data: { user: null } });
     const access = await requireInspectionAccess("insp-1", "view");

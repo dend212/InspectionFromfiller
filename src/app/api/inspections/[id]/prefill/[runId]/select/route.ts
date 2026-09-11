@@ -43,7 +43,14 @@ export async function POST(
 
   await updateRun(runId, { status: "running" });
   const keys = parsed.data.candidateKeys;
-  after(() => continuePrefillAfterSelection(runId, keys));
+  // continuePrefillAfterSelection never throws; the guard keeps a rejection out of after() regardless
+  after(async () => {
+    try {
+      await continuePrefillAfterSelection(runId, keys);
+    } catch (err) {
+      console.error("[prefill] selection continuation rejected", runId, err);
+    }
+  });
 
   return NextResponse.json({ ok: true });
 }

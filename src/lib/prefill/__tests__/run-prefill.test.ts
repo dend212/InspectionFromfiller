@@ -112,13 +112,18 @@ describe("runPrefill", () => {
     expect(final.proposals).toEqual([]);
   });
 
-  it("marks the run failed (never throws) when persistence blows up", async () => {
-    mockUpdateRun.mockRejectedValueOnce(new Error("db down"));
+  it("marks the run failed (never throws) with a generic message and logs the real error", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const boom = new Error("db down: connection refused at 10.0.0.1:5432");
+    mockUpdateRun.mockRejectedValueOnce(boom);
     await expect(runPrefill("run-1")).resolves.toBeUndefined();
     const final = lastPatch();
     expect(final.status).toBe("failed");
-    expect(final.error).toBe("db down");
+    // Internal error text never reaches the tile
+    expect(final.error).toBe("Prefill failed — try again");
     expect(final.finishedAt).toBeInstanceOf(Date);
+    expect(errorSpy).toHaveBeenCalledWith("[prefill] run failed", "run-1", boom);
+    errorSpy.mockRestore();
   });
 
   it("swallows a load failure", async () => {
@@ -136,5 +141,23 @@ describe("continuePrefillAfterSelection", () => {
       error: "Candidate selection is not available yet",
       finishedAt: expect.any(Date),
     });
+  });
+
+  it("never rejects inside after(): a thrown DB error marks the run failed with a generic message", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const boom = new Error("db down");
+    mockUpdateRun.mockRejectedValueOnce(boom);
+    await expect(continuePrefillAfterSelection("run-1", ["k"])).resolves.toBeUndefined();
+    expect(errorSpy).toHaveBeenCalledWith("[prefill] selection continuation failed", "run-1", boom);
+    expect(lastPatch()).toEqual({
+      status: "failed",
+      error: "Prefill failed — try again",
+      finishedAt: expect.any(Date),
+    });
+
+    // Even the failure record can fail — still resolves
+    mockUpdateRun.mockRejectedValue(new Error("db still down"));
+    await expect(continuePrefillAfterSelection("run-1", ["k"])).resolves.toBeUndefined();
+    errorSpy.mockRestore();
   });
 });

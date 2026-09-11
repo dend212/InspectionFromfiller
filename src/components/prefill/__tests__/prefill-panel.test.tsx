@@ -70,7 +70,15 @@ function installFetch() {
           }),
       };
     }
-    return { ok: false, status: 404, json: () => Promise.resolve({ error: "no route" }) };
+    if (method === "PATCH" && url === "/api/inspections/insp-1/provenance") {
+      return { ok: true, status: 200, json: () => Promise.resolve({ saved: true }) };
+    }
+    return {
+      ok: false,
+      status: 404,
+      json: () => Promise.resolve({ error: "no route" }),
+      text: () => Promise.resolve('{"error":"no route"}'),
+    };
   });
   vi.stubGlobal("fetch", mock);
   return mock;

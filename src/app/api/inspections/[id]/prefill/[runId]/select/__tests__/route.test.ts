@@ -120,4 +120,15 @@ describe("POST /api/inspections/[id]/prefill/[runId]/select", () => {
     await mockAfter.mock.calls[0][0]();
     expect(mockContinue).toHaveBeenCalledWith("run-1", KEYS);
   });
+
+  it("the after() callback never rejects even if the continuation throws", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockLoadRunRow.mockResolvedValueOnce({ id: "run-1", inspectionId: "insp-1", status: "awaiting_selection" });
+    mockContinue.mockRejectedValueOnce(new Error("db down"));
+    const res = await POST(makeRequest({ candidateKeys: KEYS }), makeParams("insp-1", "run-1"));
+    expect(res.status).toBe(200);
+    await expect(mockAfter.mock.calls[0][0]()).resolves.toBeUndefined();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
 });

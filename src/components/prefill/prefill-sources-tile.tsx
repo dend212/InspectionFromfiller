@@ -65,6 +65,20 @@ function Banner({ tone, children }: { tone: "destructive" | "red"; children: Rea
   );
 }
 
+/**
+ * Locale-formatted timestamps differ between the SSR pass (Vercel, UTC) and the
+ * browser (Phoenix), so the text is only produced after mount — the server markup
+ * omits it and hydration has nothing to disagree about.
+ */
+function LastRunTime({ iso }: { iso: string }) {
+  const [text, setText] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    setText(new Date(iso).toLocaleString());
+  }, [iso]);
+  if (text === null) return null;
+  return <span className="truncate text-xs text-muted-foreground">Last run {text}</span>;
+}
+
 export interface PrefillSourcesTileProps {
   run: PrefillRunDTO | null;
   isRunning: boolean;
@@ -106,11 +120,7 @@ export function PrefillSourcesTile({
               aria-hidden="true"
             />
             <span className="text-sm font-semibold">Prefill sources</span>
-            {run && (
-              <span className="truncate text-xs text-muted-foreground">
-                Last run {new Date(run.createdAt).toLocaleString()}
-              </span>
-            )}
+            {run && <LastRunTime iso={run.createdAt} />}
           </button>
         </CollapsibleTrigger>
         <Button

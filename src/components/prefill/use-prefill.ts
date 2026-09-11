@@ -110,17 +110,26 @@ export function usePrefill({ inspectionId, form, enabled, initialRun }: UsePrefi
       }
       appliedRef.current.add(candidate.id);
 
-      const { fills, provenance: next } = mergeProposals(form.getValues(), provenanceRef.current, candidate.proposals, {
-        runId: candidate.id,
-      });
-      ensureTankArrayCapacity(form, fills);
-      for (const fill of fills) {
-        form.setValue(normalizeFieldPath(fill.fieldPath) as FieldPath<InspectionFormData>, fill.value as never, {
-          shouldDirty: true,
-          shouldValidate: true,
+      try {
+        const { fills, provenance: next } = mergeProposals(form.getValues(), provenanceRef.current, candidate.proposals, {
+          runId: candidate.id,
         });
+        ensureTankArrayCapacity(form, fills);
+        for (const fill of fills) {
+          form.setValue(normalizeFieldPath(fill.fieldPath) as FieldPath<InspectionFormData>, fill.value as never, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+        }
+        setMany(next);
+      } catch (err) {
+        // Nothing was marked applied server-side, so the next time this run is seen
+        // (poll, refetch, remount) it gets a fresh attempt instead of staying half-applied.
+        appliedRef.current.delete(candidate.id);
+        console.error("[prefill] could not apply run", candidate.id, err);
+        setError("Could not apply the prefill results — try again");
+        return;
       }
-      setMany(next);
 
       try {
         const res = await fetch(`/api/inspections/${inspectionId}/prefill/${candidate.id}/applied`, {

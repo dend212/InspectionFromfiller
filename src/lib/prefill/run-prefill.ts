@@ -12,6 +12,13 @@ export type { StageContext, StageResult } from "./stage";
 /** Hard stop for a whole run; whatever finished is persisted */
 export const PREFILL_TOTAL_BUDGET_MS = 240_000;
 
+/**
+ * Stored as `run.error` for unexpected failures and printed verbatim by the tile —
+ * the real error (postgres/Drizzle text) only ever goes to the server log.
+ * Stage-level messages (timeouts etc.) are already user-safe and stay as they are.
+ */
+export const GENERIC_RUN_ERROR = "Prefill failed — try again";
+
 const STAGE_NAMES: Array<keyof PrefillStages> = ["assessor", "listing", "permits"];
 
 /**
@@ -83,7 +90,7 @@ export async function runPrefill(runId: string): Promise<void> {
       await updateRun(runId, {
         status: "failed",
         stages: { ...stages },
-        error: err instanceof Error ? err.message : "Prefill failed",
+        error: GENERIC_RUN_ERROR,
         finishedAt: new Date(),
       });
     } catch (persistErr) {
@@ -95,18 +102,29 @@ export async function runPrefill(runId: string): Promise<void> {
 }
 
 /**
- * Called by the /select route after candidates are chosen.
+ * Called by the /select route after candidates are chosen. Same contract as
+ * runPrefill: safe to call from `after()`, never throws — an unexpected error
+ * marks the run `failed` (generic message, real error logged).
  * Phase 1 has no stage that produces candidates, so a selection can only reach
  * here through a hand-crafted request — record it as a failed run.
- * Phase 2 replaces this with the extraction continuation.
+ * Phase 2 replaces the body with the extraction continuation.
  */
 export async function continuePrefillAfterSelection(
   runId: string,
   _candidateKeys: string[],
 ): Promise<void> {
-  await updateRun(runId, {
-    status: "failed",
-    error: "Candidate selection is not available yet",
-    finishedAt: new Date(),
-  });
+  try {
+    await updateRun(runId, {
+      status: "failed",
+      error: "Candidate selection is not available yet",
+      finishedAt: new Date(),
+    });
+  } catch (err) {
+    console.error("[prefill] selection continuation failed", runId, err);
+    try {
+      await updateRun(runId, { status: "failed", error: GENERIC_RUN_ERROR, finishedAt: new Date() });
+    } catch (persistErr) {
+      console.error("[prefill] could not record failure", runId, persistErr);
+    }
+  }
 }

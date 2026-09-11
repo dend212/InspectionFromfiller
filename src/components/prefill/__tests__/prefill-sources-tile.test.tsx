@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
+import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { PrefillSourcesTile, stageSummary } from "@/components/prefill/prefill-sources-tile";
 import type { InspectionRecordDTO, PrefillRunDTO } from "@/lib/prefill/types";
@@ -110,6 +111,22 @@ describe("PrefillSourcesTile", () => {
 
     expect(document.querySelector("[data-stage=permits]")).toHaveAttribute("data-status", "not_found");
     expect(screen.getByText(/last run/i)).toBeInTheDocument();
+  });
+
+  it("renders the Last run time client-only so SSR (UTC) and the browser never disagree", () => {
+    // Server pass: no locale-formatted time in the markup (that's what caused the hydration mismatch)
+    let html = "";
+    expect(() => {
+      html = renderToString(
+        <PrefillSourcesTile run={RUN} isRunning={false} canRun error={null} onFindRecords={() => {}} />,
+      );
+    }).not.toThrow();
+    expect(html).toContain("Prefill sources");
+    expect(html).not.toMatch(/last run/i);
+
+    // Client pass: appears after mount
+    renderTile();
+    expect(screen.getByText(/last run/i)).toHaveTextContent(new Date(RUN.createdAt).toLocaleString());
   });
 
   it("shows the failed banner with the run error", () => {
