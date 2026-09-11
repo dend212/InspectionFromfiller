@@ -1,4 +1,5 @@
-import type { ListingFacts, ListingWaterSource } from "./provider";
+import type { PrefillAddress } from "../types";
+import type { ListingFacts, ListingProvider, ListingWaterSource } from "./provider";
 
 /**
  * Zillow via the Apify actor `sian.agency/zillow-property-detail-scraper`.
@@ -177,3 +178,65 @@ export function normaliseListingItem(raw: unknown): ListingFacts | null {
   if (lotSqft !== undefined) facts.lotSqft = lotSqft;
   return facts;
 }
+
+// ---------------------------------------------------------------------------
+// Apify client
+// ---------------------------------------------------------------------------
+
+export const APIFY_ACTOR_ID = "sian.agency~zillow-property-detail-scraper";
+const APIFY_RUN_SYNC_URL = `https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/run-sync-get-dataset-items`;
+/** Spec §10: Apify 60 s. The actor's own `timeout` query param matches. */
+export const APIFY_TIMEOUT_MS = 60_000;
+
+export class ListingLookupError extends Error {
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = "ListingLookupError";
+    this.status = status;
+  }
+}
+
+/** The token travels only in the query string of this URL — never log or persist the URL. */
+export function buildApifyUrl(token: string): string {
+  const params = new URLSearchParams({ token, timeout: "60", memory: "1024" });
+  return `${APIFY_RUN_SYNC_URL}?${params}`;
+}
+
+/**
+ * Single-line address for the actor's `addresses` input:
+ * "8911 E Cave Creek Rd, Carefree, AZ 85377". The app is Maricopa-only, so the
+ * state is always AZ. Returns null when there is no street number or name.
+ */
+export function fullAddress(address: PrefillAddress): string | null {
+  const explicit = address.full?.trim();
+  if (explicit) return explicit;
+  const number = address.streetNumber?.trim();
+  const name = address.streetName?.trim();
+  if (!number || !name) return null;
+  const street = [number, address.streetDir?.trim(), name].filter(Boolean).join(" ");
+  const stateZip = ["AZ", address.zip?.trim()].filter(Boolean).join(" ");
+  return [street, address.city?.trim(), stateZip].filter(Boolean).join(", ");
+}
+
+export const zillowApifyProvider: ListingProvider = {
+  name: "zillow",
+  async lookup(address: PrefillAddress, signal: AbortSignal): Promise<ListingFacts | null> {
+    const token = process.env.APIFY_TOKEN;
+    if (!token) throw new ListingLookupError("APIFY_TOKEN is not configured");
+    const full = fullAddress(address);
+    if (!full) return null;
+
+    const res = await fetch(buildApifyUrl(token), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ addresses: [full] }),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(APIFY_TIMEOUT_MS)]),
+    });
+    if (!res.ok) throw new ListingLookupError(`Apify responded ${res.status}`, res.status);
+
+    const items: unknown = await res.json();
+    if (!Array.isArray(items) || items.length === 0) return null;
+    return normaliseListingItem(items[0]);
+  },
+};
