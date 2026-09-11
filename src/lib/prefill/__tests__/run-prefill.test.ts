@@ -15,16 +15,34 @@ vi.mock("@/lib/prefill/assessor", () => ({
   runAssessorStage: mockRunAssessorStage,
 }));
 
-// Phase 2 replaced the permits stub with the real stage (live EDMS + Storage) — keep the
-// phase-1 stub behaviour here so the orchestrator test stays offline. Task 10 retires this.
-vi.mock("@/lib/prefill/permits", () => ({
-  runPermitsStage: vi.fn().mockResolvedValue({
+// The listing stub and the real permits stage (live EDMS + Storage) are mocked so the
+// orchestrator test stays offline; the permits behaviour itself is covered by
+// run-prefill.permits.test.ts.
+const { mockRunListingStage, mockRunPermitsStage, mockRunPermitsSelection } = vi.hoisted(() => ({
+  mockRunListingStage: vi.fn(async () => ({
     stage: { status: "skipped", summary: "Not available yet", links: [] },
     proposals: [],
-  }),
+  })),
+  mockRunPermitsStage: vi.fn(async () => ({
+    stage: { status: "not_found", summary: "No permit records found", links: [] },
+    proposals: [],
+  })),
+  mockRunPermitsSelection: vi.fn(async () => ({
+    stage: { status: "done", summary: "1 permit document found: 000972 PERMIT", links: [] },
+    proposals: [],
+  })),
+}));
+vi.mock("@/lib/prefill/listing", () => ({ runListingStage: mockRunListingStage }));
+vi.mock("@/lib/prefill/permits", () => ({
+  runPermitsStage: mockRunPermitsStage,
+  runPermitsSelection: mockRunPermitsSelection,
 }));
 
-import { continuePrefillAfterSelection, runPrefill } from "@/lib/prefill/run-prefill";
+import {
+  GENERIC_STAGE_ERROR,
+  continuePrefillAfterSelection,
+  runPrefill,
+} from "@/lib/prefill/run-prefill";
 import type { StageContext } from "@/lib/prefill/stage";
 import type { PrefillInput } from "@/lib/prefill/types";
 
@@ -92,7 +110,7 @@ describe("runPrefill", () => {
     expect(final.proposals).toEqual([PROPOSAL]);
     expect(final.stages.assessor.status).toBe("done");
     expect(final.stages.listing).toEqual({ status: "skipped", summary: "Not available yet", links: [] });
-    expect(final.stages.permits).toEqual({ status: "skipped", summary: "Not available yet", links: [] });
+    expect(final.stages.permits).toEqual({ status: "not_found", summary: "No permit records found", links: [] });
     expect(final.finishedAt).toBeInstanceOf(Date);
   });
 
@@ -100,8 +118,8 @@ describe("runPrefill", () => {
     await runPrefill("run-1");
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(lastPatch().stages.permits).toEqual({
-      status: "skipped",
-      summary: "Not available yet",
+      status: "not_found",
+      summary: "No permit records found",
       links: [],
     });
   });
@@ -133,13 +151,23 @@ describe("runPrefill", () => {
     expect(mockRunAssessorStage).not.toHaveBeenCalled();
   });
 
-  it("records a stage error when a stage rejects and still finishes the run", async () => {
-    mockRunAssessorStage.mockRejectedValueOnce(new Error("boom"));
+  it("records a generic stage error when a stage rejects, logs the real one and still finishes", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const boom = new Error("ECONNREFUSED 10.0.0.1:443");
+    mockRunAssessorStage.mockRejectedValueOnce(boom);
     await runPrefill("run-1");
     const final = lastPatch();
     expect(final.status).toBe("done");
-    expect(final.stages.assessor).toMatchObject({ status: "error", error: "boom", links: [] });
+    // Internal rejection text never reaches the tile (it prints stage.error verbatim)
+    expect(final.stages.assessor).toMatchObject({
+      status: "error",
+      error: GENERIC_STAGE_ERROR,
+      links: [],
+    });
+    expect(final.stages.assessor.error).not.toContain("ECONNREFUSED");
+    expect(errorSpy).toHaveBeenCalledWith("[prefill] assessor stage rejected", "run-1", boom);
     expect(final.proposals).toEqual([]);
+    errorSpy.mockRestore();
   });
 
   it("marks the run failed (never throws) with a generic message and logs the real error", async () => {
@@ -164,22 +192,16 @@ describe("runPrefill", () => {
 });
 
 describe("continuePrefillAfterSelection", () => {
-  it("fails the run with an explicit phase-1 message", async () => {
-    await continuePrefillAfterSelection("run-1", ["edms_env:OW-17-00474:PERMIT:"]);
-    expect(mockUpdateRun).toHaveBeenCalledWith("run-1", {
-      status: "failed",
-      error: "Candidate selection is not available yet",
-      finishedAt: expect.any(Date),
-    });
-  });
-
+  // The real continuation is covered by run-prefill.permits.test.ts; this keeps the
+  // phase-1 never-rejects guarantee for the after() caller.
   it("never rejects inside after(): a thrown DB error marks the run failed with a generic message", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const boom = new Error("db down");
+    mockLoadRunRow.mockResolvedValue({ ...RUN, status: "running" });
     mockUpdateRun.mockRejectedValueOnce(boom);
     await expect(continuePrefillAfterSelection("run-1", ["k"])).resolves.toBeUndefined();
-    expect(errorSpy).toHaveBeenCalledWith("[prefill] selection continuation failed", "run-1", boom);
-    expect(lastPatch()).toEqual({
+    expect(errorSpy).toHaveBeenCalledWith("[prefill] run failed", "run-1", boom);
+    expect(lastPatch()).toMatchObject({
       status: "failed",
       error: "Prefill failed — try again",
       finishedAt: expect.any(Date),

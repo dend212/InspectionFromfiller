@@ -1,3 +1,4 @@
+import { isAbandonmentDocType } from "./permits/doc-types";
 import type { InspectionRecordRow, PrefillRunRow } from "./run-store";
 import { listRecordRows, loadLatestRunRow, loadRunRow } from "./run-store";
 import type {
@@ -14,9 +15,8 @@ import type {
 } from "./types";
 import { emptyStages } from "./types";
 
-export function isAbandonmentDocType(docType: string): boolean {
-  return /ABANDON/i.test(docType);
-}
+// Shared doc-type vocabulary (permits/doc-types) — kept exported here for phase-1 importers
+export { isAbandonmentDocType };
 
 /** Never exposes storage_path — documents are reached only through the auth-gated records route */
 export function toInspectionRecordDTO(row: InspectionRecordRow): InspectionRecordDTO {
@@ -33,7 +33,8 @@ export function toInspectionRecordDTO(row: InspectionRecordRow): InspectionRecor
     extractionStatus: row.extractionStatus as ExtractionStatus,
     extractionError: row.extractionError,
     isAbandonment: isAbandonmentDocType(row.docType),
-    downloadUrl: `/api/inspections/${row.inspectionId}/records/${row.id}`,
+    // "" = never stored (over 25 MB / download failed) — the tile hides the link, the route 404s
+    downloadUrl: row.storagePath ? `/api/inspections/${row.inspectionId}/records/${row.id}` : "",
   };
 }
 
