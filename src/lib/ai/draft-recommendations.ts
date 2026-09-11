@@ -1,3 +1,7 @@
+import Anthropic from "@anthropic-ai/sdk";
+
+const anthropic = new Anthropic();
+
 /** Tank deficiency checkbox → label (mirrors TANK_DEFICIENCY_ITEMS in step-septic-tank.tsx) */
 const TANK_DEFICIENCY_LABELS: Array<[field: string, label: string]> = [
   ["deficiencyRootInvasion", "Root Invasion"],
@@ -113,4 +117,80 @@ export function formatRecommendationInput(ctx: RecommendationContext): string {
   lines.push("", "Cesspool comments:", ctx.cesspoolComments || "(none)");
 
   return lines.join("\n");
+}
+
+export const FALLBACK_RECOMMENDATION =
+  "• System functioned normally at the time of inspection. Continue routine pumping every 3–5 years.";
+
+const MAX_LINES = 5;
+const MAX_WORDS = 80;
+
+const SYSTEM_PROMPT = `You write the "Recommendations" box on a customer-facing septic inspection summary page for an Arizona septic company. The reader is a home buyer or seller, not an inspector.
+
+You are given the inspector's field comments, flagged deficiencies and overall condition ratings from an ADEQ GWS 432 Property Transfer Inspection.
+
+Rules:
+- Output 2 to 5 short lines and nothing else — no heading, no intro, no closing sentence
+- Start every line with "• "
+- Keep the whole response under 60 words
+- Present tense, plain language; no jargon, no ADEQ section numbers, no pricing
+- Lead with what the customer should do; most important item first
+- Do not start lines with "We recommend" or "It is recommended" — state the action directly
+- Use only findings present in the input; never invent findings
+- If the input contains nothing actionable, output exactly this single line:
+${FALLBACK_RECOMMENDATION}
+
+Example output:
+• Tank is structurally sound; pump every 3–5 years.
+• Inlet baffle is deteriorated — replace before sale.
+• Drainfield shows early ponding; limit water use and re-inspect in 12 months.`;
+
+/**
+ * Coerce model output into the summary-page contract: every line `• `-prefixed,
+ * at most 5 lines and 80 words, fallback line when nothing usable remains.
+ */
+export function normalizeRecommendations(raw: string): string {
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:[-*•·▪‣]+|\d+[.)])\s*/, "").trim())
+    .filter((line) => line.length > 0)
+    .slice(0, MAX_LINES);
+
+  const kept: string[] = [];
+  let budget = MAX_WORDS;
+  for (const line of lines) {
+    if (budget <= 0) break;
+    const words = line.split(/\s+/);
+    if (words.length <= budget) {
+      kept.push(line);
+      budget -= words.length;
+    } else {
+      kept.push(words.slice(0, budget).join(" "));
+      budget = 0;
+    }
+  }
+
+  if (kept.length === 0) return FALLBACK_RECOMMENDATION;
+  return kept.map((line) => `• ${line}`).join("\n");
+}
+
+/**
+ * Draft customer-facing recommendations from the inspection context using Claude.
+ * Skips the model entirely when there is nothing actionable. Throws on API failure.
+ */
+export async function draftRecommendations(ctx: RecommendationContext): Promise<string> {
+  if (!hasActionableInput(ctx)) return FALLBACK_RECOMMENDATION;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 300,
+    // cache_control is a silent no-op below Sonnet 4.6's 1024-token minimum; kept so the
+    // prompt caches automatically if it grows (expect cache_read_input_tokens: 0 today).
+    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+    messages: [{ role: "user", content: formatRecommendationInput(ctx) }],
+  });
+
+  const textBlock = response.content.find((block) => block.type === "text");
+  const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
+  return normalizeRecommendations(text);
 }

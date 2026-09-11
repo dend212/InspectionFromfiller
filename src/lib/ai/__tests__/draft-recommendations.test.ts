@@ -1,10 +1,32 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// `new Anthropic()` throws under jsdom ("browser-like environment") — mock the SDK before the module loads
+const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }));
+
+vi.mock("@anthropic-ai/sdk", () => ({
+  default: class MockAnthropic {
+    messages = { create: mockCreate };
+  },
+}));
+
 import {
   buildRecommendationContext,
+  draftRecommendations,
+  FALLBACK_RECOMMENDATION,
   formatRecommendationInput,
   hasActionableInput,
+  normalizeRecommendations,
   type RecommendationContext,
 } from "@/lib/ai/draft-recommendations";
+
+/** Build a minimal Anthropic Messages response carrying one text block */
+function mockResponse(text: string) {
+  return { content: [{ type: "text", text }] };
+}
+
+beforeEach(() => {
+  mockCreate.mockReset();
+});
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -250,6 +272,109 @@ describe("formatRecommendationInput", () => {
     const text = formatRecommendationInput(buildRecommendationContext(PII_FORM));
     for (const pii of PII_STRINGS) {
       expect(text).not.toContain(pii);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeRecommendations — post-processing of model output
+// ---------------------------------------------------------------------------
+
+describe("normalizeRecommendations", () => {
+  it("normalises -, *, numbered and existing bullets to •", () => {
+    expect(
+      normalizeRecommendations("- Tank is sound.\n* Replace baffle.\n1. Re-inspect.\n•  Pump."),
+    ).toBe("• Tank is sound.\n• Replace baffle.\n• Re-inspect.\n• Pump.");
+  });
+
+  it("drops blank lines and surrounding whitespace", () => {
+    expect(normalizeRecommendations("\n  • A  \n\n\n• B\n")).toBe("• A\n• B");
+  });
+
+  it("keeps at most 5 lines", () => {
+    expect(normalizeRecommendations("1\n2\n3\n4\n5\n6\n7")).toBe("• 1\n• 2\n• 3\n• 4\n• 5");
+  });
+
+  it("truncates to 80 words across lines", () => {
+    const seventyNine = Array.from({ length: 79 }, () => "a").join(" ");
+    expect(normalizeRecommendations(`${seventyNine}\nb c d`)).toBe(`• ${seventyNine}\n• b`);
+
+    const hundred = Array.from({ length: 100 }, (_, i) => `w${i + 1}`).join(" ");
+    const out = normalizeRecommendations(hundred);
+    expect(out.startsWith("• w1 ")).toBe(true);
+    expect(out.endsWith(" w80")).toBe(true);
+    expect(out).not.toContain("w81");
+  });
+
+  it("returns the fallback line when nothing is left", () => {
+    expect(normalizeRecommendations("")).toBe(FALLBACK_RECOMMENDATION);
+    expect(normalizeRecommendations("   \n \t \n")).toBe(FALLBACK_RECOMMENDATION);
+    expect(normalizeRecommendations("- \n• ")).toBe(FALLBACK_RECOMMENDATION);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// draftRecommendations — the model call
+// ---------------------------------------------------------------------------
+
+describe("draftRecommendations", () => {
+  const ctx: RecommendationContext = {
+    ...EMPTY_CONTEXT,
+    septicTankComments: "Inlet baffle is deteriorated.",
+    tanks: [{ compromisedTank: "no", deficiencies: ["Damaged Inlet"] }],
+  };
+
+  it("calls claude-sonnet-4-6 with a cached system prompt and the formatted input", async () => {
+    mockCreate.mockResolvedValueOnce(mockResponse("• Replace the inlet baffle."));
+
+    await draftRecommendations(ctx);
+
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    const args = mockCreate.mock.calls[0][0];
+    expect(args.model).toBe("claude-sonnet-4-6");
+    expect(args.max_tokens).toBe(300);
+    expect(args.system).toHaveLength(1);
+    expect(args.system[0].type).toBe("text");
+    expect(args.system[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(args.system[0].text).toContain("Start every line with \"• \"");
+    expect(args.messages).toEqual([{ role: "user", content: formatRecommendationInput(ctx) }]);
+  });
+
+  it("normalises the model output", async () => {
+    mockCreate.mockResolvedValueOnce(
+      mockResponse("- Replace the inlet baffle.\n- Pump every 3–5 years."),
+    );
+
+    await expect(draftRecommendations(ctx)).resolves.toBe(
+      "• Replace the inlet baffle.\n• Pump every 3–5 years.",
+    );
+  });
+
+  it("returns the fallback without calling the model when there is nothing actionable", async () => {
+    await expect(draftRecommendations(EMPTY_CONTEXT)).resolves.toBe(FALLBACK_RECOMMENDATION);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("returns the fallback when the model returns no text block", async () => {
+    mockCreate.mockResolvedValueOnce({ content: [] });
+
+    await expect(draftRecommendations(ctx)).resolves.toBe(FALLBACK_RECOMMENDATION);
+  });
+
+  it("propagates API errors to the caller", async () => {
+    mockCreate.mockRejectedValueOnce(new Error("overloaded"));
+
+    await expect(draftRecommendations(ctx)).rejects.toThrow("overloaded");
+  });
+
+  it("never sends names, addresses or identifiers to the model", async () => {
+    mockCreate.mockResolvedValueOnce(mockResponse("• Fine."));
+
+    await draftRecommendations(buildRecommendationContext(PII_FORM));
+
+    const sent = JSON.stringify(mockCreate.mock.calls[0][0]);
+    for (const pii of PII_STRINGS) {
+      expect(sent).not.toContain(pii);
     }
   });
 });
