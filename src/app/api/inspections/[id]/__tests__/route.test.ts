@@ -215,6 +215,19 @@ describe("PATCH /api/inspections/[id]", () => {
     expect(res.status).toBe(403);
   });
 
+  it("allows admin who owns their own in_review inspection to PATCH", async () => {
+    mockDbSelect.mockResolvedValueOnce([{ inspectorId: USER.id, status: "in_review" }]);
+    mockGetSession.mockResolvedValueOnce({
+      data: { session: { access_token: fakeAccessToken({ user_role: "admin" }) } },
+    });
+    const res = await PATCH(
+      makeRequest({ facilityInfo: { facilityName: "Admin Own Edit" } }),
+      makeParams("insp-1"),
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).saved).toBe(true);
+  });
+
   it("allows admin to edit any inspection regardless of status", async () => {
     mockDbSelect.mockResolvedValueOnce([{ inspectorId: "other-user", status: "in_review" }]);
     mockGetSession.mockResolvedValueOnce({
