@@ -49,7 +49,7 @@ Phase 3's plan text mentions `(input, candidateKeys, ctx)`; the delivered Phase 
 
 ## A8. `searchPermits` reports partial archive failure (Phase 2 Task 5/8)
 
-Every non-`error` outcome (`found`, `ambiguous`, `not_found`) carries `failedArchives: PermitArchive[]` — the archives whose query threw in the round that produced the outcome (empty when all succeeded). `error` is returned only when every query in the round failed (unchanged). Task 8 must render a non-empty `failedArchives` in `stages.permits.summary` (e.g. `Legacy archive (env) was unavailable — results may be incomplete`) so a `not_found` after an outage never reads as a confident negative. Task 5's `not_found` summary terms stay as they are.
+Every non-`error` outcome (`found`, `ambiguous`, `not_found`) carries `failedArchives: PermitArchive[]` — the union of archives whose query threw in **any round that ran** (empty when all succeeded). `error` is returned only when every query in the round failed (unchanged). Task 8 must render a non-empty `failedArchives` in `stages.permits.summary` — phrased as a failed query, not an outage, since a `found via street` can list `edms_env` while still showing env rows (e.g. `A query to the legacy archive (env) failed — results may be incomplete`) — so a `not_found` after an outage never reads as a confident negative. Task 5's `not_found` summary terms stay as they are.
 
 ## A9. Property grouping is house number + street; other attributes split only on contradiction (Phase 2 Task 5)
 
