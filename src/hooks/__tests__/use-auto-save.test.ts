@@ -488,3 +488,81 @@ describe("enabled: false", () => {
     expect(addSpy).not.toHaveBeenCalledWith("beforeunload", expect.any(Function));
   });
 });
+
+describe("seedFromInitial: true", () => {
+  it("does not PATCH on mount when nothing changed, then PATCHes once after a real edit", async () => {
+    const initial = { field: "initial" };
+    watchedValuesRef.current = initial;
+    const form = makeMockForm(initial);
+    const { rerender } = renderHook(() =>
+      useAutoSave(form, "insp-1", { debounceMs: 100, seedFromInitial: true }),
+    );
+
+    // Mount tick: the watched snapshot equals the seeded snapshot → no save scheduled
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(fetch).not.toHaveBeenCalled();
+
+    // A real edit → exactly one PATCH with the new values
+    watchedValuesRef.current = { field: "changed" };
+    form.getValues.mockReturnValue({ field: "changed" });
+    rerender();
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith("/api/inspections/insp-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ field: "changed" }),
+    });
+  });
+
+  it("flush() resolves true without a request when the form still matches the seed", async () => {
+    const initial = { field: "initial" };
+    watchedValuesRef.current = initial;
+    const form = makeMockForm(initial);
+    const { result } = renderHook(() =>
+      useAutoSave(form, "insp-1", { debounceMs: 100, seedFromInitial: true }),
+    );
+
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await result.current.flush();
+    });
+    expect(ok).toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps the seed across an enabled: false → true flip (Reopen) so no save fires", async () => {
+    const initial = { field: "initial" };
+    watchedValuesRef.current = initial;
+    const form = makeMockForm(initial);
+    let enabled = false;
+    const { rerender } = renderHook(() =>
+      useAutoSave(form, "insp-1", { debounceMs: 100, enabled, seedFromInitial: true }),
+    );
+
+    enabled = true;
+    rerender();
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("seedFromInitial omitted (wizard default)", () => {
+  it("still saves the first watch tick, preserving the wizard contract", async () => {
+    const initial = { field: "initial" };
+    watchedValuesRef.current = initial;
+    const form = makeMockForm(initial);
+    renderHook(() => useAutoSave(form, "insp-1", { debounceMs: 100 }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});

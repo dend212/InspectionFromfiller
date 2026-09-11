@@ -65,8 +65,10 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
     mode: "onChange",
   });
 
+  // seedFromInitial: opening the page (or reopening) must not write — only edits do
   const { status: saveStatus, lastSaved, flush } = useAutoSave(form, inspection.id, {
     enabled: !readOnly,
+    seedFromInitial: true,
   });
   const validations = useStepValidations(form.control);
   const includeAlternativePages = useWatch({ control: form.control, name: "includeAlternativePages" });

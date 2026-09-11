@@ -174,16 +174,22 @@ describe("ReviewEditor", () => {
     expect(screen.queryByTestId("step-0")).not.toBeInTheDocument();
   });
 
-  it("mounts autosave enabled while in review, passing the inspection id", () => {
+  it("mounts autosave enabled while in review, seeded so opening the page never writes", () => {
     render(<ReviewEditor inspection={makeInspection()} media={media} />);
-    expect(autoSaveSpy).toHaveBeenCalledWith(expect.anything(), "insp-1", { enabled: true });
+    expect(autoSaveSpy).toHaveBeenCalledWith(expect.anything(), "insp-1", {
+      enabled: true,
+      seedFromInitial: true,
+    });
   });
 
   it("completed: steps render inside fieldset[disabled], autosave is disabled, bar says read-only", async () => {
     const user = userEvent.setup();
     render(<ReviewEditor inspection={makeInspection({ status: "completed" })} media={media} />);
 
-    expect(autoSaveSpy).toHaveBeenCalledWith(expect.anything(), "insp-1", { enabled: false });
+    expect(autoSaveSpy).toHaveBeenCalledWith(expect.anything(), "insp-1", {
+      enabled: false,
+      seedFromInitial: true,
+    });
     expect(screen.getByRole("status")).toHaveTextContent(/read-only/i);
     expect(screen.getByTestId("review-actions")).toHaveAttribute("data-status", "completed");
 

@@ -11,6 +11,12 @@ export interface UseAutoSaveOptions {
   debounceMs?: number;
   /** When false the hook never saves (read-only review) and flush() resolves true immediately */
   enabled?: boolean;
+  /**
+   * Treat the mount-time form values as already persisted, so nothing is sent
+   * until a value actually changes. The review shell opts in (opening a page
+   * must not write); the wizard keeps the default and saves its first tick.
+   */
+  seedFromInitial?: boolean;
 }
 
 export interface UseAutoSaveReturn {
@@ -38,12 +44,20 @@ export function useAutoSave(
   inspectionId: string,
   options: number | UseAutoSaveOptions = {},
 ): UseAutoSaveReturn {
-  const { debounceMs = 1000, enabled = true } =
-    typeof options === "number" ? { debounceMs: options } : options;
+  const {
+    debounceMs = 1000,
+    enabled = true,
+    seedFromInitial = false,
+  } = typeof options === "number" ? { debounceMs: options } : options;
 
   const [status, setStatus] = useState<AutoSaveStatus>("idle");
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const lastSavedRef = useRef<string>("");
+  // Seeded during the first render (before any effect) so the mount tick of the
+  // debounce effect below already sees the initial snapshot as "saved".
+  const lastSavedRef = useRef<string | null>(null);
+  if (lastSavedRef.current === null) {
+    lastSavedRef.current = seedFromInitial ? JSON.stringify(form.getValues()) : "";
+  }
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightRef = useRef<Promise<boolean> | null>(null);
   const isMountedRef = useRef(true);
