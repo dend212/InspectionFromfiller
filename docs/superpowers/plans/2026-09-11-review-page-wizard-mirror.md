@@ -111,7 +111,7 @@ Create `scripts/review-field-parity.mts`:
  * Exit code 1 when any field is missing.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 const root = process.cwd();
 const oldArgIdx = process.argv.indexOf("--old");
@@ -168,12 +168,14 @@ function extractStepPrefixes(source: string): Map<string, number> {
   return map;
 }
 
-if (!existsSync(join(root, OLD_EDITOR))) {
+// resolve() keeps an absolute --old path as-is (join() would prefix it with cwd)
+const oldEditorPath = resolve(root, OLD_EDITOR);
+if (!existsSync(oldEditorPath)) {
   console.error(`Old editor not found at ${OLD_EDITOR} — pass --old <path to a saved copy>`);
   process.exit(2);
 }
 
-const oldFields = extractOldEditorFields(readFileSync(join(root, OLD_EDITOR), "utf8"));
+const oldFields = extractOldEditorFields(readFileSync(oldEditorPath, "utf8"));
 const stepFields = new Map<string, string>(); // path → file
 for (const file of readdirSync(join(root, STEP_DIR)).filter((f) => /^step-.*\.tsx$/.test(f))) {
   for (const p of extractStepFields(readFileSync(join(root, STEP_DIR, file), "utf8"))) {
@@ -1063,7 +1065,11 @@ Append to the end of `src/app/globals.css`:
 
 - [ ] **Step 4: Expose the field path on `FormItem`**
 
-In `src/components/ui/form.tsx`, replace the `FormItem` function:
+First check whether prefill Phase 1 already did this (its plan was amended to add the same attribute):
+
+Run: `grep -n "data-field-path" src/components/ui/form.tsx ; echo "grep-exit=$?"`
+
+If the grep prints a line (`grep-exit=0`), **skip the edit below** — keep the new `form-item.test.tsx`, which passes against Phase 1's implementation as-is. Otherwise, in `src/components/ui/form.tsx`, replace the `FormItem` function:
 
 ```tsx
 function FormItem({ className, ...props }: React.ComponentProps<"div">) {
@@ -4129,8 +4135,41 @@ Run: `test -f src/components/prefill/provenance-context.tsx && echo PREFILL_PRES
 ```tsx
 import { PrefillSourcesTile } from "@/components/prefill/prefill-sources-tile";
 import { ProvenanceProvider } from "@/components/prefill/provenance-context";
+import { usePrefill } from "@/components/prefill/use-prefill";
 import type { FieldProvenance } from "@/lib/prefill/types";
 ```
+
+and add this small component above `export function ReviewEditor` (it must live inside `ProvenanceProvider` because `usePrefill` reads the provenance context; it mirrors the tile wiring in Phase 1's `PrefillPanel` minus the draft-only APN/scan toolbar):
+
+```tsx
+/** Prefill sources tile for the review page — same tile as the wizard, no draft toolbar */
+function ReviewPrefillTile({
+  inspectionId,
+  form,
+  readOnly,
+}: {
+  inspectionId: string;
+  form: UseFormReturn<InspectionFormData>;
+  readOnly: boolean;
+}) {
+  // enabled stays true when read-only so a completed inspection still shows its last run;
+  // the provider is readOnly, so nothing is persisted, and Find records is disabled.
+  const prefill = usePrefill({ inspectionId, form, enabled: true });
+  return (
+    <PrefillSourcesTile
+      run={prefill.run}
+      isRunning={prefill.isRunning}
+      canRun={!readOnly}
+      error={prefill.error}
+      onFindRecords={() => {
+        if (!readOnly) void prefill.start({ trigger: "manual" });
+      }}
+    />
+  );
+}
+```
+
+(`UseFormReturn` joins the existing `react-hook-form` import: `import { type FieldPath, type UseFormReturn, useForm, useWatch } from "react-hook-form";`.)
 
 2. Replace the comment line `// prefill provider mounted in prefill phase 1` with nothing (delete it).
 
@@ -4158,7 +4197,7 @@ import type { FieldProvenance } from "@/lib/prefill/types";
           />
 
           {/* Prefill sources (assessor / listing / permits) — same tile as the wizard */}
-          <PrefillSourcesTile inspectionId={inspection.id} form={form} readOnly={readOnly} />
+          <ReviewPrefillTile inspectionId={inspection.id} form={form} readOnly={readOnly} />
 
           {/* Six wizard sections */}
           …unchanged…
@@ -4167,7 +4206,7 @@ import type { FieldProvenance } from "@/lib/prefill/types";
       </Form>
 ```
 
-The shared contract fixes `ProvenanceProvider`'s props; `PrefillSourcesTile`'s props are owned by the prefill Phase 1 plan — open `src/components/prefill/prefill-sources-tile.tsx`, read its exported props interface, and pass exactly those (expected: `inspectionId`, `form`, and a `readOnly` flag). Do not invent props.
+Contracts used here (confirmed with the Phase 1 plan author on 2026-09-11; source: `docs/superpowers/plans/2026-09-11-prefill-phase1-provenance-foundation.md`): `ProvenanceProvider({ form, inspectionId, initial, readOnly?, children })`; `usePrefill({ inspectionId, form, enabled, initialRun? }) → { run, isRunning, start(input?), selectCandidates(keys), error }` (must be called inside the provider); `PrefillSourcesTile({ run, isRunning, canRun, error, onFindRecords })`. If the shipped files differ from these names, follow the shipped files — do not invent props.
 
 5. In `review-editor.test.tsx` add, next to the other `vi.mock` calls:
 
@@ -4177,6 +4216,9 @@ vi.mock("@/components/prefill/provenance-context", () => ({
 }));
 vi.mock("@/components/prefill/prefill-sources-tile", () => ({
   PrefillSourcesTile: () => <div data-testid="prefill-tile" />,
+}));
+vi.mock("@/components/prefill/use-prefill", () => ({
+  usePrefill: () => ({ run: null, isRunning: false, start: vi.fn(), selectCandidates: vi.fn(), error: null }),
 }));
 ```
 
@@ -4208,3 +4250,189 @@ git commit -m "feat(review): rewrite the review editor as a shell over the wizar
 ```
 
 ---
+### Task 11: `page.tsx` props (guarded on prefill Phase 1)
+
+**Files:**
+- Modify: `src/app/(dashboard)/review/[id]/page.tsx` (the `<ReviewEditor inspection={{ … }} />` block, lines ~112–130)
+
+**Interfaces:**
+- Consumes: `ReviewEditorProps` (Task 10); `inspections.fieldProvenance` Drizzle column (prefill Phase 1, if present)
+- Produces: the page passes `fieldProvenance` when the column exists; otherwise it is unchanged (the shell's prop interface without prefill is identical to today's).
+
+- [ ] **Step 1: Decide the branch**
+
+Run: `grep -n "fieldProvenance" src/lib/db/schema.ts ; test -f src/components/prefill/provenance-context.tsx && echo PREFILL_PRESENT || echo PREFILL_ABSENT`
+
+**If `PREFILL_ABSENT`** (no `fieldProvenance` column, no provider): nothing to change. Run the type check below and skip to Step 3.
+
+**If `PREFILL_PRESENT`:** add the prop to the `inspection` object literal in `page.tsx`, after `isFromWorkiz`:
+
+```tsx
+          isFromWorkiz: !!inspection.workizJobId,
+          fieldProvenance: (inspection.fieldProvenance ?? {}) as FieldProvenance,
+```
+
+and add the type import at the top of the file:
+
+```tsx
+import type { FieldProvenance } from "@/lib/prefill/types";
+```
+
+- [ ] **Step 2: Type-check the page**
+
+Run: `npx tsc --noEmit 2>&1 | grep -E "review/\[id\]/page.tsx|components/review/" ; echo "grep-exit=$?"`
+Expected: no lines, `grep-exit=1` (pre-existing errors elsewhere in the repo are ignored).
+
+- [ ] **Step 3: Commit (only when Step 1 changed the file)**
+
+```bash
+git add "src/app/(dashboard)/review/[id]/page.tsx"
+git commit -m "feat(review): pass field provenance to the review editor"
+```
+
+If nothing changed, skip the commit and note "page.tsx unchanged — prefill absent" in your task report.
+
+---
+
+### Task 12: Delete the old code paths and re-run the parity gate
+
+**Files:**
+- Verify only: `src/components/review/*.tsx`, `src/components/inspection/*.tsx`, `scripts/review-field-parity.mts`
+
+**Interfaces:**
+- Consumes: the parity script (Task 1), the saved `parity-before.txt`
+- Produces: `parity-after.txt` for the PR; proof that no dead code remains
+
+- [ ] **Step 1: Confirm the old editor is gone and nothing dangles**
+
+Run:
+
+```bash
+git show feature/property-records-prefill:src/components/review/review-editor.tsx | wc -l   # 1073 — the old file, from history
+wc -l src/components/review/review-editor.tsx                                                 # ~211
+grep -rn "review-editor" src --include='*.ts' --include='*.tsx' | grep -v __tests__           # only page.tsx imports it
+grep -rn "from \"@/components/ui/checkbox\"\|from \"@/components/ui/select\"\|from \"@/components/ui/textarea\"\|from \"@/components/ui/input\"" src/components/review/*.tsx ; echo "grep-exit=$?"
+```
+
+Expected for the last command: exactly two matches, both `@/components/ui/textarea` — in `review-actions.tsx` (summary recommendations) and `return-dialog.tsx` (return note) — and no `checkbox`/`select`/`input` imports anywhere under `src/components/review/`. Any other match is a leftover from the hand-rolled editor: delete it.
+
+- [ ] **Step 2: Re-run the parity gate against the pre-rewrite editor**
+
+```bash
+git show feature/property-records-prefill:src/components/review/review-editor.tsx > "$SCRATCHPAD/old-review-editor.tsx"
+node scripts/review-field-parity.mts --old "$SCRATCHPAD/old-review-editor.tsx" | tee "$SCRATCHPAD/parity-after.txt"; echo "exit=${PIPESTATUS[0]}"
+```
+
+Expected: identical to `parity-before.txt` — `Old editor fields: 120`, 120 `OK` rows, `PARITY OK`, `exit=0`. (An absolute `--old` path is used as-is; a relative one is resolved against the repo root.)
+
+If a `MISSING` row appears now but not before, a step file lost a field in Task 4 — restore it from `git diff feature/property-records-prefill -- src/components/inspection/` and re-run.
+
+- [ ] **Step 3: Lint the touched files (read-only check)**
+
+Run: `npx biome check src/components/review src/components/inspection/step-*.tsx src/lib/validators/step-validation.ts src/hooks/use-auto-save.ts "src/app/api/inspections/[id]/review-notes" 2>&1 | tail -15`
+Expected: only pre-existing style diagnostics of the kind the untouched files already produce (the repo is not Biome-formatted). Fix any **error-level** diagnostic (unused import, unused variable) by hand; do not run `--write`.
+
+- [ ] **Step 4: Commit any cleanup**
+
+```bash
+git add -A src/components/review src/components/inspection
+git commit -m "chore(review): remove leftovers from the legacy review editor"
+```
+
+Skip the commit if `git status --short` is empty.
+
+---
+
+### Task 13: Build, full test run, browser check, PR
+
+**Files:**
+- None created. Verification only.
+
+- [ ] **Step 1: Full vitest run against the baseline**
+
+Run: `npx vitest run 2>&1 | tail -8`
+
+Baseline (measured on `de3d3bc` before this plan): **15 failed / 1538 passed** in these untouched files —
+`src/__tests__/security/rbac.test.ts` (1), `src/types/__tests__/roles.test.ts` (1), `src/components/layout/__tests__/mobile-nav.test.tsx` (1), `src/components/layout/__tests__/nav.test.tsx` (2), `src/components/review/__tests__/review-actions.test.tsx` (3 — "Send to Customer" regex vs. "Send PDF to Customer"), `src/lib/constants/__tests__/inspection.test.ts` (1, `STEP_LABELS has 5 step labels`), `src/lib/validators/__tests__/inspection.test.ts` (2), `src/app/api/inspections/[id]/download/__tests__/route.test.ts` (2), `src/app/api/inspections/[id]/reopen/__tests__/route.test.ts` (2, missing `or` in the drizzle mock).
+
+Expected now: **12 failed**, all in the files above minus `review-actions` (Task 9 re-baselined those three). Any failure in a file this plan touched, or any new failing file, is a regression — fix it before continuing. To list failures by name:
+
+```bash
+npx vitest run --reporter=json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);for(const f of j.testResults)for(const t of f.assertionResults)if(t.status==="failed")console.log(f.name.replace(process.cwd()+"/","")+" :: "+t.fullName)})'
+```
+
+- [ ] **Step 2: Production build**
+
+Run (placeholder env is fine for the type/compile gate; use the real `.env.local` if it exists):
+
+```bash
+rm -rf .next
+NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co \
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=placeholder \
+NEXT_PUBLIC_APP_URL=http://localhost:3000 \
+npm run build 2>&1 | tail -30
+```
+
+Expected: `✓ Compiled successfully` and the route table including `/review/[id]` and `/api/inspections/[id]/review-notes`; exit code 0. A type error here is a real failure (Next's build type-checks the app) — fix and re-run.
+
+- [ ] **Step 3: Browser check (spec §8 Playwright recipe)**
+
+Prerequisites: the admin login (ask Daniel — not in the repo), `.env.local` (`npx vercel env pull .env.local`), and the Chrome/Playwright MCP (`ToolSearch "select:mcp__chrome-devtools__navigate_page,mcp__chrome-devtools__take_snapshot,mcp__chrome-devtools__click,mcp__chrome-devtools__fill,mcp__chrome-devtools__wait_for,mcp__chrome-devtools__take_screenshot,mcp__chrome-devtools__list_network_requests"`). The dev server talks to the **production** database: only touch an inspection you create for this test.
+
+```bash
+pkill -f "next dev" ; rm -rf .next ; npm run dev   # http://localhost:3000
+```
+
+1. Navigate to `http://localhost:3000/login`, sign in as the admin.
+2. Create a throwaway inspection: `/inspections/new` → fill Facility / Property Name `PLAN-TEST review mirror`, leave the rest → Submit for Review (draft → `in_review`). Note its id from the URL.
+3. Navigate to `http://localhost:3000/review/<id>`. Expected: `In Review` badge, Finalize / Return buttons, six collapsed cards `Facility Info … Alternative System` each with a pill (`Facility Info` → `N empty`; `Alternative System` → `Not included`), `Photos` card only if media exists, `Report Preview` card with **Regenerate PDF**, sticky bottom bar reading `Changes save automatically` then `Saved · N s ago` after the mount save. Take a screenshot.
+4. Click `Septic Tank`. Expected: the wizard step (Section 4A button groups, tank card, `Generate with AI`, photo drop zone). Click the `Yes` button under **Tanks Pumped**. Expected within ~2 s: bar shows `Saving…` then `Saved · 0 s ago`; network log shows `PATCH /api/inspections/<id>` 200; the `Septic Tank` pill's empty count drops by one.
+5. Deliberate issue: open `Facility Info`, clear **Facility / Property Name**. Expected: pill turns amber `1 issue` after ~300 ms.
+6. Click **Finalize Report**. Expected: `Saving your changes…` then `Finalize with validation issues?` listing `Facility Info · 1 issue` → `Facility Name — Facility/Property name is required`. Click the row: dialog closes, `Facility Info` expands/scrolls, the field shows the amber ring for ~2 s with focus in the input. Type the name back in? **No** — keep it empty to exercise the override: click **Finalize Report** again → **Finalize with issues**. Expected: toast `Inspection finalized successfully`, badge `Completed`, network log shows `PATCH …/review-notes` 200 then `POST …/finalize` 200.
+7. Read-only: every expanded step renders greyed with disabled controls (`fieldset[disabled]` in the DOM snapshot), no photo drop zone, no `Generate with AI`, bar reads `Read-only — reopen the inspection to edit`, no `PATCH /api/inspections/<id>` requests fire while clicking around.
+8. `Report Preview` shows **Finalized Report** in an iframe and **Download PDF** opens a PDF (HTTP 200, `application/pdf`).
+9. **Reopen for Editing** → `In Review`, controls enabled again. Then **Return to Tech** with a note → `Draft`. Finally delete the throwaway inspection from `/inspections` (admin delete) so production stays clean.
+10. Check `review_notes` on the throwaway inspection before deleting (Supabase dashboard or `GET /api/inspections/<id>`): it must contain the line `Finalized with 1 validation issue: Facility Info › Facility Name`.
+
+Record each expectation as observed / not observed in the task report, with screenshots for steps 3, 6 and 7.
+
+- [ ] **Step 4: Open the PR (do not merge, do not push `main`)**
+
+```bash
+git push -u origin feature/review-page-wizard-mirror
+gh pr create --base feature/property-records-prefill --title "Review page mirrors the wizard" --body-file "$SCRATCHPAD/pr-body.md"
+```
+
+`pr-body.md` must contain: the spec link, the four deviations from the "Deviations" section above, the vitest summary line and the 12 pre-existing failures, the build tail, the browser-check results, and the full contents of `parity-before.txt` / `parity-after.txt` (spec §7 requires the parity output in the PR). Deploying (merging to `main`) is Daniel's call — ask explicitly.
+
+---
+
+## Self-review
+
+**Spec coverage**
+
+| Spec section | Where |
+|---|---|
+| §3.1 page order: status header + actions, prefill tile, six collapsed sections, Photos, Report Preview, sticky bar | Task 10 shell (tile in Step 5, guarded) |
+| §3.2 pills `✓ complete` / `N empty` / `⚠ N issues`, live via Zod step validators, 300 ms debounce | Tasks 2, 5 (`ReviewPill`, `useStepValidations`) |
+| §3.3 expanding renders the wizard step with the same controls; provenance badges/chips | Task 10 (`Step*` mounted via `useFormContext`); badges come from prefill Phase 1's `FormLabel`/`FormItem` hooks and render unchanged because the review page uses the same components |
+| §3.4 autosave 1 s, bar states, flush on leave, beforeunload on failed flush | Task 3 (`flush`, `status`), Task 10 (`SaveStatusBar`; unmount save + `beforeunload` kept in the hook) |
+| §3.5 finalize: flush → validate → clean / grouped issue list → jump-to → Fix issues / Finalize with issues → `review_notes` append → POST finalize | Tasks 7, 8, 9, 10 (`jumpToField`) |
+| §3.6 Return / Reopen flush first, dialogs unchanged | Task 9 |
+| §3.7 completed/sent read-only: disabled controls, no autosave, no photo upload | Tasks 3 (`enabled`), 4 (`fieldset`, gating), 10 (`readOnly` derived from status) |
+| §3.8 office staff: same page minus admin actions | unchanged `ReviewActions` gating (Task 9 keeps the `status` switches) |
+| §4 architecture file list | Tasks 2–10 create exactly `review-pill.tsx`, `finalize-dialog.tsx`, `photo-selection.tsx`, `report-preview.tsx`, `step-validation.ts`, modify `review-section.tsx`, `review-actions.tsx`, `review-editor.tsx`, `step-*.tsx`, `use-auto-save.ts`; plus `save-status-bar.tsx` and the `review-notes` route (deviations 2–3) |
+| §4 read-only mechanism incl. CSS rule | Task 4 |
+| §4 jump-to: controlled `ReviewSection`, `openSection` + `form.setFocus` after rAF ×2, 2 s `data-highlight` ring | Tasks 4 (`data-field-path`, CSS), 5 (controlled), 10 (`jumpToField`) |
+| §5 ordering; action buttons disabled with spinner during flush; `flush()` true only on 2xx | Tasks 3, 8, 9 |
+| §6 no schema changes; PATCH unchanged; finalize unchanged | Task 7 adds a route, no migration; PATCH body untouched |
+| §7 parity script, output in PR, missing fields added to steps | Tasks 1, 12, 13 |
+| §8 tests: `step-validation`, `review-editor`, `finalize-dialog`, `review-actions` flush ordering, `use-auto-save` flush, Playwright recipe | Tasks 2, 10, 8, 9, 3, 13 |
+| §9 single PR, `git mv`-style history for extracted pieces, deploy only with approval | Task 6 (extraction committed while the old file is intact, for `-C` copy detection), Task 13 |
+| §10 risks: several galleries fetching signed URLs; portal content gated by disabled triggers | accepted as in spec; sections are collapsed by default so only expanded steps fetch |
+
+Gaps: none found. The spec's `scripts/review-field-parity.ts` is delivered as `.mts` so Node 24 runs it without `tsx` (the repo's other scripts are `.mts` too).
+
+**Placeholder scan:** no "TBD"/"TODO"/"implement later"/"similar to Task N"; every code step contains the full file or the exact replacement text; the only conditional step (prefill present/absent) spells out both branches. The prefill tile wiring in Task 10 Step 5 uses the names fixed in the Phase 1 plan (`usePrefill`, `PrefillSourcesTile { run, isRunning, canRun, error, onFindRecords }`, `ProvenanceProvider`), with an instruction to follow the shipped files if they differ.
+
+**Type consistency:** `validateSteps`/`allIssues`/`humanizeFieldPath`/`StepIssue`/`StepValidation`/`StepValidationResult` (Task 2) are the names imported in Tasks 5 and 8; `useAutoSave` returns `{ saving, lastSaved, status, flush }` and takes `{ debounceMs?, enabled? }` (Task 3) exactly as consumed in Task 10 and mocked in its test; `ReviewSection` props `open`/`onOpenChange`/`pill` (Task 5) match Task 10 usage; `ReviewPill({ result })` and `useStepValidations(control)` match; `PhotoSelection`/`ReportPreview` props (Task 6) match the shell; `FinalizeDialog` props (Task 8) match what `ReviewActions` passes (Task 9), and `ReviewActions`' new `flush`/`getFormData`/`onJumpToField` match the shell (Task 10). `readOnly` is optional on every step and on `PhotoCapture`/`VideoUpload`/`AiCommentButton` (Task 4), so the wizard compiles untouched. All code in Tasks 2–10 was executed against the repo's real dependencies before being pasted here (90 tests green, `tsc` clean apart from the expected step-prop errors that Task 4 resolves).
