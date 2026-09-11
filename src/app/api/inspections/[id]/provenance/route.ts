@@ -30,6 +30,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     );
   }
 
+  // Whole-map replace is last-writer-wins across tabs/devices by design (spec §4).
   await db
     .update(inspections)
     .set({ fieldProvenance: parsed.data.fieldProvenance })

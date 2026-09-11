@@ -5,12 +5,51 @@ import type { UseFormReturn } from "react-hook-form";
 import { toast } from "sonner";
 import type { ScanResult } from "@/lib/ai/scan-types";
 import { AUTO_SELECT_CONFIDENCE } from "@/lib/ai/scan-types";
+import type { ExtractedField } from "@/lib/ai/scan-types";
 import { normalizeFieldPath } from "@/lib/prefill/merge";
-import type { FieldProvenance } from "@/lib/prefill/types";
+import { fieldProvenanceSchema } from "@/lib/prefill/provenance-schema";
+import type { FieldProvenance, ProvenanceEntry, ProvenanceValue } from "@/lib/prefill/types";
 import { createEmptyTank } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 
 export type ScanState = "idle" | "uploading" | "scanning" | "reviewing" | "done";
+
+/** Scan values are blind-cast from the model; coerce to what provenanceValueSchema accepts */
+function toProvenanceValue(value: unknown): ProvenanceValue {
+  if (typeof value === "string") return value.slice(0, 5000);
+  if (typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.slice(0, 100).map((v) => String(v ?? "").slice(0, 500));
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") return JSON.stringify(value).slice(0, 5000);
+  return String(value);
+}
+
+/**
+ * Builds the source=scan provenance entry for an applied field, or null when it can't be
+ * made valid. The provenance PATCH is a whole-map replace, so one non-conforming entry
+ * (confidence 1.4, a numeric value, an unbounded explanation, an odd key) would reject
+ * every other entry — everything is clamped here and the result is checked against the
+ * same schema the route uses.
+ */
+function toScanProvenanceEntry(
+  field: ExtractedField,
+  at: string,
+): { key: string; entry: ProvenanceEntry } | null {
+  const key = normalizeFieldPath(field.fieldPath);
+  const confidence = Number.isFinite(field.confidence)
+    ? Math.min(1, Math.max(0, field.confidence))
+    : 0;
+  const entry: ProvenanceEntry = {
+    source: "scan",
+    state: "prefilled",
+    kind: "fill",
+    value: toProvenanceValue(field.value),
+    confidence,
+    explanation: `Scanned form · ${String(field.source ?? "")}`.slice(0, 500),
+    at,
+  };
+  return fieldProvenanceSchema.safeParse({ [key]: entry }).success ? { key, entry } : null;
+}
 
 interface UploadedImage {
   storagePath: string;
@@ -173,15 +212,8 @@ export function useFormScan(): UseFormScanReturn {
 
         appliedCount++;
         // Scanned values join the provenance system as source "scan" (green badge)
-        entries[normalizeFieldPath(field.fieldPath)] = {
-          source: "scan",
-          state: "prefilled",
-          kind: "fill",
-          value: field.value,
-          confidence: field.confidence,
-          explanation: `Scanned form · ${field.source}`,
-          at,
-        };
+        const scanEntry = toScanProvenanceEntry(field, at);
+        if (scanEntry) entries[scanEntry.key] = scanEntry.entry;
       }
 
       onProvenance?.(entries);

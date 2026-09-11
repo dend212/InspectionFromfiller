@@ -3,6 +3,7 @@ import type { UseFormReturn } from "react-hook-form";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useFormScan } from "@/hooks/use-form-scan";
 import type { ScanResult } from "@/lib/ai/scan-types";
+import { provenancePatchBodySchema } from "@/lib/prefill/provenance-schema";
 import type { FieldProvenance } from "@/lib/prefill/types";
 import type { InspectionFormData } from "@/types/inspection";
 
@@ -59,6 +60,36 @@ describe("useFormScan.applyFields provenance", () => {
       explanation: "Scanned form · Page 2, Section 4E",
     });
     expect(Date.parse(entries["facilityInfo.facilityName"].at)).not.toBeNaN();
+  });
+
+  it("always emits entries the provenance PATCH accepts, even from an out-of-range scan result", async () => {
+    const messy: ScanResult = {
+      fields: [
+        // confidence above 1, numeric value, explanation source way over the 500-char cap
+        { fieldPath: "septicTank.tanks[0].tankCapacity", value: 1000 as unknown as string, confidence: 1.4, source: "x".repeat(600) },
+        // invalid provenance key — the value is still applied to the form, the entry is dropped
+        { fieldPath: "facilityInfo.facility-name", value: "Bad Key", confidence: 0.95, source: "Page 1" },
+        // null value from the model
+        { fieldPath: "facilityInfo.facilityCity", value: null as unknown as string, confidence: 0.9, source: "Page 1" },
+      ],
+      metadata: { pagesProcessed: 1, totalFieldsExtracted: 3, processingTimeMs: 100 },
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(messy) }));
+    const { result } = renderHook(() => useFormScan());
+    const form = makeMockForm();
+    const onProvenance = vi.fn<(entries: FieldProvenance) => void>();
+
+    act(() => result.current.addUploadedImage({ storagePath: "a.jpg", previewUrl: "blob:a", fileName: "a.jpg" }));
+    await act(() => result.current.startScan("insp-1"));
+    act(() => result.current.applyFields(form, onProvenance));
+
+    const entries = onProvenance.mock.calls[0][0];
+    expect(Object.keys(entries).sort()).toEqual(["facilityInfo.facilityCity", "septicTank.tanks.0.tankCapacity"]);
+    expect(entries["septicTank.tanks.0.tankCapacity"]).toMatchObject({ value: "1000", confidence: 1 });
+    expect(entries["septicTank.tanks.0.tankCapacity"].explanation.length).toBeLessThanOrEqual(500);
+    expect(entries["facilityInfo.facilityCity"].value).toBe("");
+    // Exactly what PATCH /provenance validates — a single bad entry would reject the whole map
+    expect(provenancePatchBodySchema.safeParse({ fieldProvenance: entries }).success).toBe(true);
   });
 
   it("still works without an onProvenance callback", async () => {

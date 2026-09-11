@@ -60,32 +60,54 @@ export function ProvenanceProvider({
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guards the one-shot auto-retry below so a second failure in a row doesn't keep rescheduling.
   const retriedRef = React.useRef(false);
+  // The unmount flush can fail after we're gone — never schedule a retry timer then.
+  const mountedRef = React.useRef(true);
+
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const persist = React.useCallback((): void => {
     if (readOnly) return;
+
+    // Provenance is a sidecar — never block the form. Re-arm dirty so the next
+    // edit (or the unmount flush) resends the map, and schedule one retry in
+    // case nothing else changes the form. Callers log before calling this.
+    const onFailure = (): void => {
+      dirtyRef.current = true;
+      if (retriedRef.current || !mountedRef.current) return;
+      retriedRef.current = true;
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        if (dirtyRef.current) {
+          dirtyRef.current = false;
+          persist();
+        }
+      }, PROVENANCE_SAVE_DEBOUNCE_MS);
+    };
+
     fetch(`/api/inspections/${inspectionId}/provenance`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fieldProvenance: provenanceRef.current }),
     })
-      .then(() => {
-        retriedRef.current = false;
+      .then(async (res) => {
+        if (res.ok) {
+          retriedRef.current = false;
+          return;
+        }
+        // A 400/403/500 is a lost save just like a network error — a whole-map
+        // replace means one rejected entry drops everything, so it must be loud.
+        const body = await res.text().catch(() => "");
+        console.error("[provenance] save failed", res.status, body);
+        onFailure();
       })
       .catch((err) => {
-        // Provenance is a sidecar — never block the form. Re-arm dirty so the next
-        // edit (or the unmount flush) resends the map, and log so a failure isn't
-        // silent. Also schedule one retry in case nothing else changes the form.
-        dirtyRef.current = true;
         console.error("[provenance] save failed", err);
-        if (retriedRef.current) return;
-        retriedRef.current = true;
-        timerRef.current = setTimeout(() => {
-          timerRef.current = null;
-          if (dirtyRef.current) {
-            dirtyRef.current = false;
-            persist();
-          }
-        }, PROVENANCE_SAVE_DEBOUNCE_MS);
+        onFailure();
       });
   }, [inspectionId, readOnly]);
 

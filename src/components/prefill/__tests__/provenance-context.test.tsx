@@ -359,4 +359,92 @@ describe("ProvenanceProvider", () => {
     unmount();
     expect(fetch).toHaveBeenCalledTimes(2);
   });
+
+  it("treats a non-2xx PATCH as a failure: logs status + body, re-arms dirty and retries once", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: () => Promise.resolve('{"error":"Invalid provenance"}'),
+    } as Response);
+    const formRef: FormRef = { current: null };
+    const { result } = renderHook(() => useProvenance("facilityInfo.facilityName"), {
+      wrapper: makeWrapper({ formRef, initial: { "facilityInfo.facilityName": entry() } }),
+    });
+
+    act(() => result.current.verify("facilityInfo.facilityName"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PROVENANCE_SAVE_DEBOUNCE_MS);
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[provenance] save failed",
+      400,
+      '{"error":"Invalid provenance"}',
+    );
+
+    // The bounded retry fires on its own with the latest map
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PROVENANCE_SAVE_DEBOUNCE_MS);
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(lastPatchBody().fieldProvenance["facilityInfo.facilityName"].state).toBe("verified");
+  });
+
+  it("does not retry more than once for consecutive failures", async () => {
+    vi.mocked(fetch).mockRejectedValue(new Error("network down"));
+    const formRef: FormRef = { current: null };
+    const { result } = renderHook(() => useProvenance("facilityInfo.facilityName"), {
+      wrapper: makeWrapper({ formRef, initial: { "facilityInfo.facilityName": entry() } }),
+    });
+
+    act(() => result.current.verify("facilityInfo.facilityName"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PROVENANCE_SAVE_DEBOUNCE_MS * 5);
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("resets the retry guard after a success, so a later failure gets a fresh bounded retry", async () => {
+    vi.mocked(fetch)
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockRejectedValueOnce(new Error("network down again"))
+      .mockResolvedValueOnce({ ok: true } as Response);
+    const formRef: FormRef = { current: null };
+    const { result } = renderHook(() => useProvenance("facilityInfo.facilityName"), {
+      wrapper: makeWrapper({ formRef, initial: { "facilityInfo.facilityName": entry() } }),
+    });
+
+    // 1st save fails, its retry succeeds
+    act(() => result.current.verify("facilityInfo.facilityName"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PROVENANCE_SAVE_DEBOUNCE_MS * 2);
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    // A later save fails again — it must get its own retry (guard was reset on success)
+    act(() => result.current.verify("facilityInfo.facilityName"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PROVENANCE_SAVE_DEBOUNCE_MS * 2);
+    });
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it("never schedules a retry timer after unmount when the unmount flush fails", async () => {
+    vi.mocked(fetch).mockRejectedValue(new Error("network down"));
+    const formRef: FormRef = { current: null };
+    const { result, unmount } = renderHook(() => useProvenance("facilityInfo.facilityName"), {
+      wrapper: makeWrapper({ formRef, initial: { "facilityInfo.facilityName": entry() } }),
+    });
+
+    act(() => result.current.verify("facilityInfo.facilityName"));
+    unmount(); // flushes the dirty map → fetch #1 rejects after unmount
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PROVENANCE_SAVE_DEBOUNCE_MS * 5);
+    });
+    expect(errorSpy).toHaveBeenCalledWith("[provenance] save failed", expect.any(Error));
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 });
