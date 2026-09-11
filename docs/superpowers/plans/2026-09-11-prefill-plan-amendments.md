@@ -46,3 +46,11 @@ The replacement `<li>` block in Phase 2 Task 11 ("Mount the list in the tile") m
 ## A7. `runPermitsSelection` argument order is `(input, ctx, candidateKeys)` (Phase 2 wins)
 
 Phase 3's plan text mentions `(input, candidateKeys, ctx)`; the delivered Phase 2 signature is `(input, ctx, candidateKeys)`. Phase 3 implementers read the real signature from `src/lib/prefill/permits/index.ts`.
+
+## A8. `searchPermits` reports partial archive failure (Phase 2 Task 5/8)
+
+Every non-`error` outcome (`found`, `ambiguous`, `not_found`) carries `failedArchives: PermitArchive[]` — the archives whose query threw in the round that produced the outcome (empty when all succeeded). `error` is returned only when every query in the round failed (unchanged). Task 8 must render a non-empty `failedArchives` in `stages.permits.summary` (e.g. `Legacy archive (env) was unavailable — results may be incomplete`) so a `not_found` after an outage never reads as a confident negative. Task 5's `not_found` summary terms stay as they are.
+
+## A9. Property grouping is house number + street; other attributes split only on contradiction (Phase 2 Task 5)
+
+`propertyGroupKey` as a pure key over dir/city/zip5/APN splits one property whose older rows have blank fields, and always separates `edms_env` rows from `edms_eplpav` rows (eplpav has no street direction), so the eplpav FINAL DA is dropped on auto-select. Replace it with `groupByProperty(candidates)`: identity = house number + `normalizeStreetName(street)`; a candidate joins an existing group unless a populated attribute on both sides contradicts (dir, city, zip5, formatted APN — blank/undefined is compatible). Keep the −∞ APN-mismatch score. The brief's "two properties tie" test (three PRINCESS rows) becomes `found` with 3 hits; add a both-archives street-fallback test proving env + eplpav rows of one house land in one group.
