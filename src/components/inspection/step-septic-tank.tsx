@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CheckIcon } from "lucide-react";
 import { useFormContext, useWatch, type Control, type FieldPath } from "react-hook-form";
 import { ButtonGroup } from "@/components/ui/button-group";
