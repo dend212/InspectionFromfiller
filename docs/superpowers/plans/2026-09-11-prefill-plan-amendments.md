@@ -38,3 +38,11 @@ All `septicTank.tankCapacity` / `capacityBasis` / `tankMaterial` / `tankDimensio
 The review-page mirror plan mounts `ProvenanceProvider` + `PrefillSourcesTile` from Phase 1. If executed before Phase 1 lands on its branch, its guarded step applies (mount nothing, leave the comment `// prefill provider mounted in prefill phase 1`) and the mount is added when the branches merge.
 
 **A2 addendum (done by the controller):** the type-only imports in the phase 2/3/4 plan text were rewritten to `from "@/lib/prefill/stage"`. Phase 1 Task 5 additionally adds `export type { StageContext, StageResult } from "./stage";` to `src/lib/prefill/run-prefill.ts` so either import path works.
+
+## A6. Phase 2 Task 11 must keep the `isSafeSourceUrl` link filter in the tile
+
+The replacement `<li>` block in Phase 2 Task 11 ("Mount the list in the tile") maps over `stage.links` directly. Phase 1's delivered `prefill-sources-tile.tsx` filters stage links through `isSafeSourceUrl` (from `@/lib/prefill/provenance-schema`) before rendering, and `prefill-sources-tile.test.tsx` ("never renders an unsafe stage link …") asserts it. Implementers keep `const safeLinks = stage.links.filter(isSafeSourceUrl)` and map over `safeLinks`; the plan's block is otherwise unchanged.
+
+## A7. `runPermitsSelection` argument order is `(input, ctx, candidateKeys)` (Phase 2 wins)
+
+Phase 3's plan text mentions `(input, candidateKeys, ctx)`; the delivered Phase 2 signature is `(input, ctx, candidateKeys)`. Phase 3 implementers read the real signature from `src/lib/prefill/permits/index.ts`.
