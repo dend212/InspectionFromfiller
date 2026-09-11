@@ -1,7 +1,7 @@
 "use client";
 
 import { Link2, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -14,6 +14,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+
+const DRAFT_ERROR_MESSAGE = "Couldn't draft — write your own or retry";
 
 interface GenerateSummaryDialogProps {
   inspectionId: string;
@@ -33,21 +35,52 @@ export function GenerateSummaryDialog({
   const [recommendations, setRecommendations] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDrafting, setIsDrafting] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
 
-  // Pre-populate with most recent recommendations when dialog opens
-  useEffect(() => {
-    if (open) {
-      setIsGenerating(false);
-      setIsLoading(true);
-      fetch(`/api/inspections/${inspectionId}/generate-summary`)
-        .then((res) => (res.ok ? res.json() : { recommendations: "" }))
-        .then((data: { recommendations: string }) => {
-          setRecommendations(data.recommendations || "");
-        })
-        .catch(() => setRecommendations(""))
-        .finally(() => setIsLoading(false));
+  // Ask Claude for a draft. On failure the textarea keeps whatever it had and the notice shows.
+  const requestDraft = useCallback(async () => {
+    setIsDrafting(true);
+    setDraftError(null);
+    try {
+      const res = await fetch(`/api/inspections/${inspectionId}/draft-recommendations`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Draft failed");
+      const data: { recommendations?: string } = await res.json();
+      const draft = (data.recommendations || "").trim();
+      if (!draft) throw new Error("Empty draft");
+      setRecommendations(draft);
+    } catch {
+      setDraftError(DRAFT_ERROR_MESSAGE);
+    } finally {
+      setIsDrafting(false);
     }
-  }, [open, inspectionId]);
+  }, [inspectionId]);
+
+  // Pre-populate with most recent recommendations when dialog opens; auto-draft only when there are none
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setIsGenerating(false);
+    setDraftError(null);
+    setIsLoading(true);
+
+    fetch(`/api/inspections/${inspectionId}/generate-summary`)
+      .then((res) => (res.ok ? res.json() : { recommendations: "" }))
+      .catch(() => ({ recommendations: "" }))
+      .then((data: { recommendations?: string }) => {
+        if (cancelled) return;
+        const saved = data.recommendations || "";
+        setRecommendations(saved);
+        setIsLoading(false);
+        if (!saved) return requestDraft();
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, inspectionId, requestDraft]);
 
   const handleGenerate = async () => {
     if (!recommendations.trim() || isGenerating) return;
@@ -98,13 +131,31 @@ export function GenerateSummaryDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="recommendations">Recommendations</Label>
-            <Textarea
-              id="recommendations"
-              value={recommendations}
-              onChange={(e) => setRecommendations(e.target.value)}
-              placeholder="e.g., Tank replacement recommended within 12 months. Schedule drainfield repair before rainy season."
-              rows={5}
-            />
+            {isDrafting ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="space-y-2 rounded-md border border-input px-3 py-2"
+              >
+                <div className="h-3 w-11/12 animate-pulse rounded bg-muted" />
+                <div className="h-3 w-4/5 animate-pulse rounded bg-muted" />
+                <div className="h-3 w-3/5 animate-pulse rounded bg-muted" />
+                <p className="pt-1 text-xs text-muted-foreground">Drafting recommendations…</p>
+              </div>
+            ) : (
+              <Textarea
+                id="recommendations"
+                value={recommendations}
+                onChange={(e) => setRecommendations(e.target.value)}
+                placeholder="e.g., Tank replacement recommended within 12 months. Schedule drainfield repair before rainy season."
+                rows={5}
+              />
+            )}
+            {draftError && (
+              <p role="alert" className="text-xs text-destructive">
+                {draftError}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               These recommendations will be displayed prominently on the customer summary page.
             </p>
@@ -115,7 +166,10 @@ export function GenerateSummaryDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isGenerating}>
             Cancel
           </Button>
-          <Button onClick={handleGenerate} disabled={!recommendations.trim() || isGenerating}>
+          <Button
+            onClick={handleGenerate}
+            disabled={!recommendations.trim() || isGenerating || isDrafting}
+          >
             {isGenerating ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
