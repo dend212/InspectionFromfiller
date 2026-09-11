@@ -225,6 +225,25 @@ describe("ReviewEditor", () => {
     expect(document.querySelector("fieldset[disabled]")).not.toBeNull();
   });
 
+  it("sent: steps render inside fieldset[disabled] and autosave is disabled (no PATCH)", async () => {
+    const user = userEvent.setup();
+    render(<ReviewEditor inspection={makeInspection({ status: "sent" })} media={media} />);
+
+    expect(autoSaveSpy).toHaveBeenCalledWith(expect.anything(), "insp-1", {
+      enabled: false,
+      seedFromInitial: true,
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(/read-only/i);
+    expect(screen.getByTestId("review-actions")).toHaveAttribute("data-status", "sent");
+
+    await user.click(screen.getByText("Septic Tank"));
+    expect(screen.getByTestId("step-3")).toBeDisabled();
+    expect(document.querySelector("fieldset[disabled]")).not.toBeNull();
+    expect(
+      vi.mocked(fetch).mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "PATCH"),
+    ).toHaveLength(0);
+  });
+
   it("jump-to-field opens the section and highlights the field", async () => {
     const user = userEvent.setup();
     render(<ReviewEditor inspection={makeInspection()} media={media} />);

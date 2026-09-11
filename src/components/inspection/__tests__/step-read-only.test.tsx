@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { FormProvider, useForm } from "react-hook-form";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AiCommentButton } from "@/components/inspection/ai-comment-button";
@@ -25,9 +25,16 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
 });
 
+/** Render and let the step's mount-time media fetch (→ setMedia) settle inside act() */
+async function renderSettled(ui: React.ReactElement) {
+  const result = render(ui);
+  await act(async () => {});
+  return result;
+}
+
 describe("step readOnly", () => {
-  it("wraps the step in an enabled fieldset by default and shows the photo drop zone", () => {
-    render(
+  it("wraps the step in an enabled fieldset by default and shows the photo drop zone", async () => {
+    await renderSettled(
       <Wrapper>
         <StepDesignFlow inspectionId="insp-1" />
       </Wrapper>,
@@ -39,8 +46,8 @@ describe("step readOnly", () => {
     expect(screen.getByText(/browse files/i)).toBeInTheDocument();
   });
 
-  it("readOnly: fieldset[disabled] disables every control and hides the photo drop zone", () => {
-    render(
+  it("readOnly: fieldset[disabled] disables every control and hides the photo drop zone", async () => {
+    await renderSettled(
       <Wrapper>
         <StepDesignFlow inspectionId="insp-1" readOnly />
       </Wrapper>,

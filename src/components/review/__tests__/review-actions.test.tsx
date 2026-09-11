@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
@@ -70,6 +70,17 @@ function recordingFetch(calls: string[], ok = true, body: unknown = {}) {
   });
 }
 
+/**
+ * Render and let the mount-time recommendations prefetch settle inside act().
+ * Its `.finally(() => setRecommendationsLoaded(true))` would otherwise land
+ * after a synchronous test has finished and trip React's act() warning.
+ */
+async function renderSettled(ui: React.ReactElement) {
+  const result = render(ui);
+  await act(async () => {});
+  return result;
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -83,49 +94,49 @@ beforeEach(() => {
 
 describe("ReviewActions", () => {
   describe("status badge", () => {
-    it("renders In Review badge for in_review status", () => {
-      render(<ReviewActions {...defaultProps} status="in_review" />);
+    it("renders In Review badge for in_review status", async () => {
+      await renderSettled(<ReviewActions {...defaultProps} status="in_review" />);
       expect(screen.getByText("In Review")).toBeInTheDocument();
     });
 
-    it("renders Completed badge for completed status", () => {
-      render(<ReviewActions {...defaultProps} status="completed" />);
+    it("renders Completed badge for completed status", async () => {
+      await renderSettled(<ReviewActions {...defaultProps} status="completed" />);
       expect(screen.getByText("Completed")).toBeInTheDocument();
     });
 
-    it("renders Draft badge for draft status", () => {
-      render(<ReviewActions {...defaultProps} status="draft" />);
+    it("renders Draft badge for draft status", async () => {
+      await renderSettled(<ReviewActions {...defaultProps} status="draft" />);
       expect(screen.getByText("Draft")).toBeInTheDocument();
     });
 
-    it("renders Sent badge for sent status", () => {
-      render(<ReviewActions {...defaultProps} status="sent" />);
+    it("renders Sent badge for sent status", async () => {
+      await renderSettled(<ReviewActions {...defaultProps} status="sent" />);
       expect(screen.getByText("Sent")).toBeInTheDocument();
     });
 
-    it("renders raw status when not in labels map", () => {
-      render(<ReviewActions {...defaultProps} status="unknown_status" />);
+    it("renders raw status when not in labels map", async () => {
+      await renderSettled(<ReviewActions {...defaultProps} status="unknown_status" />);
       expect(screen.getByText("unknown_status")).toBeInTheDocument();
     });
   });
 
   describe("in_review status actions", () => {
-    it("renders Finalize Report button", () => {
-      render(<ReviewActions {...defaultProps} status="in_review" />);
+    it("renders Finalize Report button", async () => {
+      await renderSettled(<ReviewActions {...defaultProps} status="in_review" />);
       expect(
         screen.getByRole("button", { name: /finalize report/i }),
       ).toBeInTheDocument();
     });
 
-    it("renders Return to Tech button", () => {
-      render(<ReviewActions {...defaultProps} status="in_review" />);
+    it("renders Return to Tech button", async () => {
+      await renderSettled(<ReviewActions {...defaultProps} status="in_review" />);
       expect(
         screen.getByRole("button", { name: /return to tech/i }),
       ).toBeInTheDocument();
     });
 
-    it("does not render Send PDF to Customer for in_review", () => {
-      render(<ReviewActions {...defaultProps} status="in_review" />);
+    it("does not render Send PDF to Customer for in_review", async () => {
+      await renderSettled(<ReviewActions {...defaultProps} status="in_review" />);
       expect(
         screen.queryByRole("button", { name: /send pdf to customer/i }),
       ).not.toBeInTheDocument();
@@ -163,8 +174,8 @@ describe("ReviewActions", () => {
       );
     });
 
-    it("passes a referentially stable onFinalized to the FinalizeDialog across re-renders", () => {
-      const { rerender } = render(<ReviewActions {...defaultProps} status="in_review" />);
+    it("passes a referentially stable onFinalized to the FinalizeDialog across re-renders", async () => {
+      const { rerender } = await renderSettled(<ReviewActions {...defaultProps} status="in_review" />);
       const first = finalizeDialogProps.mock.lastCall![0].onFinalized;
       rerender(<ReviewActions {...defaultProps} status="in_review" />);
       const second = finalizeDialogProps.mock.lastCall![0].onFinalized;
@@ -202,6 +213,16 @@ describe("ReviewActions", () => {
       expect(order).toEqual(["flush"]);
     });
 
+    it("Return to Tech with default props (no flush) opens the return dialog", async () => {
+      const user = userEvent.setup();
+      render(<ReviewActions {...defaultProps} status="in_review" />);
+
+      await user.click(screen.getByRole("button", { name: /return to tech/i }));
+
+      expect(await screen.findByTestId("return-dialog")).toBeInTheDocument();
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
     it("does not open the return dialog when flush fails", async () => {
       const user = userEvent.setup();
       render(<ReviewActions {...defaultProps} status="in_review" flush={async () => false} />);
@@ -216,22 +237,22 @@ describe("ReviewActions", () => {
   });
 
   describe("completed status actions", () => {
-    it("renders Send PDF to Customer button", () => {
-      render(<ReviewActions {...defaultProps} status="completed" />);
+    it("renders Send PDF to Customer button", async () => {
+      await renderSettled(<ReviewActions {...defaultProps} status="completed" />);
       expect(
         screen.getByRole("button", { name: /send pdf to customer/i }),
       ).toBeInTheDocument();
     });
 
-    it("renders Reopen for Editing button", () => {
-      render(<ReviewActions {...defaultProps} status="completed" />);
+    it("renders Reopen for Editing button", async () => {
+      await renderSettled(<ReviewActions {...defaultProps} status="completed" />);
       expect(
         screen.getByRole("button", { name: /reopen for editing/i }),
       ).toBeInTheDocument();
     });
 
-    it("does not render Finalize button for completed", () => {
-      render(<ReviewActions {...defaultProps} status="completed" />);
+    it("does not render Finalize button for completed", async () => {
+      await renderSettled(<ReviewActions {...defaultProps} status="completed" />);
       expect(
         screen.queryByRole("button", { name: /finalize report/i }),
       ).not.toBeInTheDocument();
@@ -321,8 +342,8 @@ describe("ReviewActions", () => {
   });
 
   describe("sent status actions", () => {
-    it("renders Send PDF to Customer and Reopen buttons", () => {
-      render(<ReviewActions {...defaultProps} status="sent" />);
+    it("renders Send PDF to Customer and Reopen buttons", async () => {
+      await renderSettled(<ReviewActions {...defaultProps} status="sent" />);
 
       expect(
         screen.getByRole("button", { name: /send pdf to customer/i }),
@@ -334,8 +355,8 @@ describe("ReviewActions", () => {
   });
 
   describe("draft status", () => {
-    it("only shows status badge, no action buttons", () => {
-      render(<ReviewActions {...defaultProps} status="draft" />);
+    it("only shows status badge, no action buttons", async () => {
+      await renderSettled(<ReviewActions {...defaultProps} status="draft" />);
 
       expect(screen.getByText("Draft")).toBeInTheDocument();
       expect(
