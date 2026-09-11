@@ -23,9 +23,11 @@ const SECTION_NAME = "design-flow";
 
 interface StepDesignFlowProps {
   inspectionId: string;
+  /** Review page, completed/sent: disables every control and hides upload/AI actions */
+  readOnly?: boolean;
 }
 
-export function StepDesignFlow({ inspectionId }: StepDesignFlowProps) {
+export function StepDesignFlow({ inspectionId, readOnly = false }: StepDesignFlowProps) {
   const form = useFormContext<InspectionFormData>();
   const [media, setMedia] = useState<MediaRecord[]>([]);
 
@@ -65,7 +67,7 @@ export function StepDesignFlow({ inspectionId }: StepDesignFlowProps) {
   }, []);
 
   return (
-    <div className="space-y-8">
+    <fieldset disabled={readOnly} className="min-w-0 space-y-8">
       {/* 3A: Estimated Design Flow */}
       <section className="space-y-4">
         <h3 className="text-lg font-medium">Section 3A: Estimated Design Flow</h3>
@@ -226,8 +228,9 @@ export function StepDesignFlow({ inspectionId }: StepDesignFlowProps) {
           inspectionId={inspectionId}
           section={SECTION_NAME}
           onUploadComplete={(newMedia) => setMedia((prev) => [...prev, newMedia])}
+          readOnly={readOnly}
         />
       </div>
-    </div>
+    </fieldset>
   );
 }

@@ -45,9 +45,11 @@ const SECTION_NAME = "facility-info";
 
 interface StepFacilityInfoProps {
   inspectionId: string;
+  /** Review page, completed/sent: disables every control and hides upload/AI actions */
+  readOnly?: boolean;
 }
 
-export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
+export function StepFacilityInfo({ inspectionId, readOnly = false }: StepFacilityInfoProps) {
   const form = useFormContext<InspectionFormData>();
   const [media, setMedia] = useState<MediaRecord[]>([]);
 
@@ -113,7 +115,7 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
   }, []);
 
   return (
-    <div className="space-y-8">
+    <fieldset disabled={readOnly} className="min-w-0 space-y-8">
       {/* Property Information */}
       <section className="space-y-4">
         <h3 className="text-lg font-medium">Property Information</h3>
@@ -1239,8 +1241,9 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
           inspectionId={inspectionId}
           section={SECTION_NAME}
           onUploadComplete={(newMedia) => setMedia((prev) => [...prev, newMedia])}
+          readOnly={readOnly}
         />
       </div>
-    </div>
+    </fieldset>
   );
 }

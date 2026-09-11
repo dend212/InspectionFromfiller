@@ -15,9 +15,17 @@ interface AiCommentButtonProps {
   section: CommentSection;
   fieldPath: "septicTank.septicTankComments" | "disposalWorks.disposalWorksComments";
   buildContext: () => SepticTankContext | DisposalWorksContext;
+  /** Completed/sent inspections: render nothing */
+  readOnly?: boolean;
 }
 
-export function AiCommentButton({ inspectionId, section, fieldPath, buildContext }: AiCommentButtonProps) {
+export function AiCommentButton({
+  inspectionId,
+  section,
+  fieldPath,
+  buildContext,
+  readOnly,
+}: AiCommentButtonProps) {
   const form = useFormContext<InspectionFormData>();
   const { isGenerating, generate } = useCommentRewrite();
 
@@ -31,6 +39,8 @@ export function AiCommentButton({ inspectionId, section, fieldPath, buildContext
       toast.success("Comment generated");
     }
   }, [form, fieldPath, buildContext, generate, inspectionId, section]);
+
+  if (readOnly) return null;
 
   return (
     <Button

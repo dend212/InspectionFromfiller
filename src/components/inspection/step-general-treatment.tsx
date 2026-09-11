@@ -25,13 +25,15 @@ const SECTION_NAME = "general-treatment";
 
 interface StepGeneralTreatmentProps {
   inspectionId: string;
+  /** Review page, completed/sent: disables every control and hides upload/AI actions */
+  readOnly?: boolean;
 }
 
 // First 6 are common GP 4.02 types; GP 4.03+ are rarely used
 const COMMON_SYSTEM_TYPES = GP402_SYSTEM_TYPES.slice(0, 6);
 const RARE_SYSTEM_TYPES = GP402_SYSTEM_TYPES.slice(6);
 
-export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps) {
+export function StepGeneralTreatment({ inspectionId, readOnly = false }: StepGeneralTreatmentProps) {
   const form = useFormContext<InspectionFormData>();
   const showAlternative = useWatch({ control: form.control, name: "generalTreatment.alternativeSystem" });
   const [showAllTypes, setShowAllTypes] = useState(false);
@@ -81,7 +83,7 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
   }, []);
 
   return (
-    <div className="space-y-8">
+    <fieldset disabled={readOnly} className="min-w-0 space-y-8">
       {/* GP 4.02+ System Type Checkboxes */}
       <section className="space-y-4">
         <h3 className="text-lg font-medium">General Treatment & Disposal Type</h3>
@@ -330,8 +332,9 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
           inspectionId={inspectionId}
           section={SECTION_NAME}
           onUploadComplete={(newMedia) => setMedia((prev) => [...prev, newMedia])}
+          readOnly={readOnly}
         />
       </div>
-    </div>
+    </fieldset>
   );
 }
