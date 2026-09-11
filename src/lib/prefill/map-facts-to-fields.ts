@@ -3,6 +3,9 @@
  * hook merges these into the form (merge.ts); nothing here writes anywhere.
  */
 import type { Fact, PermitDocumentKind, PermitFacts } from "@/lib/ai/permit-extraction-schema";
+import { WATER_SOURCES } from "@/lib/constants/inspection";
+import type { ListingFacts } from "./listing/provider";
+import { SEWER_KEYS, WATER_KEYS, findFact, flattenText } from "./listing/zillow-apify";
 import type { PrefillSource, ProposedField } from "./types";
 
 export interface PermitRecordRef {
@@ -230,4 +233,82 @@ export function dedupeProposals(proposals: ProposedField[]): ProposedField[] {
     }
   }
   return [...best.values()];
+}
+
+// ---------------------------------------------------------------------------
+// Listing (Zillow) — spec §5.3 / §7
+// ---------------------------------------------------------------------------
+
+/** Listing data can be stale, so listing fills sit just above the 0.75 gate. */
+export const LISTING_WATER_CONFIDENCE = 0.8;
+export const LISTING_BEDROOMS_CONFIDENCE = 0.85;
+export const LISTING_SEWER_WARNING = 'Listing says "Sewer" — confirm this property is on septic';
+
+/** Original (un-normalised) text of a listing fact, for the popover evidence line. */
+function listingEvidence(raw: Record<string, unknown>, keys: string[]): string | undefined {
+  const value = findFact(raw, keys);
+  if (value === undefined) return undefined;
+  if (typeof value === "string") return value.trim() || undefined;
+  if (Array.isArray(value)) {
+    const parts = value.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+    return parts.length ? parts.join(", ") : undefined;
+  }
+  const text = flattenText(value);
+  return text ? text : undefined;
+}
+
+export function mapListingFacts(facts: ListingFacts): ProposedField[] {
+  const out: ProposedField[] = [];
+  const sourceUrl = facts.url ? { sourceUrl: facts.url } : {};
+
+  if (facts.waterSource) {
+    const label = WATER_SOURCES.find((w) => w.value === facts.waterSource)?.label ?? facts.waterSource;
+    const rawText = listingEvidence(facts.raw, WATER_KEYS);
+    out.push({
+      fieldPath: "facilityInfo.waterSource",
+      value: facts.waterSource,
+      kind: "fill",
+      provenance: {
+        source: "listing",
+        confidence: LISTING_WATER_CONFIDENCE,
+        explanation: `Zillow listing · Water source: ${rawText ?? label}`,
+        ...(rawText ? { evidence: `Water: ${rawText}` } : {}),
+        ...sourceUrl,
+      },
+    });
+  }
+
+  if (typeof facts.bedrooms === "number" && Number.isInteger(facts.bedrooms) && facts.bedrooms > 0) {
+    out.push({
+      fieldPath: "designFlow.numberOfBedrooms",
+      value: String(facts.bedrooms),
+      kind: "fill",
+      provenance: {
+        source: "listing",
+        confidence: LISTING_BEDROOMS_CONFIDENCE,
+        explanation: `Zillow listing · ${facts.bedrooms} bedrooms`,
+        evidence: `Bedrooms: ${facts.bedrooms}`,
+        ...sourceUrl,
+      },
+    });
+  }
+
+  // A listing on sewer proposes no value — it warns the inspector (amber chip).
+  if (facts.sewer === "sewer") {
+    const rawText = listingEvidence(facts.raw, SEWER_KEYS);
+    out.push({
+      fieldPath: "facilityInfo.wastewaterSource",
+      value: "",
+      kind: "warning",
+      provenance: {
+        source: "listing",
+        confidence: LISTING_WATER_CONFIDENCE,
+        explanation: LISTING_SEWER_WARNING,
+        ...(rawText ? { evidence: `Sewer: ${rawText}` } : {}),
+        ...sourceUrl,
+      },
+    });
+  }
+
+  return out;
 }
