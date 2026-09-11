@@ -5,6 +5,9 @@ import type { UseFormReturn } from "react-hook-form";
 import { toast } from "sonner";
 import type { ScanResult } from "@/lib/ai/scan-types";
 import { AUTO_SELECT_CONFIDENCE } from "@/lib/ai/scan-types";
+import { normalizeFieldPath } from "@/lib/prefill/merge";
+import type { FieldProvenance } from "@/lib/prefill/types";
+import { createEmptyTank } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 
 export type ScanState = "idle" | "uploading" | "scanning" | "reviewing" | "done";
@@ -28,7 +31,10 @@ export interface UseFormScanReturn {
   toggleField: (fieldPath: string) => void;
   selectAllHighConfidence: () => void;
   clearAllSelections: () => void;
-  applyFields: (form: UseFormReturn<InspectionFormData>) => void;
+  applyFields: (
+    form: UseFormReturn<InspectionFormData>,
+    onProvenance?: (entries: FieldProvenance) => void,
+  ) => void;
   reset: () => void;
 }
 
@@ -120,10 +126,12 @@ export function useFormScan(): UseFormScanReturn {
   }, []);
 
   const applyFields = useCallback(
-    (form: UseFormReturn<InspectionFormData>) => {
+    (form: UseFormReturn<InspectionFormData>, onProvenance?: (entries: FieldProvenance) => void) => {
       if (!scanResult) return;
 
       let appliedCount = 0;
+      const entries: FieldProvenance = {};
+      const at = new Date().toISOString();
 
       for (const field of scanResult.fields) {
         if (!selectedFields.has(field.fieldPath)) continue;
@@ -137,7 +145,7 @@ export function useFormScan(): UseFormScanReturn {
 
           // Ensure the tanks array is long enough
           while (currentTanks.length <= tankIndex) {
-            currentTanks.push({} as (typeof currentTanks)[0]);
+            currentTanks.push(createEmptyTank());
           }
 
           // Set the field value on the tank object
@@ -146,19 +154,37 @@ export function useFormScan(): UseFormScanReturn {
           form.setValue("septicTank.tanks", currentTanks, {
             shouldDirty: true,
           });
-          appliedCount++;
-          continue;
+
+          // Bump numberOfTanks when it's empty or smaller than the array we just grew
+          // (same rule as usePrefill's ensureTankArrayCapacity).
+          const requiredLength = tankIndex + 1;
+          const currentCount = form.getValues("septicTank.numberOfTanks");
+          if (!currentCount || Number.parseInt(currentCount, 10) < requiredLength) {
+            form.setValue("septicTank.numberOfTanks", String(requiredLength));
+          }
+        } else {
+          // Standard dotted path (e.g., "facilityInfo.facilityName")
+          // biome-ignore lint/suspicious/noExplicitAny: Dynamic form path
+          form.setValue(field.fieldPath as any, field.value as any, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
         }
 
-        // Standard dotted path (e.g., "facilityInfo.facilityName")
-        // biome-ignore lint/suspicious/noExplicitAny: Dynamic form path
-        form.setValue(field.fieldPath as any, field.value as any, {
-          shouldDirty: true,
-          shouldValidate: true,
-        });
         appliedCount++;
+        // Scanned values join the provenance system as source "scan" (green badge)
+        entries[normalizeFieldPath(field.fieldPath)] = {
+          source: "scan",
+          state: "prefilled",
+          kind: "fill",
+          value: field.value,
+          confidence: field.confidence,
+          explanation: `Scanned form · ${field.source}`,
+          at,
+        };
       }
 
+      onProvenance?.(entries);
       toast.success(`${appliedCount} field${appliedCount === 1 ? "" : "s"} applied from scan`);
       setState("done");
     },
