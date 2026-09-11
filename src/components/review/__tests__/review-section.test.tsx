@@ -122,3 +122,48 @@ describe("ReviewSection", () => {
     });
   });
 });
+
+describe("ReviewSection (controlled + pill)", () => {
+  it("renders the pill in the header", () => {
+    render(
+      <ReviewSection title="Septic Tank" pill={<span data-testid="pill">2 issues</span>}>
+        <p>Body</p>
+      </ReviewSection>,
+    );
+    expect(screen.getByTestId("pill")).toBeInTheDocument();
+  });
+
+  it("follows the controlled `open` prop and reports changes via onOpenChange", async () => {
+    const onOpenChange = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <ReviewSection title="Controlled" open={false} onOpenChange={onOpenChange}>
+        <p>Controlled body</p>
+      </ReviewSection>,
+    );
+    expect(screen.queryByText("Controlled body")).not.toBeInTheDocument();
+
+    await user.click(screen.getByText("Controlled"));
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+    // Still closed: the parent owns the state
+    expect(screen.queryByText("Controlled body")).not.toBeInTheDocument();
+
+    rerender(
+      <ReviewSection title="Controlled" open={true} onOpenChange={onOpenChange}>
+        <p>Controlled body</p>
+      </ReviewSection>,
+    );
+    expect(screen.getByText("Controlled body")).toBeVisible();
+  });
+
+  it("stays uncontrolled when `open` is omitted", async () => {
+    const user = userEvent.setup();
+    render(
+      <ReviewSection title="Uncontrolled">
+        <p>Uncontrolled body</p>
+      </ReviewSection>,
+    );
+    await user.click(screen.getByText("Uncontrolled"));
+    expect(screen.getByText("Uncontrolled body")).toBeVisible();
+  });
+});
