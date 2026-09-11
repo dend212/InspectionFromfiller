@@ -12,6 +12,9 @@ import {
   useFormContext,
   useFormState,
 } from "react-hook-form";
+import { ProvenanceBadge } from "@/components/prefill/provenance-badge";
+import { SuggestionChip } from "@/components/prefill/suggestion-chip";
+import { useProvenance } from "@/components/prefill/provenance-context";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
@@ -68,19 +71,37 @@ type FormItemContextValue = {
 
 const FormItemContext = React.createContext<FormItemContextValue>({} as FormItemContextValue);
 
-function FormItem({ className, ...props }: React.ComponentProps<"div">) {
+function FormItem({ className, children, ...props }: React.ComponentProps<"div">) {
   const id = React.useId();
+  // FormItem is normally rendered inside a FormField; outside one the context is empty
+  const fieldContext = React.useContext(FormFieldContext);
+  const fieldName = fieldContext?.name;
+  const { entry } = useProvenance(fieldName);
 
   return (
     <FormItemContext.Provider value={{ id }}>
-      <div data-slot="form-item" className={cn("grid gap-2", className)} {...props} />
+      <div
+        data-slot="form-item"
+        data-field-path={fieldName}
+        className={cn("grid gap-2", className)}
+        {...props}
+      >
+        {children}
+        {fieldName && entry?.state === "suggested" ? <SuggestionChip fieldPath={fieldName} /> : null}
+      </div>
     </FormItemContext.Provider>
   );
 }
 
-function FormLabel({ className, ...props }: React.ComponentProps<typeof LabelPrimitive.Root>) {
-  const { error, formItemId } = useFormField();
+function FormLabel({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof LabelPrimitive.Root>) {
+  const { error, formItemId, name } = useFormField();
 
+  // The badge is a <button>, i.e. interactive content: per the HTML spec clicking it
+  // does not activate the label's control, so it is safe inside the label.
   return (
     <Label
       data-slot="form-label"
@@ -88,7 +109,10 @@ function FormLabel({ className, ...props }: React.ComponentProps<typeof LabelPri
       className={cn("data-[error=true]:text-destructive", className)}
       htmlFor={formItemId}
       {...props}
-    />
+    >
+      {children}
+      <ProvenanceBadge fieldPath={name} />
+    </Label>
   );
 }
 
