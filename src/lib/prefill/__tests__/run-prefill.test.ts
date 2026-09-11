@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockLoadRunRow, mockUpdateRun, mockRunAssessorStage } = vi.hoisted(() => ({
   mockLoadRunRow: vi.fn(),
@@ -13,6 +13,15 @@ vi.mock("@/lib/prefill/run-store", () => ({
 
 vi.mock("@/lib/prefill/assessor", () => ({
   runAssessorStage: mockRunAssessorStage,
+}));
+
+// Phase 2 replaced the permits stub with the real stage (live EDMS + Storage) — keep the
+// phase-1 stub behaviour here so the orchestrator test stays offline. Task 10 retires this.
+vi.mock("@/lib/prefill/permits", () => ({
+  runPermitsStage: vi.fn().mockResolvedValue({
+    stage: { status: "skipped", summary: "Not available yet", links: [] },
+    proposals: [],
+  }),
 }));
 
 import { continuePrefillAfterSelection, runPrefill } from "@/lib/prefill/run-prefill";
@@ -47,8 +56,15 @@ function lastPatch() {
   return call[1];
 }
 
+// The orchestrator must never reach the network from a unit test — every stage is mocked.
+// A real call is rejected here (so nothing leaves the process) and reported by the assertion.
+let fetchSpy: ReturnType<typeof vi.spyOn>;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  fetchSpy = vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(new Error("network access is not allowed in unit tests"));
   mockLoadRunRow.mockResolvedValue(RUN);
   mockUpdateRun.mockResolvedValue(undefined);
   mockRunAssessorStage.mockImplementation(async (_input: PrefillInput, ctx: StageContext) => {
@@ -58,6 +74,10 @@ beforeEach(() => {
       proposals: [PROPOSAL],
     };
   });
+});
+
+afterEach(() => {
+  fetchSpy.mockRestore();
 });
 
 describe("runPrefill", () => {
@@ -74,6 +94,16 @@ describe("runPrefill", () => {
     expect(final.stages.listing).toEqual({ status: "skipped", summary: "Not available yet", links: [] });
     expect(final.stages.permits).toEqual({ status: "skipped", summary: "Not available yet", links: [] });
     expect(final.finishedAt).toBeInstanceOf(Date);
+  });
+
+  it("never reaches the network — every stage is mocked", async () => {
+    await runPrefill("run-1");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(lastPatch().stages.permits).toEqual({
+      status: "skipped",
+      summary: "Not available yet",
+      links: [],
+    });
   });
 
   it("passes the run input and a StageContext to the assessor stage", async () => {
