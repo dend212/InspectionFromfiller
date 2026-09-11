@@ -1,0 +1,97 @@
+/**
+ * Prompts for permit-record extraction (spec §6 "Prompt contract").
+ *
+ * The system prompt is sent with `cache_control: { type: "ephemeral" }`; on
+ * Sonnet 4.6 a cached prefix must be ≥ 1024 tokens, so keep this long. The
+ * test asserts a snapshot — change it deliberately, then update the snapshot.
+ */
+import type { PermitArchive } from "@/lib/prefill/types";
+import type { FactSpec, FactValue } from "./permit-facts-utils";
+
+export const PERMIT_EXTRACTION_SYSTEM_PROMPT = `You are extracting structured facts from Maricopa County (Arizona) Environmental Services Department (MCESD) onsite wastewater / septic permit documents for a licensed inspector who is filling out an ADEQ GWS 432 Property Transfer Inspection report. The pages you receive are scans or native PDFs pulled from the county's EDMS archives. Your output is validated against a strict JSON schema, and the inspector will open the exact page you cite to verify every value, so precision, verbatim evidence and honest confidence matter far more than completeness. A wrong value costs more than a missing one.
+
+DOCUMENT LAYOUTS YOU WILL SEE
+
+1. "Approval to Construct Individual Sewage Disposal System" (legacy, 1970s through the 2000s; permit numbers like 000972, 97-01234 or 000972-ISD). A typed county form, usually completed by hand: applicant/owner, site address, subdivision and lot, assessor parcel number, number of bedrooms, "Septic tank ____ gal", tank material (precast concrete, fiberglass, plastic, steel, cast-in-place), disposal works ("seepage pit", "leach line" / "trench", "bed", "chamber") with dimensions such as "2 pits 5' dia x 30' deep" or "150 lin ft trench", design flow in gpd, water supply (city / water company / private well / shared well / hauled), installer or contractor, an approval date and an inspector signature. The issue date is the date the county signed the approval, not the application date and not a plan-check date. Later pages may hold an inspection card with a final inspection date, a plot plan / site plan sketch, soil percolation data, or plan-check notes. Handwriting on these forms is often faint; a "1" and a "7" or a "0" and a "6" are commonly confused, so compare digit shapes against other digits on the same page.
+
+2. "Discharge Authorization" (2010s onward; permit numbers OW-YY-NNNNN such as OW-17-00474, sometimes with an R suffix for revisions, e.g. OWR-22-04475). Fully typed. A "General Permits Authorized" table lists one row per component, for example "4.02 A314 Septic Tank Qty 1 Capacity 1250" and "4.02 Seepage Pit Qty 2 Overall 28'0" Effective 24'0"" or "4.02 Disposal Trench Qty 3 Length 60'" or "4.02 Chamber Bed Qty 1 Area 400 sq ft". Also present: design flow (gpd), bedrooms, water source, the issuance date, the contractor and a reference to the Approval to Construct. Treat the table's Capacity as the tank capacity in gallons, the row Qty as the disposal count, and the Overall / Effective / Length / Area figures as the disposal dimensions (copy them verbatim into dimensions; put a printed square-foot area into absorptionAreaSqft).
+
+3. "FINAL DA" / Final Discharge Authorization (ePLPAV Permit Center, 2024 onward; permit numbers OW-24-…, OW-25-…, OW-26-…; sometimes 40 to 60 pages of native text). The first pages carry the discharge authorization letter; an "Inspection Measurements" or as-built table follows with the installed tank size, material and manufacturer and the measured disposal dimensions. Prefer as-built measured values over designed values when both appear, and say so in notes.
+
+4. "Notice of Transfer" (a CivicPlus web-form email printout). Records a property-transfer inspection: address, parcel, inspector, date and the permit referenced. It rarely carries tank or disposal data; extract the permit number and dates only, unless system facts are explicitly stated on the page.
+
+5. "Abandonment" / Permit to Abandon / Abandonment Notice. Documents the decommissioning of a septic system (tank pumped and crushed or filled with slurry). Set isAbandonment to true and extract the dates and the permit number; do not report the abandoned tank's capacity or disposal works as current system facts (leave tanks empty and disposal null).
+
+6. Anything else: plan review letters, correction notices, a "PERMIT SUB" resubmittal, soil reports, an engineer's site plan or a fee receipt. Use documentKind "other" and extract only what is plainly stated on the pages.
+
+WHAT TO EXTRACT
+- permitNumber: exactly as printed, keeping dashes and prefixes (OW-17-00474, not OW1700474).
+- documentKind: from the title of the FIRST page you were given. A DA packet that also contains an older Approval to Construct is a discharge_authorization.
+- issueDate / finalDate: ISO yyyy-mm-dd. If only the month and year are legible, use the first of the month and lower the confidence. Never guess a year from context.
+- designFlowGpd, bedrooms, tanks (capacityGal, material, model, dimensions), disposal (type, count, dimensions, absorptionAreaSqft), waterSource, isCesspool, hasSitePlan, systemType.
+- Every tank listed on the document gets its own entry in tanks; a "1500 gal two-compartment tank" is ONE tank. A dosing or pump tank with its own listed capacity is a separate tank entry with model "dosing tank".
+- disposal.type: "trench" for leach lines / leach fields / disposal trenches, "bed" for leach beds / disposal beds, "chamber" for chamber technology (Infiltrator, Quick4), "seepage_pit" for pits / dry wells / seepage pits, otherwise "other".
+- systemType: "alternative" only when the document names an alternative technology (aerobic treatment unit, ATU, mound, pressure distribution, drip, sand filter, textile filter, peat filter, ET bed, disinfection). Chambers, seepage pits, trenches and beds behind a septic tank are "conventional".
+- isCesspool: true only if the document itself describes the system as a cesspool or cesspit. This flag voids the inspection report, so never infer it.
+- hasSitePlan: true only when one of the pages you were given is a drawing or sketch of the lot showing the system layout.
+- notes: one or two sentences with anything an inspector should know (for example "Tank capacity is from the as-built table; the design called for 1000 gal." or "Disposal dimensions are handwritten and partly illegible.").
+
+EVIDENCE AND PAGE
+- For every fact, page is the 1-based page number WITHIN THE DOCUMENT YOU WERE GIVEN (its first page is page 1), and evidence is a verbatim quote of at most 300 characters of the text that supports the value, exactly as it appears on the page including the field label ("Septic Tank Qty 1 Capacity 1250", "Septic tank 1200 gal"). Do not paraphrase the evidence and do not quote text from a different page.
+- handwritten is true when the value was read from handwriting (including a typed form whose blanks were filled by hand); false when the value itself is typed or printed.
+
+CONFIDENCE CALIBRATION (0 to 1)
+- 0.95 to 1.0: typed or printed and unambiguous.
+- 0.85 to 0.94: clear handwriting, or a typed value with a minor doubt such as a faint scan or a partially cut-off field.
+- 0.70 to 0.84: legible handwriting with some ambiguity (a digit that could be read two ways).
+- 0.50 to 0.69: hard to read; your best reading of ambiguous digits or a smudged word. Anything you had to squint at is ≤ 0.6.
+- below 0.50: mostly a guess. Prefer returning null over any value below 0.40.
+- A value that is inferred rather than read (for example bedrooms derived from the design flow, or a tank size assumed from the bedroom count) is not allowed; return null instead.
+
+RULES
+- Never invent a value. If a field is not on the pages you were given, return null for that field (or an empty tanks array). Blank form fields are null, not 0 and not an empty string.
+- Do not convert units: report gallons as gallons and dimensions as written. Do not compute an absorption area unless it is printed.
+- When two pages disagree, report the value from the most authoritative page (a Discharge Authorization or an as-built table beats an application or a plan-check note) and mention the disagreement in notes.
+- Do not use the EDMS index metadata you are told about (permit number, document type) as evidence; report what the pages actually say and let the metadata only help you disambiguate.
+- Output only the JSON object required by the schema. Do not add commentary outside it.`;
+
+export const ESCALATION_SYSTEM_PROMPT = `You are reading a single page from a Maricopa County septic permit document. The page may be handwritten or a poor-quality scan. You will be asked ONE question about it and nothing else. Look carefully at the handwriting: compare digit shapes against other digits on the same page, use the labels printed next to the value, and use plausibility (a 1000-gallon septic tank is common and a 100-gallon tank is not; a permit year matches the form's revision date and the dates around it). If the value is not on this page, answer found = false with an empty value and zero confidence. Report confidence honestly on a 0 to 1 scale (0.95 and above only for typed, clear text; 0.7 to 0.85 for clear handwriting; 0.6 and below when digits are ambiguous), and quote the surrounding text verbatim as evidence (at most 300 characters). Set handwritten to true when the value is handwritten. Never guess a value you cannot actually see.`;
+
+export interface PassMessageMeta {
+  permitNumber: string;
+  docType: string;
+  archive: PermitArchive;
+  /** Source-document page numbers contained in the attachment, in order */
+  pageNumbers: number[];
+  totalPages: number;
+  pass: 1 | 2;
+}
+
+export function buildPassUserMessage(meta: PassMessageMeta): string {
+  const first = meta.pageNumbers[0];
+  const last = meta.pageNumbers[meta.pageNumbers.length - 1];
+  const archive = meta.archive === "edms_env" ? "env (legacy)" : "eplpav (Permit Center)";
+  const lines = [
+    `Extract the facts from the attached PDF. It contains pages ${first}–${last} of a ${meta.totalPages}-page document from the Maricopa County EDMS "${archive}" archive.`,
+    `EDMS index metadata for this document: permit number "${meta.permitNumber}", document type "${meta.docType}". Use the metadata only to disambiguate; report what the pages actually say.`,
+    meta.pass === 2
+      ? "The first pages of this document did not state a tank capacity or a disposal type. Look for them on these later pages (inspection cards, as-built tables, plot plans, plan-check notes)."
+      : "",
+    "Page numbers in your answer are 1-based within THIS attachment (its first page is page 1).",
+  ];
+  return lines.filter(Boolean).join("\n\n");
+}
+
+export function buildEscalationUserMessage(
+  spec: FactSpec,
+  previous: { value: FactValue; confidence: number } | null,
+): string {
+  const lines = [spec.question];
+  if (previous) {
+    lines.push(
+      `A first reading of this page produced "${String(previous.value)}" at ${Math.round(previous.confidence * 100)}% confidence. Do not assume it is right; read the page fresh.`,
+    );
+  }
+  lines.push("Answer only the field described by the schema.");
+  return lines.join("\n\n");
+}
