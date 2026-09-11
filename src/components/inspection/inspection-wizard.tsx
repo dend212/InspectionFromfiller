@@ -4,9 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { type FieldPath, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
-import { ApnLookupInput } from "@/components/inspection/apn-lookup-input";
 import { ReviewNoteBanner } from "@/components/inspection/review-note-banner";
-import { ScanFormButton } from "@/components/inspection/scan-form-button";
 import { StepAlternativeSystem } from "@/components/inspection/step-alternative-system";
 import { StepDesignFlow } from "@/components/inspection/step-design-flow";
 import { StepDisposalWorks } from "@/components/inspection/step-disposal-works";
@@ -16,9 +14,12 @@ import { StepSepticTank } from "@/components/inspection/step-septic-tank";
 import { SubmitForReviewButton } from "@/components/inspection/submit-for-review-button";
 import { WizardNavigation } from "@/components/inspection/wizard-navigation";
 import { WizardProgress } from "@/components/inspection/wizard-progress";
+import { PrefillPanel } from "@/components/prefill/prefill-panel";
+import { ProvenanceProvider } from "@/components/prefill/provenance-context";
 import { Form } from "@/components/ui/form";
 import { useAutoSave } from "@/hooks/use-auto-save";
 import { STEP_LABELS } from "@/lib/constants/inspection";
+import type { FieldProvenance, PrefillRunDTO } from "@/lib/prefill/types";
 import { normalizeIncludeAlternativePages } from "@/lib/inspection-form";
 import {
   getDefaultFormValues,
@@ -33,6 +34,10 @@ interface InspectionWizardProps {
     formData: InspectionFormData | null;
     status: string;
     reviewNotes?: string | null;
+    /** Per-field prefill provenance sidecar (inspections.field_provenance) */
+    fieldProvenance?: FieldProvenance;
+    /** Latest prefill run, loaded server-side so the tile renders without a fetch */
+    prefillRun?: PrefillRunDTO | null;
   };
 }
 
@@ -112,14 +117,21 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
 
   return (
     <Form {...form}>
+      <ProvenanceProvider
+        form={form}
+        inspectionId={inspection.id}
+        initial={inspection.fieldProvenance ?? {}}
+        readOnly={inspection.status !== "draft"}
+      >
       <form onSubmit={handleSubmit} className="flex flex-col gap-6 pb-4">
         {inspection.reviewNotes && <ReviewNoteBanner note={inspection.reviewNotes} />}
 
         {inspection.status === "draft" && (
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <ApnLookupInput form={form} />
-            <ScanFormButton inspectionId={inspection.id} form={form} />
-          </div>
+          <PrefillPanel
+            inspectionId={inspection.id}
+            form={form}
+            initialRun={inspection.prefillRun}
+          />
         )}
 
         <WizardProgress
@@ -166,6 +178,7 @@ export function InspectionWizard({ inspection }: InspectionWizardProps) {
           }
         />
       </form>
+      </ProvenanceProvider>
     </Form>
   );
 }
