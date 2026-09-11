@@ -8,7 +8,8 @@
  * Usage:
  *   node scripts/review-field-parity.mts                      # gate the live old editor
  *   node scripts/review-field-parity.mts --old <saved-copy>   # gate a saved copy after deletion
- * Exit code 1 when any field is missing.
+ * Exit code 1 when any field is missing, 2 when no old-editor fields could be
+ * extracted (the gate must never pass on an empty set).
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -76,6 +77,12 @@ if (!existsSync(oldEditorPath)) {
 }
 
 const oldFields = extractOldEditorFields(readFileSync(oldEditorPath, "utf8"));
+if (oldFields.size === 0) {
+  console.error(
+    `No fields extracted from ${OLD_EDITOR} — pass --old <saved copy of the pre-rewrite editor>`,
+  );
+  process.exit(2);
+}
 const stepFields = new Map<string, string>(); // path → file
 for (const file of readdirSync(join(root, STEP_DIR)).filter((f) => /^step-.*\.tsx$/.test(f))) {
   for (const p of extractStepFields(readFileSync(join(root, STEP_DIR, file), "utf8"))) {
