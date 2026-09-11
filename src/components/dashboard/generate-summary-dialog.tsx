@@ -1,6 +1,6 @@
 "use client";
 
-import { Link2, Loader2 } from "lucide-react";
+import { Link2, Loader2, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 const DRAFT_ERROR_MESSAGE = "Couldn't draft — write your own or retry";
+const REGENERATE_CONFIRM_MESSAGE = "Replace your edits with a new draft?";
 
 interface GenerateSummaryDialogProps {
   inspectionId: string;
@@ -37,6 +38,8 @@ export function GenerateSummaryDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [isDrafting, setIsDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
+  // The last text Claude produced — anything different in the textarea counts as a user edit
+  const [lastDraft, setLastDraft] = useState<string | null>(null);
   // Guards requestDraft's own async chain: bumped on every new draft request and on
   // dialog close, so a response that lands after the request it belongs to has been
   // superseded is discarded instead of clobbering fresher state or double-firing.
@@ -57,6 +60,7 @@ export function GenerateSummaryDialog({
       const draft = (data.recommendations || "").trim();
       if (!draft) throw new Error("Empty draft");
       setRecommendations(draft);
+      setLastDraft(draft);
     } catch {
       if (draftSeqRef.current === mySeq) setDraftError(DRAFT_ERROR_MESSAGE);
     } finally {
@@ -70,6 +74,7 @@ export function GenerateSummaryDialog({
     let cancelled = false;
     setIsGenerating(false);
     setDraftError(null);
+    setLastDraft(null);
     setIsLoading(true);
 
     fetch(`/api/inspections/${inspectionId}/generate-summary`)
@@ -91,6 +96,12 @@ export function GenerateSummaryDialog({
       setDraftError(null);
     };
   }, [open, inspectionId, requestDraft]);
+
+  const handleRegenerate = async () => {
+    const hasEdits = recommendations.trim() !== "" && recommendations !== lastDraft;
+    if (hasEdits && !window.confirm(REGENERATE_CONFIRM_MESSAGE)) return;
+    await requestDraft();
+  };
 
   const handleGenerate = async () => {
     if (!recommendations.trim() || isGenerating) return;
@@ -140,7 +151,24 @@ export function GenerateSummaryDialog({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="recommendations">Recommendations</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="recommendations">Recommendations</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleRegenerate}
+                disabled={isDrafting || isLoading || isGenerating}
+                className="gap-1.5"
+              >
+                {isDrafting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Sparkles className="size-4" />
+                )}
+                Regenerate
+              </Button>
+            </div>
             {isDrafting ? (
               <div
                 role="status"
