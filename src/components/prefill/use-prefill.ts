@@ -138,6 +138,23 @@ export function usePrefill({ inspectionId, form, enabled, initialRun }: UsePrefi
     [form, inspectionId, setMany],
   );
 
+  /**
+   * Single entry point for every run DTO the hook receives (mount's initialRun/latest,
+   * start()'s first GET, selectCandidates()'s refetch, poll ticks). Adopts it into state
+   * and applies it immediately if it's already `done` — a run can finish before the
+   * client's next look at it (e.g. a fast assessor stage beats the first GET after the
+   * 201), so applying must not be limited to the mount effect and poll tick alone.
+   */
+  const adoptRun = useCallback(
+    (dto: PrefillRunDTO) => {
+      setRun(dto);
+      if (dto.status === "done" && dto.appliedAt === null && !appliedRef.current.has(dto.id)) {
+        void applyRun(dto);
+      }
+    },
+    [applyRun],
+  );
+
   const fetchRun = useCallback(
     async (runId: string): Promise<PrefillRunDTO | null> => {
       try {
@@ -156,7 +173,7 @@ export function usePrefill({ inspectionId, form, enabled, initialRun }: UsePrefi
   useEffect(() => {
     if (!enabled) return;
     if (initialRun !== undefined) {
-      if (initialRun) void applyRun(initialRun);
+      if (initialRun) adoptRun(initialRun);
       return;
     }
     let cancelled = false;
@@ -166,8 +183,11 @@ export function usePrefill({ inspectionId, form, enabled, initialRun }: UsePrefi
         if (!res.ok || cancelled) return;
         const latest = (await res.json()) as PrefillRunDTO | null;
         if (cancelled) return;
-        setRun(latest);
-        if (latest) void applyRun(latest);
+        if (latest) {
+          adoptRun(latest);
+        } else {
+          setRun(null);
+        }
       } catch {
         // No latest run to show — the tile falls back to its intro copy
       }
@@ -175,7 +195,7 @@ export function usePrefill({ inspectionId, form, enabled, initialRun }: UsePrefi
     return () => {
       cancelled = true;
     };
-  }, [enabled, inspectionId, initialRun, applyRun]);
+  }, [enabled, inspectionId, initialRun, adoptRun]);
 
   // Poll while the run is queued/running
   useEffect(() => {
@@ -185,14 +205,13 @@ export function usePrefill({ inspectionId, form, enabled, initialRun }: UsePrefi
     const timer = setInterval(async () => {
       const next = await fetchRun(runId);
       if (!next || cancelled) return;
-      setRun(next);
-      if (next.status === "done") void applyRun(next);
+      adoptRun(next);
     }, PREFILL_POLL_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [enabled, run, fetchRun, applyRun]);
+  }, [enabled, run, fetchRun, adoptRun]);
 
   const start = useCallback(
     async (input: StartPrefillInput = {}) => {
@@ -209,12 +228,16 @@ export function usePrefill({ inspectionId, form, enabled, initialRun }: UsePrefi
           return;
         }
         const created = await fetchRun(body.runId);
-        setRun(created ?? placeholderRun(body.runId, inspectionId, input.trigger ?? "manual"));
+        if (created) {
+          adoptRun(created);
+        } else {
+          setRun(placeholderRun(body.runId, inspectionId, input.trigger ?? "manual"));
+        }
       } catch {
         setError("Prefill failed — check your connection and try again");
       }
     },
-    [inspectionId, fetchRun],
+    [inspectionId, fetchRun, adoptRun],
   );
 
   const selectCandidates = useCallback(
@@ -232,12 +255,17 @@ export function usePrefill({ inspectionId, form, enabled, initialRun }: UsePrefi
           setError(body.error ?? "Could not select records");
           return;
         }
-        setRun({ ...run, status: "running", candidates: [] });
+        const refetched = await fetchRun(run.id);
+        if (refetched) {
+          adoptRun(refetched);
+        } else {
+          setRun({ ...run, status: "running", candidates: [] });
+        }
       } catch {
         setError("Could not select records — try again");
       }
     },
-    [inspectionId, run],
+    [inspectionId, run, fetchRun, adoptRun],
   );
 
   return {

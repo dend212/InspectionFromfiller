@@ -245,6 +245,58 @@ describe("usePrefill", () => {
     expect(result.current.prefill.error).toBe("Run is not awaiting selection");
   });
 
+  it("applies a run that is already done on start()'s first GET", async () => {
+    const mock = installFetch((method, url) => {
+      if (method === "POST" && url === "/api/inspections/insp-1/prefill") return { status: 201, body: { runId: "run-3" } };
+      if (method === "GET" && url === "/api/inspections/insp-1/prefill/run-3") {
+        return { status: 200, body: { ...DONE_RUN, id: "run-3" } };
+      }
+      if (method === "POST" && url === "/api/inspections/insp-1/prefill/run-3/applied") return { status: 200, body: { ok: true } };
+      return undefined;
+    });
+    const { result, formRef } = renderPrefill({ initialRun: null });
+
+    await act(async () => {
+      await result.current.prefill.start({ apn: "219-11-121", trigger: "apn_lookup" });
+    });
+
+    expect(result.current.prefill.run?.status).toBe("done");
+    await waitFor(() => {
+      expect(formRef.current?.getValues("facilityInfo.taxParcelNumber")).toBe("219-11-121");
+    });
+    await waitFor(() => {
+      expect(calls(mock)).toContain("POST /api/inspections/insp-1/prefill/run-3/applied");
+    });
+  });
+
+  it("applies a done run returned by selectCandidates()'s refetch", async () => {
+    const AWAITING_RUN: PrefillRunDTO = {
+      ...DONE_RUN,
+      status: "awaiting_selection",
+      appliedAt: null,
+      proposals: [],
+    };
+    const mock = installFetch((method, url) => {
+      if (method === "POST" && url === "/api/inspections/insp-1/prefill/run-1/select") return { status: 200, body: { ok: true } };
+      if (method === "GET" && url === "/api/inspections/insp-1/prefill/run-1") return { status: 200, body: DONE_RUN };
+      if (method === "POST" && url === "/api/inspections/insp-1/prefill/run-1/applied") return { status: 200, body: { ok: true } };
+      return undefined;
+    });
+    const { result, formRef } = renderPrefill({ initialRun: AWAITING_RUN });
+
+    await act(async () => {
+      await result.current.prefill.selectCandidates(["edms_env:000972:PERMIT:"]);
+    });
+
+    expect(result.current.prefill.run?.status).toBe("done");
+    await waitFor(() => {
+      expect(formRef.current?.getValues("facilityInfo.taxParcelNumber")).toBe("219-11-121");
+    });
+    await waitFor(() => {
+      expect(calls(mock)).toContain("POST /api/inspections/insp-1/prefill/run-1/applied");
+    });
+  });
+
   it("grows a shorter septicTank.tanks array to fit a fill's tank index (amendment A1)", async () => {
     const runWithTankFill: PrefillRunDTO = {
       ...DONE_RUN,
