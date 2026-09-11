@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import type * as React from "react";
 import { type UseFormReturn, useForm } from "react-hook-form";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   NOOP_PROVENANCE,
   PROVENANCE_SAVE_DEBOUNCE_MS,
@@ -66,9 +66,25 @@ function lastPatchBody(): { fieldProvenance: FieldProvenance } {
   return JSON.parse(String(init?.body));
 }
 
+// Mocked for the whole file (not per-test) so it stays silenced through
+// testing-library's automatic unmount, which runs after our own afterEach
+// (afterEach hooks run in reverse registration order) and can otherwise
+// trigger a real, un-stubbed persist() call for any test that leaves the
+// provenance map dirty without advancing timers to flush it.
+let errorSpy: ReturnType<typeof vi.spyOn>;
+
+beforeAll(() => {
+  errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+afterAll(() => {
+  errorSpy.mockRestore();
+});
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+  errorSpy.mockClear();
 });
 
 afterEach(() => {
@@ -294,5 +310,53 @@ describe("ProvenanceProvider", () => {
     expect(fetch).not.toHaveBeenCalled();
     unmount();
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-arms dirty and logs when a PATCH fails, so the next change retries with the latest map", async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new Error("network down"));
+    const formRef: FormRef = { current: null };
+    const { result } = renderHook(() => useProvenance("facilityInfo.facilityName"), {
+      wrapper: makeWrapper({
+        formRef,
+        initial: { "facilityInfo.facilityName": entry() },
+        facility: { facilityName: "JOHN DOE" },
+      }),
+    });
+
+    act(() => result.current.verify("facilityInfo.facilityName"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PROVENANCE_SAVE_DEBOUNCE_MS);
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith("[provenance] save failed", expect.any(Error));
+
+    // A later interaction (not just the failed PATCH's own retry) must still see dirty=true
+    // and resend the latest map — the failure must not be lost silently.
+    act(() => result.current.verify("facilityInfo.facilityName"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PROVENANCE_SAVE_DEBOUNCE_MS);
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(lastPatchBody().fieldProvenance["facilityInfo.facilityName"].state).toBe("verified");
+  });
+
+  it("flushes a retry PATCH on unmount after a failed save", async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new Error("network down"));
+    const formRef: FormRef = { current: null };
+    const { result, unmount } = renderHook(() => useProvenance("facilityInfo.facilityName"), {
+      wrapper: makeWrapper({ formRef, initial: { "facilityInfo.facilityName": entry() } }),
+    });
+
+    act(() => result.current.verify("facilityInfo.facilityName"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PROVENANCE_SAVE_DEBOUNCE_MS);
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith("[provenance] save failed", expect.any(Error));
+
+    // Unmount happens before the scheduled retry fires — the flush-on-unmount path
+    // must still see dirty=true and attempt the PATCH itself.
+    unmount();
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
