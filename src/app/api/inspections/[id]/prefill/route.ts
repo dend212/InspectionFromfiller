@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { isUniqueViolation } from "@/lib/prefill/db-errors";
 import { buildPrefillInput, isValidApn, prefillStartBodySchema } from "@/lib/prefill/input";
 import { requireInspectionAccess } from "@/lib/prefill/route-access";
 import { runPrefill } from "@/lib/prefill/run-prefill";
@@ -18,20 +19,6 @@ export const maxDuration = 300;
  * Body: { apn?, address?, trigger? } — defaults come from the inspection's facilityInfo.
  * Creates a queued run row and executes it in after(). 201 { runId }.
  */
-/**
- * postgres.js surfaces a unique violation as `code: "23505"`, but Drizzle wraps the
- * driver error (`DrizzleQueryError`) so the code lives on `err.cause` in practice —
- * check both shapes.
- */
-function isUniqueViolation(err: unknown): boolean {
-  const code = (e: unknown) =>
-    e && typeof e === "object" && "code" in e ? (e as { code?: unknown }).code : undefined;
-  return (
-    code(err) === "23505" ||
-    (err instanceof Error && code(err.cause) === "23505")
-  );
-}
-
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const access = await requireInspectionAccess(id, "edit");
@@ -81,7 +68,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } catch (err) {
     // Backstop for the check-then-act lock above: a concurrent POST can slip past
     // findActiveRun before either insert lands, so the partial unique index (migration
-    // 0015) is the actual guarantee.
+    // 0015) is the actual guarantee. Drizzle wraps the postgres error, so the 23505
+    // usually sits on `err.cause` — isUniqueViolation checks both shapes.
     if (isUniqueViolation(err)) {
       return NextResponse.json(
         { error: "A prefill run is already in progress" },
