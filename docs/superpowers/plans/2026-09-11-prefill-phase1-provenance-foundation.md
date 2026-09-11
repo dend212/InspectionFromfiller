@@ -5521,7 +5521,7 @@ git commit -m "feat(prefill): ProvenanceBadge popover and SuggestionChip"
 
 **Interfaces:**
 - Consumes: `ProvenanceBadge` (Task 10), `SuggestionChip` (Task 10), `useProvenance` (Task 9).
-- Produces: every `FormLabel` inside a `FormField` appends `<ProvenanceBadge fieldPath={name} />`; every `FormItem` inside a `FormField` appends `<SuggestionChip fieldPath={name} />` after its children. No per-field changes in the six step components. Outside a `ProvenanceProvider` both render nothing (no-op context), so every existing test keeps passing.
+- Produces: every `FormLabel` inside a `FormField` appends `<ProvenanceBadge fieldPath={name} />`; every `FormItem` inside a `FormField` appends `<SuggestionChip fieldPath={name} />` after its children and carries `data-field-path={name}` (a stable selector the review page uses to scroll/highlight a field). No per-field changes in the six step components. Outside a `ProvenanceProvider` both render nothing (no-op context), so every existing test keeps passing.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5631,6 +5631,10 @@ describe("FormLabel / FormItem provenance integration", () => {
     const chip = document.querySelector("[data-slot=suggestion-chip]");
     expect(chip).not.toBeNull();
     expect(chip?.closest("[data-slot=form-item]")).not.toBeNull();
+    expect(chip?.closest("[data-slot=form-item]")).toHaveAttribute(
+      "data-field-path",
+      "facilityInfo.facilityName",
+    );
     expect(screen.getByRole("button", { name: /accept suggestion from county assessor/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /prefilled from/i })).toBeNull();
   });
@@ -5664,7 +5668,12 @@ function FormItem({ className, children, ...props }: React.ComponentProps<"div">
 
   return (
     <FormItemContext.Provider value={{ id }}>
-      <div data-slot="form-item" className={cn("grid gap-2", className)} {...props}>
+      <div
+        data-slot="form-item"
+        data-field-path={fieldName}
+        className={cn("grid gap-2", className)}
+        {...props}
+      >
         {children}
         {fieldName && entry?.state === "suggested" ? <SuggestionChip fieldPath={fieldName} /> : null}
       </div>
