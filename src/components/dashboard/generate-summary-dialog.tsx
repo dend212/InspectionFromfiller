@@ -1,7 +1,7 @@
 "use client";
 
 import { Link2, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -37,9 +37,14 @@ export function GenerateSummaryDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [isDrafting, setIsDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
+  // Guards requestDraft's own async chain: bumped on every new draft request and on
+  // dialog close, so a response that lands after the request it belongs to has been
+  // superseded is discarded instead of clobbering fresher state or double-firing.
+  const draftSeqRef = useRef(0);
 
   // Ask Claude for a draft. On failure the textarea keeps whatever it had and the notice shows.
   const requestDraft = useCallback(async () => {
+    const mySeq = ++draftSeqRef.current;
     setIsDrafting(true);
     setDraftError(null);
     try {
@@ -48,13 +53,14 @@ export function GenerateSummaryDialog({
       });
       if (!res.ok) throw new Error("Draft failed");
       const data: { recommendations?: string } = await res.json();
+      if (draftSeqRef.current !== mySeq) return; // superseded — discard
       const draft = (data.recommendations || "").trim();
       if (!draft) throw new Error("Empty draft");
       setRecommendations(draft);
     } catch {
-      setDraftError(DRAFT_ERROR_MESSAGE);
+      if (draftSeqRef.current === mySeq) setDraftError(DRAFT_ERROR_MESSAGE);
     } finally {
-      setIsDrafting(false);
+      if (draftSeqRef.current === mySeq) setIsDrafting(false);
     }
   }, [inspectionId]);
 
@@ -79,6 +85,10 @@ export function GenerateSummaryDialog({
 
     return () => {
       cancelled = true;
+      // Invalidate any in-flight draft request and leave state clean for a re-open.
+      draftSeqRef.current += 1;
+      setIsDrafting(false);
+      setDraftError(null);
     };
   }, [open, inspectionId, requestDraft]);
 

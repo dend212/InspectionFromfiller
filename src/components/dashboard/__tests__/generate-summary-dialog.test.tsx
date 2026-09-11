@@ -42,8 +42,12 @@ function mockFetch({
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith("/draft-recommendations")) {
-      const draft = await drafts[Math.min(draftIndex, drafts.length - 1)];
+      // Assign this call's entry synchronously (by invocation order), then await it —
+      // so two overlapping calls each wait on their own entry instead of racing to read
+      // the same `draftIndex` before either has resolved.
+      const idx = Math.min(draftIndex, drafts.length - 1);
       draftIndex += 1;
+      const draft = await drafts[idx];
       return {
         ok: draft.ok,
         json: async () => ({
@@ -171,5 +175,93 @@ describe("GenerateSummaryDialog — AI draft", () => {
     await user.click(generateButton());
 
     await waitFor(() => expect(onSummaryGenerated).toHaveBeenCalledWith("http://localhost/summary/tok"));
+  });
+
+  it("discards a draft response that resolves after the dialog was closed", async () => {
+    let resolveDraft!: (value: DraftResponse) => void;
+    const pendingDraft = new Promise<DraftResponse>((resolve) => {
+      resolveDraft = resolve;
+    });
+
+    let getCallCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/draft-recommendations")) {
+        const draft = await pendingDraft;
+        return { ok: draft.ok, json: async () => ({ recommendations: draft.recommendations ?? "" }) };
+      }
+      if (url.endsWith("/generate-summary") && (init?.method ?? "GET") === "GET") {
+        getCallCount += 1;
+        // Second open (after close/reopen) now has a saved recommendation, so no new
+        // draft request should fire — isolating whether the stale first response leaks in.
+        const saved = getCallCount === 1 ? "" : "Saved after reopen";
+        return { ok: true, json: async () => ({ recommendations: saved }) };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(<GenerateSummaryDialog {...defaultProps} />);
+
+    await screen.findByText("Drafting recommendations…");
+    expect(generateButton()).toBeDisabled();
+
+    // Close before the draft request resolves.
+    rerender(<GenerateSummaryDialog {...defaultProps} open={false} />);
+
+    // Reopen with a saved recommendation this time — no new draft request fires.
+    rerender(<GenerateSummaryDialog {...defaultProps} open={true} />);
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Recommendations")).toHaveValue("Saved after reopen"),
+    );
+    expect(generateButton()).not.toBeDisabled();
+
+    // The stale draft from before the close now resolves.
+    resolveDraft({ ok: true, recommendations: "• Stale draft." });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.getByLabelText("Recommendations")).toHaveValue("Saved after reopen");
+    expect(generateButton()).not.toBeDisabled();
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith("/draft-recommendations")))
+      .toHaveLength(1);
+  });
+
+  it("fires exactly one new draft request on close/reopen and ignores the stale first response", async () => {
+    let resolveFirst!: (value: DraftResponse) => void;
+    let resolveSecond!: (value: DraftResponse) => void;
+    const firstDraft = new Promise<DraftResponse>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondDraft = new Promise<DraftResponse>((resolve) => {
+      resolveSecond = resolve;
+    });
+
+    const fetchMock = mockFetch({ saved: "", drafts: [firstDraft, secondDraft] });
+
+    const { rerender } = render(<GenerateSummaryDialog {...defaultProps} />);
+
+    await screen.findByText("Drafting recommendations…");
+    expect(draftCallCount(fetchMock)).toBe(1);
+
+    // Close before the first draft resolves, then reopen — saved is still empty.
+    rerender(<GenerateSummaryDialog {...defaultProps} open={false} />);
+    rerender(<GenerateSummaryDialog {...defaultProps} open={true} />);
+
+    await waitFor(() => expect(draftCallCount(fetchMock)).toBe(2));
+
+    resolveSecond({ ok: true, recommendations: "• Second draft." });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Recommendations")).toHaveValue("• Second draft."),
+    );
+
+    // The stale first request resolves after the second has already won.
+    resolveFirst({ ok: true, recommendations: "• First draft (stale)." });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.getByLabelText("Recommendations")).toHaveValue("• Second draft.");
+    expect(draftCallCount(fetchMock)).toBe(2);
   });
 });
