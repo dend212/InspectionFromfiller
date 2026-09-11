@@ -16,14 +16,33 @@ import Anthropic, {
 } from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { buildSubPdf, loadPdfDocument, planPasses } from "@/lib/prefill/permits/triage";
-import type { PermitArchive } from "@/lib/prefill/types";
+import { HANDWRITING_ESCALATION_THRESHOLD, type PermitArchive } from "@/lib/prefill/types";
 import {
+  ESCALATION_SYSTEM_PROMPT,
   PERMIT_EXTRACTION_SYSTEM_PROMPT,
+  buildEscalationUserMessage,
   buildPassUserMessage,
   type PassMessageMeta,
 } from "./permit-extraction-prompt";
-import { PermitFactsSchema, type PermitFacts } from "./permit-extraction-schema";
-import { hasCoreFacts, mergePermitFacts, rebasePages } from "./permit-facts-utils";
+import {
+  EscalationAnswerSchema,
+  PermitFactsSchema,
+  type EscalationAnswer,
+  type Fact,
+  type PermitFacts,
+} from "./permit-extraction-schema";
+import {
+  allFactSpecs,
+  coerceFactValue,
+  getFactAt,
+  hasCoreFacts,
+  mergePermitFacts,
+  rebasePages,
+  setFactAt,
+  type FactSpec,
+  type FactValue,
+} from "./permit-facts-utils";
+import type { PDFDocument } from "pdf-lib";
 
 // Built lazily: constructing the SDK client at import time throws under vitest's jsdom
 // environment ("browser-like environment"); tests inject `opts.client` instead.
@@ -205,6 +224,94 @@ async function runPass(
   return rebasePages(message.parsed_output, meta.pageNumbers);
 }
 
+async function askEscalation(
+  client: Anthropic,
+  pagePdf: Uint8Array,
+  spec: FactSpec,
+  current: Fact<FactValue>,
+  signal: AbortSignal | undefined,
+  calls: ModelCallUsage[],
+): Promise<EscalationAnswer | null> {
+  const message = await guarded(() =>
+    client.messages.parse(
+      {
+        model: ESCALATION_MODEL,
+        max_tokens: EXTRACTION_MAX_TOKENS,
+        // Under Opus 5's 512-token cache minimum, so no cache_control — it would be silently ignored.
+        system: ESCALATION_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "document",
+                source: {
+                  type: "base64",
+                  media_type: "application/pdf",
+                  data: Buffer.from(pagePdf).toString("base64"),
+                },
+              },
+              { type: "text", text: buildEscalationUserMessage(spec, current) },
+            ],
+          },
+        ],
+        output_config: { format: zodOutputFormat(EscalationAnswerSchema) },
+      },
+      { timeout: EXTRACTION_TIMEOUT_MS, maxRetries: 0, signal },
+    ),
+  );
+  recordUsage(calls, ESCALATION_MODEL, message.usage);
+  return message.parsed_output ?? null;
+}
+
+/**
+ * Spec §6: every handwritten fact with confidence < 0.6 (weakest first, max 3)
+ * is re-asked on Opus with only its page. The Opus answer replaces the fact
+ * only when it is more confident. An Opus failure ends escalation but keeps
+ * the Sonnet facts. Returns the number of answers received.
+ */
+async function escalateWeakHandwriting(
+  client: Anthropic,
+  doc: PDFDocument,
+  facts: PermitFacts,
+  signal: AbortSignal | undefined,
+  calls: ModelCallUsage[],
+): Promise<number> {
+  const weak = allFactSpecs(facts)
+    .map((spec) => ({ spec, fact: getFactAt(facts, spec.path) }))
+    .filter(
+      (x): x is { spec: FactSpec; fact: Fact<FactValue> } =>
+        x.fact != null && x.fact.handwritten && x.fact.confidence < HANDWRITING_ESCALATION_THRESHOLD,
+    )
+    .sort((a, b) => a.fact.confidence - b.fact.confidence)
+    .slice(0, MAX_ESCALATIONS_PER_DOCUMENT);
+
+  let answered = 0;
+  for (const { spec, fact } of weak) {
+    let answer: EscalationAnswer | null;
+    try {
+      answer = await askEscalation(client, await buildSubPdf(doc, [fact.page]), spec, fact, signal, calls);
+    } catch (err) {
+      console.warn(
+        `[prefill] escalation of ${spec.path} failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      break;
+    }
+    answered++;
+    if (!answer?.found) continue;
+    const value = coerceFactValue(spec.kind, answer.value);
+    if (value === null || answer.confidence <= fact.confidence) continue;
+    setFactAt(facts, spec.path, {
+      value,
+      confidence: answer.confidence,
+      page: fact.page,
+      evidence: answer.evidence,
+      handwritten: answer.handwritten,
+    });
+  }
+  return answered;
+}
+
 /**
  * Extract PermitFacts from one stored permit PDF. Throws ExtractionError; the
  * caller marks the record `failed` and moves on.
@@ -246,7 +353,8 @@ export async function extractPermitFactsFromPdf(
     passes = 2;
   }
 
-  const escalations = 0; // Task 6 replaces this with escalateWeakHandwriting(...)
+  const escalations =
+    opts.escalate === false ? 0 : await escalateWeakHandwriting(client, doc, facts, opts.signal, calls);
 
   return {
     facts,

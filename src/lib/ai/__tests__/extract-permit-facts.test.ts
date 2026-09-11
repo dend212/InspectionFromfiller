@@ -225,3 +225,100 @@ describe("extractPermitFactsFromPdf — failures", () => {
     }
   });
 });
+
+describe("extractPermitFactsFromPdf — Opus escalation", () => {
+  const weakCapacity = () => withCapacity(emptyPermitFacts(), 1200, 2, 0.5, true);
+  const found = (value: string, confidence: number) => ({
+    found: true,
+    value,
+    confidence,
+    evidence: `Septic tank ${value} gal`,
+    handwritten: true,
+  });
+
+  it("re-asks a handwritten fact below 0.6 on Opus with only its page and replaces it when Opus is more confident", async () => {
+    const { client, parse } = fakeClient(reply(weakCapacity()), opusReply(found("1250", 0.8)));
+    const result = await extractPermitFactsFromPdf(await makePdf(7), meta, { client });
+
+    expect(parse).toHaveBeenCalledTimes(2);
+    const [params, options] = parse.mock.calls[1];
+    expect(params.model).toBe(ESCALATION_MODEL);
+    expect(options).toEqual({ timeout: 90_000, maxRetries: 0, signal: undefined });
+    const page = await attachedPdf(params);
+    expect(page.getPageCount()).toBe(1);
+    expect(page.getPage(0).getWidth()).toBe(102); // source page 2
+    expect(attachedText(params)).toContain("capacity in gallons of septic tank #1");
+    expect(attachedText(params)).toContain('"1200"');
+    expect(params.output_config.format.type).toBe("json_schema");
+
+    expect(result.escalations).toBe(1);
+    expect(result.facts.tanks[0].capacityGal).toEqual({
+      value: 1250,
+      confidence: 0.8,
+      page: 2,
+      evidence: "Septic tank 1250 gal",
+      handwritten: true,
+    });
+    expect(result.usage.calls.map((c) => c.model)).toEqual([EXTRACTION_MODEL, ESCALATION_MODEL]);
+  });
+
+  it("keeps the Sonnet value when Opus is not more confident, says not found, or answers unusably", async () => {
+    for (const answer of [found("1250", 0.4), { ...found("", 0), found: false }, found("twelve hundred", 0.9)]) {
+      const { client } = fakeClient(reply(weakCapacity()), opusReply(answer));
+      const result = await extractPermitFactsFromPdf(await makePdf(7), meta, { client });
+      expect(result.escalations).toBe(1);
+      expect(result.facts.tanks[0].capacityGal?.value).toBe(1200);
+      expect(result.facts.tanks[0].capacityGal?.confidence).toBe(0.5);
+    }
+  });
+
+  it("does not escalate typed facts, or handwritten facts at or above the threshold", async () => {
+    for (const facts of [
+      withCapacity(emptyPermitFacts(), 1200, 2, 0.3, false),
+      withCapacity(emptyPermitFacts(), 1200, 2, 0.6, true),
+    ]) {
+      const { client, parse } = fakeClient(reply(facts));
+      const result = await extractPermitFactsFromPdf(await makePdf(7), meta, { client });
+      expect(parse).toHaveBeenCalledTimes(1);
+      expect(result.escalations).toBe(0);
+    }
+  });
+
+  it("caps escalations at 3 per document, weakest first", async () => {
+    // a typed tank capacity keeps hasCoreFacts true so no second Sonnet pass runs
+    const facts: PermitFacts = {
+      ...withCapacity(emptyPermitFacts(), 1000, 1, 0.95, false),
+      permitNumber: f("000972", 0.5, 1, true),
+      issueDate: f("2000-03-01", 0.3, 1, true),
+      bedrooms: f(3, 0.55, 1, true),
+      designFlowGpd: f(450, 0.2, 1, true),
+      contractor: f("Smith", 0.45, 1, true),
+    };
+    const notFound = { found: false, value: "", confidence: 0, evidence: "", handwritten: false };
+    const { client, parse } = fakeClient(reply(facts), opusReply(notFound), opusReply(notFound), opusReply(notFound));
+    const result = await extractPermitFactsFromPdf(await makePdf(7), meta, { client });
+    expect(parse).toHaveBeenCalledTimes(4);
+    expect(result.escalations).toBe(3);
+    const questions = parse.mock.calls.slice(1).map((c) => attachedText(c[0]));
+    expect(questions[0]).toContain("design flow");
+    expect(questions[1]).toContain("approval / issue date");
+    expect(questions[2]).toContain("installing contractor");
+  });
+
+  it("escalate: false skips Opus entirely", async () => {
+    const { client, parse } = fakeClient(reply(weakCapacity()));
+    const result = await extractPermitFactsFromPdf(await makePdf(7), meta, { client, escalate: false });
+    expect(parse).toHaveBeenCalledTimes(1);
+    expect(result.escalations).toBe(0);
+  });
+
+  it("keeps the Sonnet facts when Opus fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { client } = fakeClient(reply(weakCapacity()), new APIError(529, undefined, "overloaded", undefined));
+    const result = await extractPermitFactsFromPdf(await makePdf(7), meta, { client });
+    expect(result.escalations).toBe(0);
+    expect(result.facts.tanks[0].capacityGal?.value).toBe(1200);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("escalation of tanks.0.capacityGal failed"));
+    warn.mockRestore();
+  });
+});
