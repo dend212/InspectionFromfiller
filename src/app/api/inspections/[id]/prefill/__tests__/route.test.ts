@@ -216,7 +216,28 @@ describe("POST /api/inspections/[id]/prefill", () => {
   });
 
   it("returns 409 when createRun hits the one-active-run unique index, without scheduling after()", async () => {
+    // Raw postgres.js shape
     mockCreateRun.mockRejectedValueOnce({ code: "23505" });
+    let res = await POST(makeRequest({}), makeParams("insp-1"));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("A prefill run is already in progress");
+
+    // What Drizzle actually throws (verified live): the postgres error is on `cause`, `err.code` is undefined
+    mockCreateRun.mockRejectedValueOnce(
+      Object.assign(new Error("Failed query: insert into inspection_prefill_runs …"), {
+        cause: { code: "23505", constraint_name: "inspection_prefill_runs_one_active_idx" },
+      }),
+    );
+    res = await POST(makeRequest({}), makeParams("insp-1"));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("A prefill run is already in progress");
+    expect(mockAfter).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 when the unique violation is wrapped by Drizzle (code on err.cause)", async () => {
+    const wrapped = new Error("Failed query: insert into inspection_prefill_runs");
+    (wrapped as Error & { cause?: unknown }).cause = { code: "23505" };
+    mockCreateRun.mockRejectedValueOnce(wrapped);
     const res = await POST(makeRequest({}), makeParams("insp-1"));
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBe("A prefill run is already in progress");
