@@ -2,6 +2,7 @@
 
 import { AlertTriangle, Check, ChevronDown, Loader2, Minus, Search, SearchX } from "lucide-react";
 import * as React from "react";
+import { PermitRecordsList } from "@/components/prefill/permit-records-list";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -87,6 +88,8 @@ export interface PrefillSourcesTileProps {
   /** Hook-level error (409 / 429 / network) shown above the rows */
   error: string | null;
   onFindRecords: () => void;
+  /** usePrefill().selectCandidates; omit on read-only views — the picker then cannot submit */
+  onSelectCandidates?: (keys: string[]) => Promise<void> | void;
 }
 
 /**
@@ -100,6 +103,7 @@ export function PrefillSourcesTile({
   canRun,
   error,
   onFindRecords,
+  onSelectCandidates,
 }: PrefillSourcesTileProps) {
   const [open, setOpen] = React.useState(true);
   const hasAbandonment = run?.records.some((r) => r.isAbandonment) ?? false;
@@ -163,30 +167,39 @@ export function PrefillSourcesTile({
                 return (
                   <li
                     key={key}
-                    className="flex items-start gap-2 text-sm"
+                    className="flex flex-col gap-1 text-sm"
                     data-stage={key}
                     data-status={stage.status}
                   >
-                    <StageIcon status={stage.status} />
-                    <div className="min-w-0 flex-1">
-                      <span className="font-medium">{label}</span>
-                      <span className="text-muted-foreground"> · {stageSummary(stage)}</span>
-                      {safeLinks.length > 0 && (
-                        <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
-                          {safeLinks.map((link) => (
-                            <a
-                              key={link.url}
-                              href={link.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-primary underline underline-offset-2"
-                            >
-                              {link.label}
-                            </a>
-                          ))}
-                        </div>
-                      )}
+                    <div className="flex items-start gap-2">
+                      <StageIcon status={stage.status} />
+                      <div className="min-w-0 flex-1">
+                        <span className="font-medium">{label}</span>
+                        <span className="text-muted-foreground"> · {stageSummary(stage)}</span>
+                        {safeLinks.length > 0 && (
+                          <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
+                            {safeLinks.map((link) => (
+                              <a
+                                key={link.url}
+                                href={link.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-primary underline underline-offset-2"
+                              >
+                                {link.label}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
+                    {key === "permits" && (
+                      <PermitRecordsList
+                        run={run}
+                        onSelectCandidates={onSelectCandidates ?? (() => undefined)}
+                        disabled={isRunning || !onSelectCandidates}
+                      />
+                    )}
                   </li>
                 );
               })}

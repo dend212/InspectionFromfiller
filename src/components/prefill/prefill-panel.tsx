@@ -41,6 +41,7 @@ export function PrefillPanel({ inspectionId, form, initialRun }: PrefillPanelPro
         onFindRecords={() => {
           void prefill.start({ trigger: "manual" });
         }}
+        onSelectCandidates={(keys) => prefill.selectCandidates(keys)}
       />
     </div>
   );
