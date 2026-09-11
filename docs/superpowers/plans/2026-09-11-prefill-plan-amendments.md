@@ -1,0 +1,40 @@
+# Prefill plans — controller amendments
+
+Resolutions of cross-plan ambiguities found after the phase plans were written. These override the plan text where they conflict. The controller hands the relevant bullet to each implementer with its task brief.
+
+## A1. Tank fields are per-tank (`septicTank.tanks.<i>.*`) — affects Phase 1 Tasks 2/13/15 and Phase 3 Task 7
+
+`tankCapacity`, `capacityBasis`, `tankMaterial`, `tankDimensions` exist **only** inside `tankInspectionSchema` (`septicTank.tanks[n]`), never at `septicTank.*`. Provenance keys and proposals use react-hook-form dotted form `septicTank.tanks.0.tankCapacity` (bracket form is normalised by `normalizeFieldPath`).
+
+When a fill targets `septicTank.tanks.<i>.<field>` and the array is shorter than `i + 1`, the apply step must grow the array with **complete empty tank objects**, not `{}` — otherwise controlled inputs receive `undefined` and React warns. Do this by exporting a factory from `src/lib/validators/inspection.ts`:
+
+```ts
+/** A blank tank matching tankInspectionSchema defaults — used when the wizard or a prefill grows septicTank.tanks */
+export function createEmptyTank(): InspectionFormData["septicTank"]["tanks"][number] {
+  return tankInspectionSchema.parse({});
+}
+```
+
+(`tankInspectionSchema.parse({})` yields every default because every field is `.optional().default(...)`.) Use it in:
+- Phase 1 Task 13 (`usePrefill` apply) and Task 15 (`use-form-scan.ts` `applyFields`) wherever the tanks array is grown (replace the existing `currentTanks.push({} as …)` in `use-form-scan.ts` with `createEmptyTank()`), and
+- `src/components/inspection/step-septic-tank.tsx`'s inline `emptyTank` literal (replace the literal with `createEmptyTank()` — same shape, one source of truth).
+
+After growing the array, also set `septicTank.numberOfTanks` to `String(tanks.length)` if it is empty or smaller, so the step's sync effect does not truncate the array.
+
+## A2. `StageContext` / `StageResult` live in `src/lib/prefill/stage.ts` — affects Phases 2–4
+
+Phase 1 Task 1 creates `src/lib/prefill/stage.ts` exporting `StageContext`, `StageResult`. Phase 2/3/4 plans that write `import type { StageContext, StageResult } from "./run-prefill"` (or `"../run-prefill"`) must import from `"@/lib/prefill/stage"` instead. No other change.
+
+## A3. `PrefillSourcesTile` props — affects Phases 2–4 tile edits
+
+Phase 1 Task 12 defines the tile's props; Phase 4 Task 6 assumed `{ run, isRunning, onFindRecords, onSelectCandidates }`. Implementers of later tile tasks read the actual props from `src/components/prefill/prefill-sources-tile.tsx` as delivered by Phase 1 and adapt the plan's test/props accordingly (assertions are on rendered text/links, which do not depend on prop names).
+
+## A4. Phase 3 field paths were retargeted in the plan text (done by the controller)
+
+All `septicTank.tankCapacity` / `capacityBasis` / `tankMaterial` / `tankDimensions` occurrences in `2026-09-11-prefill-phase3-extraction.md` now read `septicTank.tanks.0.…`. `mapPermitFacts` maps `facts.tanks[i]` → `septicTank.tanks.<i>.*` for every extracted tank and proposes `septicTank.numberOfTanks = String(facts.tanks.length)` when ≥ 1.
+
+## A5. Review-page plan runs after Phase 1 (or with the guarded skip)
+
+The review-page mirror plan mounts `ProvenanceProvider` + `PrefillSourcesTile` from Phase 1. If executed before Phase 1 lands on its branch, its guarded step applies (mount nothing, leave the comment `// prefill provider mounted in prefill phase 1`) and the mount is added when the branches merge.
+
+**A2 addendum (done by the controller):** the type-only imports in the phase 2/3/4 plan text were rewritten to `from "@/lib/prefill/stage"`. Phase 1 Task 5 additionally adds `export type { StageContext, StageResult } from "./stage";` to `src/lib/prefill/run-prefill.ts` so either import path works.

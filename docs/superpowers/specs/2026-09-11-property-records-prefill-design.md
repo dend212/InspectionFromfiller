@@ -249,8 +249,8 @@ type ProposedField = { fieldPath: string; value: string | boolean | string[]; pr
 | `discharge_authorization` / `final_da` permit # | `facilityInfo.hasDischargeAuth` = true, `facilityInfo.dischargeAuthPermitNo` | permit # |
 | site plan page detected (`notes` mentions site plan or doc has an engineer's plan page) | `facilityInfo.hasSitePlan` | true, conf from model |
 | `issueDate` | `facilityInfo.facilityAge`, `facilityInfo.facilityAgeEstimateExplanation` | years since issue as a string (`"26"`); explanation `"Approval to construct issued 03/2000 (permit 000972)"` |
-| `tanks[0].capacityGal` | `septicTank.tankCapacity`, `septicTank.capacityBasis` | `"1250"`, `"permit_document"` |
-| `tanks[0].material` | `septicTank.tankMaterial` | enum value |
+| `tanks[i].capacityGal` | `septicTank.tanks.<i>.tankCapacity`, `septicTank.tanks.<i>.capacityBasis` | `"1250"`, `"permit_document"` (tank fields are per-tank in the form; the merge/apply step grows `septicTank.tanks` with `createEmptyTank()` so the slot exists) |
+| `tanks[i].material` | `septicTank.tanks.<i>.tankMaterial` | enum value |
 | `tanks.length` | `septicTank.numberOfTanks` | `"1"` / `"2"` |
 | `disposal.type` | `disposalWorks.disposalType` | enum value; `dimensions` go into the explanation, not a field |
 | `bedrooms` (permit or listing) | `designFlow.numberOfBedrooms` | permit wins over listing when both exist |
@@ -261,7 +261,7 @@ type ProposedField = { fieldPath: string; value: string | boolean | string[]; pr
 | listing `sewer = "sewer"` | `facilityInfo.wastewaterSource` | `kind: "warning"` chip, no value |
 | `isAbandonment` | — | tile banner only |
 
-Tank-level fields for `septicTank.tanks[n].*` (multi-tank UI) are **not** proposed in v1 — the top-level tank fields cover the report; multi-tank mapping is a follow-up.
+Tank capacity/material/basis live only on `septicTank.tanks[n]` (there are no top-level equivalents); each extracted tank maps to its own index, and `numberOfTanks` is set to the count so the wizard's tank-sync effect keeps the array and the count consistent.
 
 **Merge (`merge.ts`, pure, unit-tested, used by the client hook):**
 - `kind: "warning"` → provenance entry with `state: "suggested"` and the message; never writes a value.
