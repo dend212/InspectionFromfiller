@@ -32,6 +32,20 @@ vi.mock("@/components/review/return-dialog", () => ({
     ) : null,
 }));
 
+const finalizeDialogProps = vi.fn();
+vi.mock("@/components/review/finalize-dialog", () => ({
+  FinalizeDialog: (props: any) => {
+    finalizeDialogProps(props);
+    return props.open ? (
+      <div data-testid="finalize-dialog">
+        <button onClick={() => { props.onOpenChange(false); props.onFinalized(); }}>
+          Mock Finalize
+        </button>
+      </div>
+    ) : null;
+  },
+}));
+
 vi.mock("@/components/dashboard/send-email-dialog", () => ({
   SendEmailDialog: ({ open }: any) =>
     open ? <div data-testid="send-email-dialog">Email Dialog</div> : null,
@@ -48,12 +62,23 @@ const defaultProps = {
   onStatusChange: vi.fn(),
 };
 
+/** fetch mock that records "METHOD url" into `calls` so ordering can be asserted */
+function recordingFetch(calls: string[], ok = true, body: unknown = {}) {
+  return vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push(`${init?.method ?? "GET"} ${url}`);
+    return { ok, status: ok ? 200 : 500, statusText: "x", json: async () => body };
+  });
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
   vi.restoreAllMocks();
   mockPush.mockClear();
   mockRefresh.mockClear();
+  finalizeDialogProps.mockClear();
+  // Silence the recommendations prefetch that runs on mount
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
 });
 
 describe("ReviewActions", () => {
@@ -99,79 +124,93 @@ describe("ReviewActions", () => {
       ).toBeInTheDocument();
     });
 
-    it("does not render Send to Customer for in_review", () => {
+    it("does not render Send PDF to Customer for in_review", () => {
       render(<ReviewActions {...defaultProps} status="in_review" />);
       expect(
-        screen.queryByRole("button", { name: /send to customer/i }),
+        screen.queryByRole("button", { name: /send pdf to customer/i }),
       ).not.toBeInTheDocument();
     });
 
-    it("shows confirmation dialog when Finalize is clicked", async () => {
-      const user = userEvent.setup();
-      render(<ReviewActions {...defaultProps} status="in_review" />);
-
-      await user.click(
-        screen.getByRole("button", { name: /finalize report/i }),
-      );
-
-      expect(
-        screen.getByText("Finalize Inspection Report?"),
-      ).toBeInTheDocument();
-    });
-
-    it("calls finalize API and shows success on confirmation", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve({}),
-        }),
-      );
-
-      const onStatusChange = vi.fn();
+    it("opens the FinalizeDialog with flush, form data and selected media", async () => {
+      const flush = vi.fn(async () => true);
+      const getFormData = vi.fn(() => null);
+      const onJumpToField = vi.fn();
       const user = userEvent.setup();
       render(
         <ReviewActions
           {...defaultProps}
           status="in_review"
-          onStatusChange={onStatusChange}
+          flush={flush}
+          getFormData={getFormData}
+          onJumpToField={onJumpToField}
+          selectedMediaIds={["m1"]}
         />,
       );
 
-      await user.click(
-        screen.getByRole("button", { name: /finalize report/i }),
-      );
-      await user.click(screen.getByRole("button", { name: /^finalize$/i }));
+      expect(screen.queryByTestId("finalize-dialog")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /finalize report/i }));
 
-      await waitFor(() => {
-        expect(fetch).toHaveBeenCalledWith(
-          "/api/inspections/insp-1/finalize",
-          expect.objectContaining({ method: "POST" }),
-        );
-        expect(toast.success).toHaveBeenCalledWith(
-          "Inspection finalized successfully",
-        );
-        expect(onStatusChange).toHaveBeenCalledWith("completed");
-      });
+      expect(screen.getByTestId("finalize-dialog")).toBeInTheDocument();
+      expect(finalizeDialogProps).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          inspectionId: "insp-1",
+          open: true,
+          flush,
+          getFormData,
+          onJumpToField,
+          selectedMediaIds: ["m1"],
+        }),
+      );
     });
 
-    it("opens return dialog when Return to Tech is clicked", async () => {
+    it("marks the inspection completed and refreshes when the dialog finalizes", async () => {
+      const onStatusChange = vi.fn();
       const user = userEvent.setup();
-      render(<ReviewActions {...defaultProps} status="in_review" />);
-
-      await user.click(
-        screen.getByRole("button", { name: /return to tech/i }),
+      render(
+        <ReviewActions {...defaultProps} status="in_review" onStatusChange={onStatusChange} />,
       );
 
-      expect(screen.getByTestId("return-dialog")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /finalize report/i }));
+      await user.click(screen.getByRole("button", { name: /mock finalize/i }));
+
+      expect(onStatusChange).toHaveBeenCalledWith("completed");
+      expect(mockRefresh).toHaveBeenCalled();
+      expect(screen.queryByTestId("finalize-dialog")).not.toBeInTheDocument();
+    });
+
+    it("flushes before opening the return dialog", async () => {
+      const order: string[] = [];
+      const flush = vi.fn(async () => {
+        order.push("flush");
+        return true;
+      });
+      const user = userEvent.setup();
+      render(<ReviewActions {...defaultProps} status="in_review" flush={flush} />);
+
+      await user.click(screen.getByRole("button", { name: /return to tech/i }));
+
+      expect(await screen.findByTestId("return-dialog")).toBeInTheDocument();
+      expect(order).toEqual(["flush"]);
+    });
+
+    it("does not open the return dialog when flush fails", async () => {
+      const user = userEvent.setup();
+      render(<ReviewActions {...defaultProps} status="in_review" flush={async () => false} />);
+
+      await user.click(screen.getByRole("button", { name: /return to tech/i }));
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/couldn't save/i)),
+      );
+      expect(screen.queryByTestId("return-dialog")).not.toBeInTheDocument();
     });
   });
 
   describe("completed status actions", () => {
-    it("renders Send to Customer button", () => {
+    it("renders Send PDF to Customer button", () => {
       render(<ReviewActions {...defaultProps} status="completed" />);
       expect(
-        screen.getByRole("button", { name: /send to customer/i }),
+        screen.getByRole("button", { name: /send pdf to customer/i }),
       ).toBeInTheDocument();
     });
 
@@ -189,7 +228,7 @@ describe("ReviewActions", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("opens email dialog when Send to Customer is clicked", async () => {
+    it("opens email dialog when Send PDF to Customer is clicked", async () => {
       const user = userEvent.setup();
       render(
         <ReviewActions
@@ -200,7 +239,7 @@ describe("ReviewActions", () => {
       );
 
       await user.click(
-        screen.getByRole("button", { name: /send to customer/i }),
+        screen.getByRole("button", { name: /send pdf to customer/i }),
       );
 
       expect(screen.getByTestId("send-email-dialog")).toBeInTheDocument();
@@ -217,14 +256,13 @@ describe("ReviewActions", () => {
       expect(screen.getByText("Reopen Inspection?")).toBeInTheDocument();
     });
 
-    it("calls reopen API on confirmation", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve({}),
-        }),
-      );
+    it("flushes, then calls the reopen API on confirmation", async () => {
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", recordingFetch(calls));
+      const flush = vi.fn(async () => {
+        calls.push("flush");
+        return true;
+      });
 
       const onStatusChange = vi.fn();
       const user = userEvent.setup();
@@ -233,6 +271,7 @@ describe("ReviewActions", () => {
           {...defaultProps}
           status="completed"
           onStatusChange={onStatusChange}
+          flush={flush}
         />,
       );
 
@@ -242,24 +281,42 @@ describe("ReviewActions", () => {
       await user.click(screen.getByRole("button", { name: /^reopen$/i }));
 
       await waitFor(() => {
-        expect(fetch).toHaveBeenCalledWith(
-          "/api/inspections/insp-1/reopen",
-          expect.objectContaining({ method: "POST" }),
-        );
         expect(toast.success).toHaveBeenCalledWith(
           "Inspection reopened for editing",
         );
         expect(onStatusChange).toHaveBeenCalledWith("in_review");
       });
+      // The recommendations prefetch is the GET; flush must precede the POST
+      expect(calls.filter((c) => !c.startsWith("GET"))).toEqual([
+        "flush",
+        "POST /api/inspections/insp-1/reopen",
+      ]);
+    });
+
+    it("does not call the reopen API when flush fails", async () => {
+      const calls: string[] = [];
+      vi.stubGlobal("fetch", recordingFetch(calls));
+      const user = userEvent.setup();
+      render(
+        <ReviewActions {...defaultProps} status="completed" flush={async () => false} />,
+      );
+
+      await user.click(screen.getByRole("button", { name: /reopen for editing/i }));
+      await user.click(screen.getByRole("button", { name: /^reopen$/i }));
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/couldn't save/i)),
+      );
+      expect(calls.filter((c) => c.startsWith("POST"))).toEqual([]);
     });
   });
 
   describe("sent status actions", () => {
-    it("renders Send to Customer and Reopen buttons", () => {
+    it("renders Send PDF to Customer and Reopen buttons", () => {
       render(<ReviewActions {...defaultProps} status="sent" />);
 
       expect(
-        screen.getByRole("button", { name: /send to customer/i }),
+        screen.getByRole("button", { name: /send pdf to customer/i }),
       ).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: /reopen for editing/i }),
@@ -285,28 +342,6 @@ describe("ReviewActions", () => {
   });
 
   describe("error handling", () => {
-    it("shows error toast on finalize failure", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: false,
-          json: () => Promise.resolve({ error: "Missing PDF" }),
-        }),
-      );
-
-      const user = userEvent.setup();
-      render(<ReviewActions {...defaultProps} status="in_review" />);
-
-      await user.click(
-        screen.getByRole("button", { name: /finalize report/i }),
-      );
-      await user.click(screen.getByRole("button", { name: /^finalize$/i }));
-
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith("Missing PDF");
-      });
-    });
-
     it("shows error toast on reopen failure", async () => {
       vi.stubGlobal(
         "fetch",

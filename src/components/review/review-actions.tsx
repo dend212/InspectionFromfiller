@@ -21,6 +21,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getStatusConfig } from "@/lib/constants/status";
+import type { InspectionFormData } from "@/types/inspection";
+import { FinalizeDialog } from "./finalize-dialog";
 import { ReturnDialog } from "./return-dialog";
 
 const STATUS_BADGE_STYLES: Record<string, string> = {
@@ -28,6 +30,8 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
   completed: "text-sm px-3 py-1",
   draft: "text-sm px-3 py-1",
 };
+
+const FLUSH_FAILED_MESSAGE = "Couldn't save your latest changes — fix the save error, then try again";
 
 interface ReviewActionsProps {
   inspectionId: string;
@@ -37,7 +41,16 @@ interface ReviewActionsProps {
   isFromWorkiz?: boolean;
   selectedMediaIds?: string[];
   onStatusChange: (newStatus: string) => void;
+  /** Flush pending autosave before a transition; resolves false when the save failed. Defaults to a no-op. */
+  flush?: () => Promise<boolean>;
+  /** Current form values for finalize validation. When omitted, finalize skips validation. */
+  getFormData?: () => InspectionFormData | null;
+  /** Expand a section and highlight a field (finalize "jump to issue") */
+  onJumpToField?: (path: string, stepIndex: number) => void;
 }
+
+const noopFlush = async () => true;
+const noFormData = () => null;
 
 export function ReviewActions({
   inspectionId,
@@ -47,10 +60,14 @@ export function ReviewActions({
   isFromWorkiz,
   selectedMediaIds,
   onStatusChange,
+  flush = noopFlush,
+  getFormData = noFormData,
+  onJumpToField,
 }: ReviewActionsProps) {
   const router = useRouter();
-  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isFlushing, setIsFlushing] = useState(false);
   const [isReopening, setIsReopening] = useState(false);
+  const [finalizeDialogOpen, setFinalizeDialogOpen] = useState(false);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [sendEmailDialogOpen, setSendEmailDialogOpen] = useState(false);
   const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
@@ -72,37 +89,30 @@ export function ReviewActions({
       .finally(() => setRecommendationsLoaded(true));
   }, [inspectionId, recommendationsLoaded]);
 
-  const handleFinalize = async () => {
-    setIsFinalizing(true);
-    try {
-      const res = await fetch(`/api/inspections/${inspectionId}/finalize`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selectedMediaIds }),
-      });
-      if (!res.ok) {
-        let errorMessage = "Failed to finalize";
-        try {
-          const data = await res.json();
-          errorMessage = data.error || errorMessage;
-        } catch {
-          errorMessage = `Server error (${res.status}): ${res.statusText}`;
-        }
-        throw new Error(errorMessage);
-      }
-      toast.success("Inspection finalized successfully");
-      onStatusChange("completed");
-      router.refresh();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to finalize inspection");
-    } finally {
-      setIsFinalizing(false);
+  const handleFinalized = () => {
+    onStatusChange("completed");
+    router.refresh();
+  };
+
+  const handleReturnClick = async () => {
+    setIsFlushing(true);
+    const ok = await flush();
+    setIsFlushing(false);
+    if (!ok) {
+      toast.error(FLUSH_FAILED_MESSAGE);
+      return;
     }
+    setReturnDialogOpen(true);
   };
 
   const handleReopen = async () => {
     setIsReopening(true);
     try {
+      const ok = await flush();
+      if (!ok) {
+        toast.error(FLUSH_FAILED_MESSAGE);
+        return;
+      }
       const res = await fetch(`/api/inspections/${inspectionId}/reopen`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -170,45 +180,39 @@ export function ReviewActions({
       {/* In Review: Finalize and Return buttons */}
       {status === "in_review" && (
         <>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                size="sm"
-                className="bg-emerald-600 hover:bg-emerald-700"
-                disabled={isFinalizing}
-              >
-                {isFinalizing ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <CheckCircle className="size-4" />
-                )}
-                Finalize Report
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Finalize Inspection Report?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will mark the inspection as completed. The field tech will no longer be able
-                  to edit it. You can reopen it later if needed.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleFinalize} variant="default">
-                  Finalize
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <Button
+            size="sm"
+            className="bg-emerald-600 hover:bg-emerald-700"
+            disabled={isFlushing || finalizeDialogOpen}
+            onClick={() => setFinalizeDialogOpen(true)}
+          >
+            {finalizeDialogOpen ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <CheckCircle className="size-4" />
+            )}
+            Finalize Report
+          </Button>
+
+          <FinalizeDialog
+            inspectionId={inspectionId}
+            open={finalizeDialogOpen}
+            onOpenChange={setFinalizeDialogOpen}
+            flush={flush}
+            getFormData={getFormData}
+            selectedMediaIds={selectedMediaIds ?? []}
+            onJumpToField={onJumpToField}
+            onFinalized={handleFinalized}
+          />
 
           <Button
             size="sm"
             variant="outline"
             className="border-amber-300 text-amber-700 hover:bg-amber-50"
-            onClick={() => setReturnDialogOpen(true)}
+            disabled={isFlushing}
+            onClick={handleReturnClick}
           >
-            <Undo2 className="size-4" />
+            {isFlushing ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}
             Return to Tech
           </Button>
 
