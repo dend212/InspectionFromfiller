@@ -49,7 +49,7 @@
 | `src/lib/prefill/map-facts-to-fields.ts` | `mapPermitFacts`, `dedupeProposals` (every §7 row) | 7 |
 | `src/lib/prefill/permits/extract-records.ts` | `rankRecordsForExtraction` (over phase 2's `rankForExtraction`), `extractStoredRecords` (download → extract → persist → proposals → progress) | 8 |
 | `src/lib/prefill/permits/with-extraction.ts` | `withExtraction` hook: reload the run's records, extract pending ones, fold proposals + summary into the stage result | 9 |
-| `src/lib/prefill/permits/index.ts` + `run-prefill.ts` (phase 2, modified) | `storeHits` (shared by `runPermitsStage` / `runPermitsSelection`) returns through `withExtraction`; DTO `isAbandonment` from extracted facts | 9 |
+| `src/lib/prefill/permits/index.ts` + `run-dto.ts` (phase 2, modified) | `storeHits` (shared by `runPermitsStage` / `runPermitsSelection`) returns through `withExtraction`; DTO `isAbandonment` from extracted facts | 9 |
 | `src/components/prefill/record-extraction-badge.tsx` + tile edit | Per-record extraction status in the Prefill sources tile | 10 |
 | `scripts/prefill-extract-smoke.mts` | Live run against parcels 219-11-121 and 200-08-079 | 11 |
 
@@ -57,11 +57,11 @@ Test files sit next to their modules in `__tests__/` folders, matching the repo 
 
 ## Integration contract with phases 1–2 (what this plan consumes)
 
-From `src/lib/prefill/types.ts` (phase 1): `ProposedField`, `ProvenanceEntry`, `PrefillSource`, `PrefillStage`, `PermitArchive`, `ExtractionStatus`, `InspectionRecordDTO`, `MAX_DOCUMENTS_PER_RUN`, `MAX_DOCUMENT_BYTES`, `HANDWRITING_ESCALATION_THRESHOLD`. From `src/lib/prefill/run-prefill.ts` (phase 1, "Orchestrator contract"): `StageContext`, `StageResult` (type-only imports from the permits modules — no runtime cycle).
+From `src/lib/prefill/types.ts` (phase 1): `ProposedField`, `ProvenanceEntry`, `PrefillSource`, `PrefillStage`, `PermitArchive`, `ExtractionStatus`, `InspectionRecordDTO`, `MAX_DOCUMENTS_PER_RUN`, `MAX_DOCUMENT_BYTES`, `HANDWRITING_ESCALATION_THRESHOLD`. From `src/lib/prefill/stage.ts` (phase 1 Task 1, amendment A2): `StageContext`, `StageResult`. From `src/lib/prefill/run-store.ts` (phase 1 Task 5): `listRecordRows(runId)`, `InspectionRecordRow`. From `src/lib/prefill/run-dto.ts` (phase 1 Task 5, modified by phase 2): `toInspectionRecordDTO(row)`.
 
 From `src/lib/db/schema.ts` (phase 1 migration 0015): `inspectionRecords` with columns `extractionStatus`, `extractionError`, `extracted`, `storagePath`, `sizeBytes`, `docDate`, `source`, `permitNumber`, `docType`.
 
-From phase 2 (`docs/superpowers/plans/2026-09-11-prefill-phase2-permit-search-storage.md`, file map): `src/lib/prefill/permits/index.ts` exports `runPermitsStage(input, ctx, deps?)` (search → rank → `storeDocument` → returns `PermitsStageResult = StageResult & { candidates? }`) and `runPermitsSelection(input, ctx, candidateKeys, deps?)` (called by `continuePrefillAfterSelection` in `run-prefill.ts`), both ending in the internal `storeHits(...)`; `storeDocument` in `permits/fetch-document.ts` inserts each `inspection_records` row with `extraction_status` `"pending"` for the top `MAX_DOCUMENTS_PER_RUN` by `rankForExtraction` and `"skipped"` for the rest (or over-size documents); `permits/doc-types.ts` exports `classifyDocType`, `isExtractableDocType`, `rankForExtraction`, `isAbandonmentDocType`; `run-prefill.ts` builds `InspectionRecordDTO` (`downloadUrl`, `isAbandonment`); `src/components/prefill/permit-records-list.tsx` renders one row per record inside the tile. Phase 3 never re-decides what phase 2 stored: it reads only records that are still `"pending"` (Task 8), hooks `storeHits`' return (Task 9) and adds a badge to the record row (Task 10).
+From phase 2 (`docs/superpowers/plans/2026-09-11-prefill-phase2-permit-search-storage.md`, file map): `src/lib/prefill/permits/index.ts` exports `runPermitsStage(input, ctx, deps?)` (search → rank → `storeDocument` → returns `PermitsStageResult = StageResult & { candidates? }`) and `runPermitsSelection(input, ctx, candidateKeys, deps?)` (called by `continuePrefillAfterSelection` in `run-prefill.ts`), both ending in the internal `storeHits(...)`; `storeDocument` in `permits/fetch-document.ts` inserts each `inspection_records` row with `extraction_status` `"pending"` for the top `MAX_DOCUMENTS_PER_RUN` by `rankForExtraction` and `"skipped"` for the rest (or over-size documents); `permits/doc-types.ts` exports `classifyDocType`, `isExtractableDocType`, `rankForExtraction`, `isAbandonmentDocType`; `run-dto.ts`'s `toInspectionRecordDTO(row)` sets `isAbandonment: isAbandonmentDocType(row.docType)` and `downloadUrl` (`""` for unstored rows); `src/lib/storage/record-storage.ts` exports `RECORD_BUCKET`; `src/components/prefill/permit-records-list.tsx` (`PermitRecordsList({ run, onSelectCandidates, disabled })`) renders one `<li>` per `run.records` entry with a plain-text `statusLabel(r)` span that phase 3 replaces with a badge. Phase 3 never re-decides what phase 2 stored: it reads only records that are still `"pending"` (Task 8), hooks `storeHits`' return (Task 9) and adds a badge to the record row (Task 10).
 
 ---
 
@@ -1921,7 +1921,7 @@ git commit -m "feat(prefill): escalate weak handwritten facts to Opus 5 (single 
 - Consumes: `PermitFacts`, `Fact`, `PermitDocumentKind` (Task 1); `ProposedField`, `PrefillSource` (types.ts).
 - Produces: `interface PermitRecordRef { id; permitNumber; docType; inspectionId }`; `mapPermitFacts(facts, record, opts?: { now?: Date }): ProposedField[]`; `dedupeProposals(proposals): ProposedField[]`; `CESSPOOL_MAX_CONFIDENCE = 0.7`; `SYSTEM_TYPE_MAX_CONFIDENCE = 0.7`. (`mapListingFacts` is phase 4 and lives in the same file later.)
 
-Field-path notes checked against `src/lib/validators/inspection.ts`: `facilityInfo.recordsAvailable` and `facilityInfo.isCesspool` are `"yes" | "no" | ""` enums (so the cesspool suggestion proposes `"yes"`, not `true`); `facilityInfo.hasSitePlan`, `hasApprovalOfConstruction`, `hasDischargeAuth` are booleans; `septicTank.tanks.0.tankCapacity`, `numberOfTanks`, `designFlow.estimatedDesignFlow`, `numberOfBedrooms`, `facilityInfo.facilityAge` are strings; `facilityInfo.facilitySystemTypes` is `string[]`. Enum values match `src/lib/constants/inspection.ts` (`TANK_MATERIALS`, `DISPOSAL_TYPES`, `WATER_SOURCES`, `CAPACITY_BASIS_OPTIONS` → `permit_document`, `DESIGN_FLOW_BASIS` → `permit_documents`, `FACILITY_SYSTEM_TYPES`).
+Field-path notes checked against `src/lib/validators/inspection.ts` and amendment A1/A4 (`docs/superpowers/plans/2026-09-11-prefill-plan-amendments.md`): tank fields exist only per tank, so proposals use the dotted react-hook-form paths `septicTank.tanks.<i>.tankCapacity` / `capacityBasis` / `tankMaterial` / `tankDimensions` for **every** extracted tank (the client apply step grows the array with `createEmptyTank()`); `facilityInfo.recordsAvailable` and `facilityInfo.isCesspool` are `"yes" | "no" | ""` enums (so the cesspool suggestion proposes `"yes"`, not `true`); `facilityInfo.hasSitePlan`, `hasApprovalOfConstruction`, `hasDischargeAuth` are booleans; `septicTank.tanks.0.tankCapacity`, `numberOfTanks`, `designFlow.estimatedDesignFlow`, `numberOfBedrooms`, `facilityInfo.facilityAge` are strings; `facilityInfo.facilitySystemTypes` is `string[]`. Enum values match `src/lib/constants/inspection.ts` (`TANK_MATERIALS`, `DISPOSAL_TYPES`, `WATER_SOURCES`, `CAPACITY_BASIS_OPTIONS` → `permit_document`, `DESIGN_FLOW_BASIS` → `permit_documents`, `FACILITY_SYSTEM_TYPES`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2143,10 +2143,27 @@ describe("mapPermitFacts — edge cases", () => {
         { capacityGal: null, material: f("plastic" as const, 0.7, 2), model: null, dimensions: null },
       ],
     };
-    const p = byPath(mapPermitFacts(facts, record))["septicTank.numberOfTanks"];
+    const props = byPath(mapPermitFacts(facts, record));
+    const p = props["septicTank.numberOfTanks"];
     expect(p.value).toBe("2");
     expect(p.provenance.confidence).toBe(0.9);
     expect(p.provenance.explanation).toContain("lists 2 tanks");
+    // amendment A4: every tank gets its own septicTank.tanks.<i>.* proposals
+    expect(props["septicTank.tanks.0.tankCapacity"].value).toBe("1000");
+    expect(props["septicTank.tanks.0.capacityBasis"].value).toBe("permit_document");
+    expect(props["septicTank.tanks.1.tankMaterial"].value).toBe("plastic");
+    expect(props["septicTank.tanks.1.tankMaterial"].provenance.page).toBe(2);
+    expect(props["septicTank.tanks.1.tankCapacity"]).toBeUndefined();
+  });
+
+  it("proposes tank dimensions as written", () => {
+    const facts: PermitFacts = {
+      ...emptyPermitFacts(),
+      tanks: [{ capacityGal: null, material: null, model: null, dimensions: f("5' x 8' x 5'", 0.8) }],
+    };
+    const props = byPath(mapPermitFacts(facts, record));
+    expect(props["septicTank.tanks.0.tankDimensions"].value).toBe("5' x 8' x 5'");
+    expect(props["septicTank.numberOfTanks"].value).toBe("1");
   });
 });
 
@@ -2335,15 +2352,16 @@ export function mapPermitFacts(
     }
   }
 
-  // §7 rows: tanks[0] capacity/material, tanks.length
-  const tank = facts.tanks[0];
-  if (tank?.capacityGal) {
-    fill("septicTank.tanks.0.tankCapacity", String(Math.round(tank.capacityGal.value)), prov(tank.capacityGal));
-    fill("septicTank.tanks.0.capacityBasis", "permit_document", prov(tank.capacityGal));
-  }
-  if (tank?.material) {
-    fill("septicTank.tanks.0.tankMaterial", tank.material.value, prov(tank.material));
-  }
+  // §7 rows + amendment A1/A4: every extracted tank → septicTank.tanks.<i>.* (react-hook-form dotted form)
+  facts.tanks.forEach((tank, i) => {
+    const base = `septicTank.tanks.${i}`;
+    if (tank.capacityGal) {
+      fill(`${base}.tankCapacity`, String(Math.round(tank.capacityGal.value)), prov(tank.capacityGal));
+      fill(`${base}.capacityBasis`, "permit_document", prov(tank.capacityGal));
+    }
+    if (tank.material) fill(`${base}.tankMaterial`, tank.material.value, prov(tank.material));
+    if (tank.dimensions) fill(`${base}.tankDimensions`, tank.dimensions.value, prov(tank.dimensions));
+  });
   if (facts.tanks.length > 0) {
     const best = facts.tanks
       .flatMap((t) => [t.capacityGal, t.material, t.model, t.dimensions])
@@ -2429,7 +2447,7 @@ export function dedupeProposals(proposals: ProposedField[]): ProposedField[] {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run src/lib/prefill/__tests__/map-facts-to-fields.test.ts`
-Expected: PASS (35 tests: 17 table rows + 18 others).
+Expected: PASS (36 tests: 17 table rows + 19 others).
 
 - [ ] **Step 5: Commit**
 
@@ -2447,7 +2465,7 @@ git commit -m "feat(prefill): map permit facts to form proposals (spec §7) + de
 - Test: `src/lib/prefill/permits/__tests__/extract-records.test.ts`
 
 **Interfaces:**
-- Consumes: `extractPermitFactsFromPdf`, `ExtractionError`, `ExtractPermitFactsResult` (Tasks 5–6); `PermitFacts` (Task 1); `mapPermitFacts` (Task 7); `isExtractableDocType`, `rankForExtraction` from phase 2's `src/lib/prefill/permits/doc-types.ts` (`rankForExtraction<T extends { docType: string; docDate?: string }>(docs: T[]): T[]` — class rank ascending, newest first); `StageContext` (`src/lib/prefill/run-prefill.ts`, per the contracts doc's orchestrator section); `ProposedField`, `PermitArchive`, `ExtractionStatus`, `MAX_DOCUMENTS_PER_RUN`, `MAX_DOCUMENT_BYTES` (types.ts); `db`, `inspectionRecords` (phase 1 schema); `createAdminClient`.
+- Consumes: `extractPermitFactsFromPdf`, `ExtractionError`, `ExtractPermitFactsResult` (Tasks 5–6); `PermitFacts` (Task 1); `mapPermitFacts` (Task 7); `isExtractableDocType`, `rankForExtraction` from phase 2's `src/lib/prefill/permits/doc-types.ts` (`rankForExtraction<T extends { docType: string; docDate?: string }>(docs: T[]): T[]` — class rank ascending, newest first); `StageContext` (`src/lib/prefill/stage.ts`, amendment A2); `ProposedField`, `PermitArchive`, `ExtractionStatus`, `MAX_DOCUMENTS_PER_RUN`, `MAX_DOCUMENT_BYTES` (types.ts); `db`, `inspectionRecords` (phase 1 schema); `createAdminClient`; `RECORD_BUCKET` from phase 2's `src/lib/storage/record-storage.ts` (`"inspection-media"`; records live at `records/{inspectionId}/{recordId}.pdf`, bucket-relative).
 - Produces: `interface StoredRecord { id; inspectionId; permitNumber; docType; source: PermitArchive; storagePath; docDate: string | null; sizeBytes: number | null; extractionStatus: ExtractionStatus }`; `interface RecordExtractionPatch { extractionStatus; extractionError?; extracted? }`; `interface ExtractRecordsDeps { loadPdf; extract; persist; log }`; `defaultExtractRecordsDeps()`; `interface ExtractRecordsResult { proposals; done; failed; skipped; abandonmentPermits: string[]; estimatedCostUsd; highlights: string[] }`; `rankRecordsForExtraction(records)`; `extractStoredRecords(records, ctx, deps?)`; `describeFacts(permitNumber, facts)`.
 
 - [ ] **Step 1: Write the failing test**
@@ -2456,9 +2474,10 @@ git commit -m "feat(prefill): map permit facts to form proposals (spec §7) + de
 // src/lib/prefill/permits/__tests__/extract-records.test.ts
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// extract-records imports db/admin for its default deps only; the tests inject deps, so stub the modules
+// extract-records imports db/admin/storage for its default deps only; the tests inject deps, so stub the modules
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
+vi.mock("@/lib/storage/record-storage", () => ({ RECORD_BUCKET: "inspection-media" }));
 
 import { ExtractionError } from "@/lib/ai/extract-permit-facts";
 import { emptyPermitFacts, type PermitFacts } from "@/lib/ai/permit-extraction-schema";
@@ -2686,6 +2705,7 @@ import {
 import type { PermitFacts } from "@/lib/ai/permit-extraction-schema";
 import { db } from "@/lib/db";
 import { inspectionRecords } from "@/lib/db/schema";
+import { RECORD_BUCKET } from "@/lib/storage/record-storage";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { mapPermitFacts } from "../map-facts-to-fields";
 import type { StageContext } from "@/lib/prefill/stage";
@@ -2744,7 +2764,7 @@ export interface ExtractRecordsResult {
 export function defaultExtractRecordsDeps(): ExtractRecordsDeps {
   return {
     loadPdf: async (storagePath) => {
-      const { data, error } = await createAdminClient().storage.from("inspection-media").download(storagePath);
+      const { data, error } = await createAdminClient().storage.from(RECORD_BUCKET).download(storagePath);
       if (error || !data) {
         throw new ExtractionError(`Could not download stored document: ${error?.message ?? "empty response"}`);
       }
@@ -2913,11 +2933,11 @@ git commit -m "feat(prefill): rank stored permit records, extract up to 3, persi
 **Files:**
 - Create: `src/lib/prefill/permits/with-extraction.ts`
 - Modify: `src/lib/prefill/permits/index.ts` (phase 2 — the `return` of its internal `storeHits(...)`, which both `runPermitsStage` and `runPermitsSelection` funnel through)
-- Modify: `src/lib/prefill/run-prefill.ts` (phase 2 — record DTO `isAbandonment`)
-- Test: `src/lib/prefill/permits/__tests__/with-extraction.test.ts`; phase 2's `src/lib/prefill/permits/__tests__/index.test.ts` and `src/lib/prefill/__tests__/run-prefill.test.ts` (one added case each)
+- Modify: `src/lib/prefill/run-dto.ts` (phase 1/2 — `toInspectionRecordDTO`'s `isAbandonment`)
+- Test: `src/lib/prefill/permits/__tests__/with-extraction.test.ts`; phase 2's `src/lib/prefill/permits/__tests__/index.test.ts` and `src/lib/prefill/__tests__/run-dto.records.test.ts` (one added case each)
 
 **Interfaces:**
-- Consumes: `extractStoredRecords`, `StoredRecord`, `ExtractRecordsResult` (Task 8); `dedupeProposals` (Task 7); `StageContext`, `StageResult` (`run-prefill.ts`); `PermitArchive`, `ExtractionStatus` (types.ts); `db`, `inspectionRecords` (schema); phase 2's `src/lib/prefill/permits/index.ts` — `runPermitsStage(input, ctx, deps?)`, `runPermitsSelection(input, ctx, candidateKeys, deps?)`, and their shared internal `storeHits(hits, ctx, deps, clock): Promise<PermitsStageResult>` whose last line is `return { stage: finishStage(clock, { status: "done", summary: parts.join(" · ") }), proposals };` — and `isAbandonmentDocType` (doc-types.ts).
+- Consumes: `extractStoredRecords`, `StoredRecord`, `ExtractRecordsResult` (Task 8); `dedupeProposals` (Task 7); `StageContext`, `StageResult` (`@/lib/prefill/stage`); `PermitArchive`, `ExtractionStatus` (types.ts); `listRecordRows(runId): Promise<InspectionRecordRow[]>` and `InspectionRecordRow` (phase 1's `src/lib/prefill/run-store.ts` — rows ordered by `createdAt`); phase 2's `src/lib/prefill/permits/index.ts` — `runPermitsStage(input, ctx, deps?)`, `runPermitsSelection(input, ctx, candidateKeys, deps?)`, and their shared internal `storeHits(hits, ctx, deps, clock): Promise<PermitsStageResult>` whose last line is `return { stage: finishStage(clock, { status: "done", summary: parts.join(" · ") }), proposals };` — and `isAbandonmentDocType` (doc-types.ts).
 - Produces: `withExtraction(ctx, result, deps?)`, `buildExtractionSummary(base, x)`, `WithExtractionDeps`, `defaultWithExtractionDeps()`; `runPermitsStage` / `runPermitsSelection` now include extraction (unchanged signatures); `InspectionRecordDTO.isAbandonment` is also true when the extracted facts say so.
 
 Why a hook that reloads the run's records from the DB instead of threading phase 2's `StoreOutcome[]` through: `storeHits` is the one place both the initial stage and the post-selection continuation end ("documents stored under `ctx.runId`, status `done`"), `storeDocument` already persisted every row with the right `extraction_status`, and re-reading them keeps the hook independent of phase 2's internals (the smoke script's single `runPermitsStage` call then exercises the full path).
@@ -2928,7 +2948,8 @@ Why a hook that reloads the run's records from the DB instead of threading phase
 // src/lib/prefill/permits/__tests__/with-extraction.test.ts
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/db", () => ({ db: {} }));
+// the default deps read rows through phase 1's run-store (which imports db); the tests inject deps
+vi.mock("@/lib/prefill/run-store", () => ({ listRecordRows: vi.fn() }));
 
 import type { StoredRecord } from "@/lib/prefill/permits/extract-records";
 import {
@@ -3083,10 +3104,8 @@ Expected: FAIL — `Failed to resolve import "@/lib/prefill/permits/with-extract
  * resulting proposals and a one-line digest into the stage result.
  * Never throws — a crash here leaves the phase-2 result intact with a note.
  */
-import { eq } from "drizzle-orm";
-import { db } from "@/lib/db";
-import { inspectionRecords } from "@/lib/db/schema";
 import { dedupeProposals } from "../map-facts-to-fields";
+import { listRecordRows } from "../run-store";
 import type { StageContext, StageResult } from "@/lib/prefill/stage";
 import type { ExtractionStatus, PermitArchive } from "../types";
 import { type ExtractRecordsResult, type StoredRecord, extractStoredRecords } from "./extract-records";
@@ -3099,7 +3118,7 @@ export interface WithExtractionDeps {
 export function defaultWithExtractionDeps(): WithExtractionDeps {
   return {
     loadRecords: async (runId) => {
-      const rows = await db.select().from(inspectionRecords).where(eq(inspectionRecords.runId, runId));
+      const rows = await listRecordRows(runId); // phase 1 run-store: the run's rows, oldest first (= rank order)
       return rows.map((r) => ({
         id: r.id,
         inspectionId: r.inspectionId,
@@ -3339,34 +3358,36 @@ Expected: PASS (phase 2's 11 cases + this one).
 
 - [ ] **Step 7: Abandonment banner from extracted facts**
 
-In `src/lib/prefill/run-prefill.ts`, the record → `InspectionRecordDTO` mapper (phase 2) sets `isAbandonment: isAbandonmentDocType(r.docType)`. Change that property to:
+In `src/lib/prefill/run-dto.ts`, `toInspectionRecordDTO(row: InspectionRecordRow)` (phase 1, modified by phase 2) sets `isAbandonment: isAbandonmentDocType(row.docType),`. Change that property to:
 
 ```ts
-isAbandonment:
-  isAbandonmentDocType(r.docType) || (r.extracted as PermitFacts | null)?.isAbandonment === true,
+    isAbandonment:
+      isAbandonmentDocType(row.docType) || (row.extracted as PermitFacts | null)?.isAbandonment === true,
 ```
 
-and add `import type { PermitFacts } from "@/lib/ai/permit-extraction-schema";` to the file's imports. Append to phase 2's `src/lib/prefill/__tests__/run-prefill.test.ts`, next to its existing DTO case (reuse its record-row fixture — the object it feeds the mapper for a `PERMIT` row):
+and add `import type { PermitFacts } from "@/lib/ai/permit-extraction-schema";` to the file's imports. The tile's red banner keys off `run.records.some((r) => r.isAbandonment)` (phase 1), so an abandonment the model found in a document filed under another type now shows too. Append inside the `describe("toInspectionRecordDTO (phase 2)", …)` block of phase 2's `src/lib/prefill/__tests__/run-dto.records.test.ts` (it defines a `ROW: InspectionRecordRow` fixture with `docType: "ABANDONMENT"`):
 
 ```ts
-it("flags a record as abandonment when the extracted facts say so", async () => {
-  const { emptyPermitFacts } = await import("@/lib/ai/permit-extraction-schema");
-  const dto = await loadRunDto({
-    records: [{ ...permitRecordRow, docType: "PERMIT", extracted: { ...emptyPermitFacts(), isAbandonment: true } }],
+  it("flags abandonment from the extracted facts even when the EDMS type is PERMIT", async () => {
+    const { emptyPermitFacts } = await import("@/lib/ai/permit-extraction-schema");
+    const dto = toInspectionRecordDTO({
+      ...ROW,
+      docType: "PERMIT",
+      extractionStatus: "done",
+      extracted: { ...emptyPermitFacts(), isAbandonment: true },
+    });
+    expect(dto.isAbandonment).toBe(true);
+    expect(toInspectionRecordDTO({ ...ROW, docType: "PERMIT" }).isAbandonment).toBe(false);
   });
-  expect(dto.records[0].isAbandonment).toBe(true);
-});
 ```
 
-(`loadRunDto` / `permitRecordRow` stand for phase 2's DTO helper and record fixture — use that file's real names.)
-
-Run: `npx vitest run src/lib/prefill/__tests__/run-prefill.test.ts`
-Expected: PASS.
+Run: `npx vitest run src/lib/prefill/__tests__/run-dto.records.test.ts`
+Expected: PASS (phase 2's 3 cases + this one).
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/lib/prefill/permits/with-extraction.ts src/lib/prefill/permits/__tests__/with-extraction.test.ts src/lib/prefill/permits/index.ts src/lib/prefill/permits/__tests__/index.test.ts src/lib/prefill/run-prefill.ts src/lib/prefill/__tests__/run-prefill.test.ts
+git add src/lib/prefill/permits/with-extraction.ts src/lib/prefill/permits/__tests__/with-extraction.test.ts src/lib/prefill/permits/index.ts src/lib/prefill/permits/__tests__/index.test.ts src/lib/prefill/run-dto.ts src/lib/prefill/__tests__/run-dto.records.test.ts
 git commit -m "feat(prefill): run extraction after permit documents are stored (initial run + selection)"
 ```
 
@@ -3376,11 +3397,11 @@ git commit -m "feat(prefill): run extraction after permit documents are stored (
 
 **Files:**
 - Create: `src/components/prefill/record-extraction-badge.tsx`
-- Modify: `src/components/prefill/permit-records-list.tsx` (phase 2 — the per-record row)
+- Modify: `src/components/prefill/permit-records-list.tsx` (phase 2 — replace its `statusLabel` span in the per-record `<li>`)
 - Test: `src/components/prefill/__tests__/record-extraction-badge.test.tsx`
 
 **Interfaces:**
-- Consumes: `InspectionRecordDTO` (types.ts: `extractionStatus`, `extractionError`, `permitNumber`); `Badge` from `src/components/ui/badge.tsx` (variants `outline`, `success`, `warning`, `destructive` exist there); phase 2's `PermitRecordsList` (renders one row per `InspectionRecordDTO` with the `<a target="_blank" rel="noopener">` download link).
+- Consumes: `InspectionRecordDTO` (types.ts: `extractionStatus`, `extractionError`, `permitNumber`); `Badge` from `src/components/ui/badge.tsx` (variants `outline`, `success`, `warning`, `destructive` exist there); phase 2's `PermitRecordsList({ run, onSelectCandidates, disabled })` (one `<li>` per `run.records` entry; `run.stages.permits.summary` carries the "Reading …" progress text).
 - Produces: `RecordExtractionBadge({ record, reading? })`; `isRecordBeingRead(record, summary)`.
 
 - [ ] **Step 1: Write the failing test**
@@ -3501,61 +3522,97 @@ export function RecordExtractionBadge({
 Run: `npx vitest run src/components/prefill/__tests__/record-extraction-badge.test.tsx`
 Expected: PASS (8 tests).
 
-- [ ] **Step 5: Mount the badge in the permit row**
+- [ ] **Step 5: Replace the plain-text status in the permit row with the badge**
 
-Open phase 2's `src/components/prefill/permit-records-list.tsx`. It renders one row per `InspectionRecordDTO` (the element that contains the `<a href={record.downloadUrl} target="_blank" rel="noopener">` link). Make two edits:
+Open phase 2's `src/components/prefill/permit-records-list.tsx` (`PermitRecordsList({ run, onSelectCandidates, disabled })`). It renders one `<li>` per `run.records` entry and a module-private `statusLabel(r)` that returns "Queued for extraction" / "Extracted" / `${extractionError ?? "Failed"} — re-run Find records` / `extractionError ?? "Not extracted"`. Make three edits:
 
-1. Add the import at the top of the file:
+1. Add the import next to the other component imports:
 
 ```tsx
 import { RecordExtractionBadge, isRecordBeingRead } from "./record-extraction-badge";
 ```
 
-2. Inside the per-record row, after the download link, render the badge and — only when the status is `failed` or `skipped` and an `extractionError` exists — a one-line reason. `readingSummary` is the permits stage's `summary` (phase 2's component receives the permits `PrefillStage` as `stage`; if it only receives `records`, add an optional `readingSummary?: string` prop and pass `run.stages.permits.summary` from `prefill-sources-tile.tsx`):
+2. Delete the `statusLabel` function entirely.
+
+3. In the `<li>`, replace the line
 
 ```tsx
-{/* phase 3: extraction status per document */}
-<RecordExtractionBadge record={record} reading={isRecordBeingRead(record, stage?.summary)} />
-{record.extractionStatus !== "done" && record.extractionError ? (
-  <p className="text-xs text-muted-foreground">{record.extractionError}</p>
-) : null}
+              <span className="text-xs text-muted-foreground">{statusLabel(r)}</span>
 ```
 
-Keep the surrounding layout (the row is a flex container in phase 2; the badge goes in the same line as the doc type/date chips, the reason on its own line under it).
-
-- [ ] **Step 6: Extend phase 2's list test for the new badge**
-
-Append to `src/components/prefill/__tests__/permit-records-list.test.tsx` (phase 2's test for the list; it already renders the component with a `records` fixture — reuse its render helper and fixture names):
+with
 
 ```tsx
-it("shows each record's extraction status and the failure reason", () => {
-  renderList({
-    records: [
-      { ...recordFixture, id: "r1", permitNumber: "OW-17-00474", extractionStatus: "done", extractionError: null },
-      { ...recordFixture, id: "r2", permitNumber: "000972", extractionStatus: "failed", extractionError: "Claude API error: 500 boom" },
-      { ...recordFixture, id: "r3", permitNumber: "OW-24-00001", extractionStatus: "skipped", extractionError: "Only the first 3 documents are read per run" },
-    ],
-    stage: { status: "done", summary: "3 permits found", links: [] },
-  });
-  expect(screen.getByText("Read")).toBeInTheDocument();
-  expect(screen.getByText("Read failed")).toBeInTheDocument();
-  expect(screen.getByText("Claude API error: 500 boom")).toBeInTheDocument();
-  expect(screen.getByText("Not read")).toBeInTheDocument();
-});
-
-it("marks the record named in a running 'Reading …' summary", () => {
-  renderList({
-    records: [{ ...recordFixture, id: "r1", permitNumber: "OW-17-00474", extractionStatus: "pending", extractionError: null }],
-    stage: { status: "running", summary: "Reading OW-17-00474…", links: [] },
-  });
-  expect(screen.getByText("Reading…")).toBeInTheDocument();
-});
+              <RecordExtractionBadge
+                record={r}
+                reading={isRecordBeingRead(r, run.stages.permits.summary)}
+              />
+              {r.extractionStatus === "failed" && (
+                <span className="text-xs text-muted-foreground">
+                  {r.extractionError ?? "Failed"} — re-run Find records
+                </span>
+              )}
+              {r.extractionStatus === "skipped" && r.extractionError && (
+                <span className="text-xs text-muted-foreground">{r.extractionError}</span>
+              )}
 ```
 
-(`renderList` / `recordFixture` are whatever phase 2's test file calls its render helper and record fixture — use those names; if the component takes `readingSummary` instead of `stage`, pass `readingSummary: "Reading OW-17-00474…"`.)
+The badge sits in the same flex row as the doc-type/date/size chips; the failure/skip reason keeps phase 2's wording so its existing test (`/Download failed: .* — re-run Find records/`) still passes.
+
+- [ ] **Step 6: Update phase 2's list test for the new labels and add the extraction cases**
+
+In `src/components/prefill/__tests__/permit-records-list.test.tsx` (phase 2) change the one assertion on the old text:
+
+```tsx
+    expect(rows[0]).toHaveTextContent("Queued for extraction");
+```
+
+to
+
+```tsx
+    expect(rows[0]).toHaveTextContent("Queued");
+```
+
+and append these cases inside its `describe("PermitRecordsList — records", …)` block (they reuse that file's `run()` and `record()` fixture helpers):
+
+```tsx
+  it("shows each record's extraction status and the failure reason", () => {
+    render(
+      <PermitRecordsList
+        run={run({
+          records: [
+            record({ id: "r1", permitNumber: "OW-17-00474", extractionStatus: "done", extractionError: null }),
+            record({ id: "r2", permitNumber: "000972", extractionStatus: "failed", extractionError: "Claude API error: 500 boom" }),
+            record({ id: "r3", permitNumber: "OW-24-00001", extractionStatus: "skipped", extractionError: "Only the first 3 documents are read per run" }),
+          ],
+        })}
+        onSelectCandidates={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Read")).toBeInTheDocument();
+    expect(screen.getByText("Read failed")).toBeInTheDocument();
+    expect(screen.getByText("Claude API error: 500 boom — re-run Find records")).toBeInTheDocument();
+    expect(screen.getByText("Not read")).toBeInTheDocument();
+    expect(screen.getByText("Only the first 3 documents are read per run")).toBeInTheDocument();
+  });
+
+  it("marks the record named in a running 'Reading …' summary", () => {
+    render(
+      <PermitRecordsList
+        run={run({
+          status: "running",
+          stages: { ...emptyStages(), permits: { status: "running", links: [], summary: "Reading OW-17-00474…" } },
+          records: [record({ id: "r1", permitNumber: "OW-17-00474", extractionStatus: "pending", extractionError: null })],
+        })}
+        onSelectCandidates={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Reading…")).toBeInTheDocument();
+  });
+```
 
 Run: `npx vitest run src/components/prefill/__tests__/permit-records-list.test.tsx src/components/prefill/__tests__/record-extraction-badge.test.tsx`
-Expected: PASS.
+Expected: PASS (phase 2's cases with the one changed assertion + 2 new + 8 badge tests).
 
 - [ ] **Step 7: Commit**
 
@@ -3615,6 +3672,7 @@ const mod = (p: string) => import(pathToFileURL(join(root, p)).href);
 const { db } = await mod("src/lib/db/index.ts");
 const { inspectionPrefillRuns, inspectionRecords, inspections } = await mod("src/lib/db/schema.ts");
 const { createAdminClient } = await mod("src/lib/supabase/admin.ts");
+const { RECORD_BUCKET } = await mod("src/lib/storage/record-storage.ts");
 const { runPermitsStage } = await mod("src/lib/prefill/permits/index.ts");
 const { emptyStages } = await mod("src/lib/prefill/types.ts");
 
@@ -3760,7 +3818,7 @@ if (args.cleanup) {
     .where(inArray(inspectionRecords.runId, createdRunIds));
   if (recs.length > 0) {
     const { error } = await createAdminClient()
-      .storage.from("inspection-media")
+      .storage.from(RECORD_BUCKET)
       .remove(recs.map((r) => r.storagePath as string));
     if (error) console.warn(`storage cleanup: ${error.message}`);
     await db.delete(inspectionRecords).where(inArray(inspectionRecords.id, recs.map((r) => r.id as string)));
@@ -3899,12 +3957,12 @@ Production deploys only with Daniel's explicit approval — pushing `main` is no
 | §12 live smoke `219-11-121` (000972, 1,200 gal, pit, 2000) and `200-08-079` (OW-17-00474, 1,250 gal, 2 pits, design flow) printing proposals + usage/cost | 11 |
 | Existing suites stay green; `next build` passes | 11 |
 
-Not in this phase (by design): the rate limit (spec §6 "shares the run's 3/hour/inspection limit") lives in phase 2's `POST /prefill` route; listing proposals and the sewer warning are phase 4; multi-tank `septicTank.tanks[n].*` proposals are a follow-up per §7.
+Not in this phase (by design): the rate limit (spec §6 "shares the run's 3/hour/inspection limit") lives in phase 2's `POST /prefill` route; listing proposals and the sewer warning are phase 4. Per amendment A1/A4 the §7 "top-level tank fields" do not exist in the form, so `mapPermitFacts` proposes `septicTank.tanks.<i>.*` for every extracted tank instead (the client grows the array with `createEmptyTank()`).
 
 Two deliberate deviations, both flagged in the tasks: `facilityInfo.isCesspool` is proposed as `"yes"` (the form field is a `"yes" | "no" | ""` enum in `src/lib/validators/inspection.ts`, not a boolean as §7 shorthand suggests); the SDK's `maxRetries` is `0` with a module-level connection-error retry, because the SDK's retry also covers 429/5xx, which §10 excludes.
 
-**2. Placeholder scan** — no "TBD/TODO/implement later"; every code step contains the full code; the only names not defined in this plan are phase-2 names, each cited with its phase-2 file and checked against `docs/superpowers/plans/2026-09-11-prefill-phase2-permit-search-storage.md` as written on 2026-09-11 (`storeHits`, `storeDocument`, `PermitsStageResult`, `rankForExtraction`, `isExtractableDocType`, `isAbandonmentDocType`, `PermitRecordsList`, the index test's `makeDeps` / `makeCtx` / `PERMIT` / `input`). Task 9 step 7 and Task 10 step 6 refer to phase 2's run-prefill DTO test and list test, which phase 2 had not written yet — those steps name the role of each helper so the implementer can substitute the real names.
+**2. Placeholder scan** — no "TBD/TODO/implement later"; every code step contains the full code; the only names not defined in this plan are phase-2 names, each cited with its phase-2 file and checked against `docs/superpowers/plans/2026-09-11-prefill-phase2-permit-search-storage.md` as written on 2026-09-11 (`storeHits`, `storeDocument`, `PermitsStageResult`, `rankForExtraction`, `isExtractableDocType`, `isAbandonmentDocType`, `PermitRecordsList`, the index test's `makeDeps` / `makeCtx` / `PERMIT` / `input`). Task 9 step 7 and Task 10 steps 5–6 were re-checked against phase 2's finished plan text: `toInspectionRecordDTO` + its `ROW` fixture in `run-dto.records.test.ts`, `statusLabel` in `permit-records-list.tsx`, and the list test's `run()` / `record()` helpers and its "Queued for extraction" assertion.
 
-**3. Type consistency** — checked pairwise: `StoredRecord` (Task 8) fields = what `defaultWithExtractionDeps` (Task 9) maps and what the tests construct; `ExtractRecordsResult` (Task 8) = the Task 9 fixture; `ExtractPermitFactsResult` (Task 5) = what Task 8's `deps.extract` mock returns (incl. `pageCount`); `ExtractPermitFactsOptions.signal` matches Task 8's `{ signal: ctx.signal }`; `PassMessageMeta` (Task 4) = what `runPass` (Task 5) builds; `FactSpec.question` strings in Task 2 are what Task 6's tests assert (`"design flow"`, `"approval / issue date"`, `"installing contractor"`, `"capacity in gallons of septic tank #1"`); `PermitRecordRef` (Task 7) = the object Task 8 passes to `mapPermitFacts`; `StageContext` / `StageResult` are imported from `src/lib/prefill/run-prefill.ts` everywhere (type-only, so no runtime cycle); `RecordExtractionBadge` props use `InspectionRecordDTO["extractionStatus"]`, whose values are exactly `pending | done | skipped | failed`.
+**3. Type consistency** — checked pairwise: `StoredRecord` (Task 8) fields = what `defaultWithExtractionDeps` (Task 9) maps and what the tests construct; `ExtractRecordsResult` (Task 8) = the Task 9 fixture; `ExtractPermitFactsResult` (Task 5) = what Task 8's `deps.extract` mock returns (incl. `pageCount`); `ExtractPermitFactsOptions.signal` matches Task 8's `{ signal: ctx.signal }`; `PassMessageMeta` (Task 4) = what `runPass` (Task 5) builds; `FactSpec.question` strings in Task 2 are what Task 6's tests assert (`"design flow"`, `"approval / issue date"`, `"installing contractor"`, `"capacity in gallons of septic tank #1"`); `PermitRecordRef` (Task 7) = the object Task 8 passes to `mapPermitFacts`; `StageContext` / `StageResult` are imported from `@/lib/prefill/stage` everywhere (amendment A2; type-only); `RecordExtractionBadge` props use `InspectionRecordDTO["extractionStatus"]`, whose values are exactly `pending | done | skipped | failed`.
 
-**4. Dry run of the code in this plan** — every `// src/…` code block above was extracted verbatim into a scratch project (with stubs for phase 1's `types.ts` / `run-prefill.ts`, phase 2's `doc-types.ts` copied from its plan, and `any`-typed `db` / `createAdminClient`), `node_modules` symlinked, the repo's `vitest.config.ts` + `tsconfig.json` reused: `npx vitest run` → **9 files, 105 tests passed** (counts per file match the "Expected" lines above), `npx tsc --noEmit` → clean. Two things that dry run caught and that are already fixed in the text: `new Anthropic()` at import time throws under vitest's jsdom environment (hence the lazy `getClient()`), and a `Buffer` is not `instanceof` jsdom's `Uint8Array` for pdf-lib (hence `new Uint8Array(Buffer.from(…))` in the test helper). Not covered by the dry run: Task 9's edits to phase 2's files and Task 10's tile edit (they need phase 2's code), and the live smoke script.
+**4. Dry run of the code in this plan** — every `// src/…` code block above was extracted verbatim into a scratch project (with stubs for phase 1's `types.ts` / `stage.ts` / `run-store.ts`, phase 2's `doc-types.ts` copied from its plan, and stubbed `db` / `createAdminClient` / `RECORD_BUCKET`), `node_modules` symlinked, the repo's `vitest.config.ts` + `tsconfig.json` reused: `npx vitest run` → **9 files, 106 tests passed** (counts per file match the "Expected" lines above), `npx tsc --noEmit` → clean. Two things that dry run caught and that are already fixed in the text: `new Anthropic()` at import time throws under vitest's jsdom environment (hence the lazy `getClient()`), and a `Buffer` is not `instanceof` jsdom's `Uint8Array` for pdf-lib (hence `new Uint8Array(Buffer.from(…))` in the test helper). Not covered by the dry run: Task 9's edits to phase 2's files and Task 10's tile edit (they need phase 2's code), and the live smoke script.
