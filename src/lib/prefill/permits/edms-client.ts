@@ -120,14 +120,42 @@ export class EdmsError extends Error {
     message: string,
     readonly kind: "network" | "http" | "parse",
     readonly status?: number,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = "EdmsError";
   }
 }
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function isAbortOrTimeout(err: unknown): boolean {
+  return err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError");
+}
+
+/**
+ * Reads a response body via `read`, mapping an abort/timeout of the caller's
+ * signal or the per-attempt `AbortSignal.timeout` (still attached to the body
+ * stream after `fetchWithRetry` resolves the headers) to a network EdmsError
+ * instead of a raw DOMException, and any other read failure to a parse error.
+ */
+async function readBody<T>(
+  res: Response,
+  read: (r: Response) => Promise<T>,
+  what: string,
+): Promise<T> {
+  try {
+    return await read(res);
+  } catch (err) {
+    if (isAbortOrTimeout(err)) {
+      throw new EdmsError(`${what} timed out`, "network", undefined, { cause: err });
+    }
+    throw new EdmsError(`${what} could not be read: ${errorMessage(err)}`, "parse", undefined, {
+      cause: err,
+    });
+  }
 }
 
 /**
@@ -141,10 +169,11 @@ async function fetchWithRetry(
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<Response> {
+  const budgetExhaustedMessage = "Prefill run budget exhausted before EDMS request";
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     if (signal?.aborted) {
-      throw new EdmsError("Prefill run budget exhausted before EDMS request", "network");
+      throw new EdmsError(budgetExhaustedMessage, "network");
     }
     const timeout = AbortSignal.timeout(timeoutMs);
     const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
@@ -155,7 +184,15 @@ async function fetchWithRetry(
       if (signal?.aborted) break;
     }
   }
-  throw new EdmsError(`Maricopa EDMS unreachable: ${errorMessage(lastError)}`, "network");
+  if (signal?.aborted) {
+    throw new EdmsError(budgetExhaustedMessage, "network", undefined, { cause: lastError });
+  }
+  throw new EdmsError(
+    `Maricopa EDMS unreachable: ${errorMessage(lastError)}`,
+    "network",
+    undefined,
+    { cause: lastError },
+  );
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -213,12 +250,7 @@ export async function searchKeywords(
   if (!res.ok) {
     throw new EdmsError(`EDMS search failed (${res.status})`, "http", res.status);
   }
-  let json: unknown;
-  try {
-    json = await res.json();
-  } catch (err) {
-    throw new EdmsError(`EDMS search returned non-JSON: ${errorMessage(err)}`, "parse");
-  }
+  const json = await readBody<unknown>(res, (r) => r.json(), "EDMS search response");
   return parseSearchResponse(json);
 }
 
@@ -246,12 +278,7 @@ export async function getDocumentInfo(
   if (!res.ok) {
     throw new EdmsError(`EDMS document info failed (${res.status})`, "http", res.status);
   }
-  let json: unknown;
-  try {
-    json = await res.json();
-  } catch (err) {
-    throw new EdmsError(`EDMS document info returned non-JSON: ${errorMessage(err)}`, "parse");
-  }
+  const json = await readBody<unknown>(res, (r) => r.json(), "EDMS document info response");
   if (!isRecord(json) || typeof json.Size !== "number") {
     throw new EdmsError("EDMS document info missing Size", "parse");
   }
@@ -264,8 +291,20 @@ export async function getDocumentInfo(
 
 function filenameFromDisposition(header: string | null): string | null {
   if (!header) return null;
-  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
-  return match ? decodeURIComponent(match[1].trim()) : null;
+  // RFC 5987 extended value (`filename*=UTF-8''…`) is percent-encoded — decode it.
+  const extended = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (extended) {
+    const raw = extended[1].trim();
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+  // Plain `filename="…"` is a literal value — never decode it (a stray `%`
+  // like in "100%.pdf" isn't percent-encoding and would throw a URIError).
+  const plain = /filename="?([^";]+)"?/i.exec(header);
+  return plain ? plain[1].trim() : null;
 }
 
 /** `GET` the PDF. Buffers the whole body (callers gate size at 25 MB first). */
@@ -284,7 +323,8 @@ export async function fetchDocumentBytes(
     throw new EdmsError(`EDMS document download failed (${res.status})`, "http", res.status);
   }
   const contentType = res.headers.get("content-type");
-  const bytes = new Uint8Array(await res.arrayBuffer());
+  const buffer = await readBody(res, (r) => r.arrayBuffer(), "EDMS document body");
+  const bytes = new Uint8Array(buffer);
   const looksLikePdf =
     bytes.length >= 5 &&
     bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;

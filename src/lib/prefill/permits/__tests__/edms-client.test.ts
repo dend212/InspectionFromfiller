@@ -141,6 +141,42 @@ describe("searchKeywords", () => {
     ).rejects.toMatchObject({ kind: "network" });
     expect(mockFetch).not.toHaveBeenCalled();
   });
+
+  it("uses the budget-exhausted wording (not a raw abort message) when the caller's signal aborts mid-flight, without retrying", async () => {
+    const controller = new AbortController();
+    mockFetch.mockImplementationOnce(() => {
+      controller.abort();
+      return Promise.reject(new DOMException("The operation was aborted.", "AbortError"));
+    });
+    await expect(
+      searchKeywords(EDMS_ARCHIVES.env, [{ id: 1264, value: "219-11-121" }], controller.signal),
+    ).rejects.toMatchObject({
+      kind: "network",
+      message: "Prefill run budget exhausted before EDMS request",
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("classifies an aborted JSON parse as a network EdmsError, not parse", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.reject(new DOMException("The operation was aborted due to timeout", "AbortError")),
+    } as unknown as Response);
+    await expect(
+      searchKeywords(EDMS_ARCHIVES.env, [{ id: 1264, value: "219-11-121" }]),
+    ).rejects.toMatchObject({ kind: "network" });
+  });
+
+  it("still classifies a genuinely malformed JSON body as parse", async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response("not json", { status: 200, headers: { "content-type": "application/json" } }),
+    );
+    await expect(
+      searchKeywords(EDMS_ARCHIVES.env, [{ id: 1264, value: "219-11-121" }]),
+    ).rejects.toMatchObject({ kind: "parse" });
+  });
 });
 
 describe("documentUrl", () => {
@@ -204,5 +240,40 @@ describe("fetchDocumentBytes", () => {
     await expect(fetchDocumentBytes(EDMS_ARCHIVES.env, "abc")).rejects.toMatchObject({
       kind: "parse",
     });
+  });
+
+  it("classifies a body-read timeout as a network EdmsError, not a raw DOMException", async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.error(
+          new DOMException("The operation was aborted due to timeout", "TimeoutError"),
+        );
+      },
+    });
+    mockFetch.mockResolvedValueOnce(
+      new Response(stream, {
+        status: 200,
+        headers: { "content-type": "application/pdf" },
+      }),
+    );
+    await expect(fetchDocumentBytes(EDMS_ARCHIVES.env, "abc")).rejects.toMatchObject({
+      name: "EdmsError",
+      kind: "network",
+    });
+  });
+
+  it("does not throw decoding a filename with a literal percent sign", async () => {
+    const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]); // %PDF-
+    mockFetch.mockResolvedValueOnce(
+      new Response(pdf, {
+        status: 200,
+        headers: {
+          "content-type": "application/pdf",
+          "content-disposition": 'inline; filename="100%.pdf"',
+        },
+      }),
+    );
+    const doc = await fetchDocumentBytes(EDMS_ARCHIVES.env, "abc");
+    expect(doc.filename).toBe("100%.pdf");
   });
 });
