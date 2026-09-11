@@ -11,7 +11,7 @@
  */
 
 import { formatApn } from "../apn";
-import type { PermitCandidate, PrefillInput } from "../types";
+import type { PermitArchive, PermitCandidate, PrefillInput } from "../types";
 import { type SearchHit, rowsToHits } from "./candidates";
 import {
   EDMS_ARCHIVES,
@@ -31,10 +31,21 @@ import {
   zip5,
 } from "./normalize";
 
+/**
+ * `failedArchives` lists every archive whose query threw during the search
+ * (empty when all succeeded) so the tile never renders a confident negative
+ * after an outage. `error` is reserved for "every query failed".
+ */
 export type PermitSearchOutcome =
-  | { kind: "found"; via: "apn" | "street"; hits: SearchHit[]; searched: string[] }
-  | { kind: "ambiguous"; hits: SearchHit[]; searched: string[] }
-  | { kind: "not_found"; searched: string[] }
+  | {
+      kind: "found";
+      via: "apn" | "street";
+      hits: SearchHit[];
+      searched: string[];
+      failedArchives: PermitArchive[];
+    }
+  | { kind: "ambiguous"; hits: SearchHit[]; searched: string[]; failedArchives: PermitArchive[] }
+  | { kind: "not_found"; searched: string[]; failedArchives: PermitArchive[] }
   | { kind: "error"; message: string; searched: string[] };
 
 export interface SearchDeps {
@@ -103,24 +114,49 @@ export function dedupeHits(hits: SearchHit[]): SearchHit[] {
   return out;
 }
 
-/** Rows describing the same property share this key regardless of doc type. */
-export function propertyGroupKey(candidate: PermitCandidate): string {
-  const parts = splitStreetAddress(candidate.streetAddress);
+/** Attributes that split a property group only when populated on both sides. */
+function propertyAttributes(candidate: PermitCandidate, dir: string): string[] {
   return [
-    normalizeStreetName(parts.street),
-    parts.number,
-    parts.dir,
+    normaliseStreetDir(dir),
     (candidate.city ?? "").trim().toUpperCase(),
     zip5(candidate.zip ?? ""),
     formatApn(candidate.apn) ?? "",
-  ].join("|");
+  ];
+}
+
+/**
+ * Rows describing the same property, regardless of doc type. Identity is the
+ * house number + normalised street; a row joins a group unless direction,
+ * city, ZIP5 or APN is populated on both sides and differs (blank is
+ * compatible). So a legacy PERMIT with no city/ZIP/APN sits with the
+ * property's later NOTICE OF TRANSFER, and an eplpav row (its address never
+ * carries a direction) sits with the env rows of the same house.
+ */
+export function groupByProperty(candidates: PermitCandidate[]): PermitCandidate[][] {
+  const groups: { identity: string; attrs: string[]; members: PermitCandidate[] }[] = [];
+  for (const candidate of candidates) {
+    const parts = splitStreetAddress(candidate.streetAddress);
+    const identity = `${parts.number}|${normalizeStreetName(parts.street)}`;
+    const attrs = propertyAttributes(candidate, parts.dir);
+    const group = groups.find(
+      (g) => g.identity === identity && g.attrs.every((v, i) => !v || !attrs[i] || v === attrs[i]),
+    );
+    if (group) {
+      group.members.push(candidate);
+      group.attrs = group.attrs.map((v, i) => v || attrs[i]);
+    } else {
+      groups.push({ identity, attrs, members: [candidate] });
+    }
+  }
+  return groups.map((g) => g.members);
 }
 
 function matchesStreet(candidate: PermitCandidate, input: PrefillInput): boolean {
   const addr = input.address;
   if (!addr) return true;
   const theirs = splitStreetAddress(candidate.streetAddress);
-  if (theirs.number && addr.streetNumber && theirs.number !== addr.streetNumber.trim()) {
+  const ourNumber = addr.streetNumber.trim().toUpperCase();
+  if (theirs.number && ourNumber && theirs.number !== ourNumber) {
     return false;
   }
   const ours = normalizeStreetName(addr.streetName);
@@ -140,15 +176,11 @@ export function decideFallback(
     }))
     .filter((h) => Number.isFinite(h.candidate.score));
 
-  const groups = new Map<string, { score: number; hits: SearchHit[] }>();
-  for (const hit of scored) {
-    const key = propertyGroupKey(hit.candidate);
-    const group = groups.get(key) ?? { score: -Infinity, hits: [] };
-    group.score = Math.max(group.score, hit.candidate.score);
-    group.hits.push(hit);
-    groups.set(key, group);
-  }
-  const ranked = [...groups.values()].sort((a, b) => b.score - a.score);
+  const groups = groupByProperty(scored.map((h) => h.candidate)).map((members) => {
+    const hits = scored.filter((h) => members.includes(h.candidate));
+    return { score: Math.max(...hits.map((h) => h.candidate.score)), hits };
+  });
+  const ranked = groups.sort((a, b) => b.score - a.score);
   const [top, second] = ranked;
   if (
     top &&
@@ -173,26 +205,26 @@ interface ArchiveQuery {
   keywords: EdmsKeyword[];
 }
 
-/** Runs the queries in parallel; returns merged hits and how many queries failed. */
+/** Runs the queries in parallel; returns merged hits and the archives whose query threw. */
 async function runQueries(
   queries: ArchiveQuery[],
   signal: AbortSignal,
   deps: SearchDeps,
-): Promise<{ hits: SearchHit[]; failures: number }> {
+): Promise<{ hits: SearchHit[]; failedArchives: PermitArchive[] }> {
   const settled = await Promise.allSettled(
     queries.map((q) => deps.search(q.archive, q.keywords, signal)),
   );
   const hits: SearchHit[] = [];
-  let failures = 0;
+  const failedArchives: PermitArchive[] = [];
   settled.forEach((result, i) => {
     if (result.status === "fulfilled") {
       hits.push(...rowsToHits(queries[i].archive, result.value.rows));
     } else {
-      failures++;
+      failedArchives.push(queries[i].archive.archive);
       console.warn(`[prefill/permits] ${queries[i].archive.id} search failed:`, result.reason);
     }
   });
-  return { hits: dedupeHits(hits), failures };
+  return { hits: dedupeHits(hits), failedArchives };
 }
 
 export async function searchPermits(
@@ -201,8 +233,17 @@ export async function searchPermits(
   deps: SearchDeps = defaultDeps,
 ): Promise<PermitSearchOutcome> {
   const searched: string[] = [];
+  // Accumulated across rounds: a not_found is only as good as the queries that ran
+  const failedArchives: PermitArchive[] = [];
   let totalFailures = 0;
   let totalQueries = 0;
+  const recordRound = (round: { failedArchives: PermitArchive[] }, queryCount: number) => {
+    totalQueries += queryCount;
+    totalFailures += round.failedArchives.length;
+    for (const archive of round.failedArchives) {
+      if (!failedArchives.includes(archive)) failedArchives.push(archive);
+    }
+  };
 
   // 1. APN on both archives
   const apn = formatApn(input.apn);
@@ -218,23 +259,32 @@ export async function searchPermits(
         keywords: [{ id: EDMS_ARCHIVES.eplpav.keywords.apn, value: apn }],
       },
     ];
-    const { hits, failures } = await runQueries(queries, signal, deps);
-    totalFailures += failures;
-    totalQueries += queries.length;
-    if (hits.length > 0) {
+    const round = await runQueries(queries, signal, deps);
+    recordRound(round, queries.length);
+    if (round.hits.length > 0) {
       return {
         kind: "found",
         via: "apn",
-        hits: hits.map((h) => ({ ...h, candidate: { ...h.candidate, score: APN_MATCH_SCORE } })),
+        hits: round.hits.map((h) => ({
+          ...h,
+          candidate: { ...h.candidate, score: APN_MATCH_SCORE },
+        })),
         searched,
+        failedArchives,
       };
     }
   }
 
-  // 2. Street fallback — the house number must look like one (digits + optional letter)
+  // 2. Street fallback — the house number must look like one (digits + optional letter).
+  //    Skipped once the caller's budget has expired: the requests could only reject.
   const number = (input.address?.streetNumber ?? "").trim().toUpperCase();
   const street = normalizeStreetName(input.address?.streetName ?? "");
-  if (/^\d{1,8}[A-Z]?$/.test(number) && street && isSafeKeywordValue(`${street}*`)) {
+  if (
+    !signal.aborted &&
+    /^\d{1,8}[A-Z]?$/.test(number) &&
+    street &&
+    isSafeKeywordValue(`${street}*`)
+  ) {
     searched.push(`${number} ${street}`);
     const queries: ArchiveQuery[] = [
       {
@@ -252,15 +302,14 @@ export async function searchPermits(
         ],
       },
     ];
-    const { hits, failures } = await runQueries(queries, signal, deps);
-    totalFailures += failures;
-    totalQueries += queries.length;
-    if (hits.length > 0) {
-      const decision = decideFallback(hits, input);
+    const round = await runQueries(queries, signal, deps);
+    recordRound(round, queries.length);
+    if (round.hits.length > 0) {
+      const decision = decideFallback(round.hits, input);
       if (decision.hits.length > 0) {
         return decision.kind === "found"
-          ? { kind: "found", via: "street", hits: decision.hits, searched }
-          : { kind: "ambiguous", hits: decision.hits, searched };
+          ? { kind: "found", via: "street", hits: decision.hits, searched, failedArchives }
+          : { kind: "ambiguous", hits: decision.hits, searched, failedArchives };
       }
     }
   }
@@ -268,5 +317,5 @@ export async function searchPermits(
   if (totalQueries > 0 && totalFailures === totalQueries) {
     return { kind: "error", message: EDMS_UNAVAILABLE_MESSAGE, searched };
   }
-  return { kind: "not_found", searched };
+  return { kind: "not_found", searched, failedArchives };
 }
