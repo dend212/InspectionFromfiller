@@ -18,7 +18,7 @@
 - Document: `GET {base}/Document/{encodeURIComponent(ID)}/` → `application/pdf`; `POST` same URL with body `{}` → `{ Size, ViewerMode, IsAboveDownloadThreshold }`. **Document IDs are ephemeral tokens containing non-ASCII bytes — always `encodeURIComponent` them, never persist them, always search-then-fetch in the same run.**
 - Timeouts: EDMS 15 s per request (`AbortSignal.timeout(15000)`), document download 60 s; **one retry on network errors only** (never on HTTP 4xx/5xx). The whole run has a 240 s budget delivered as `ctx.signal`.
 - APN must be dashed `NNN-NN-NNN[L]` for EDMS (`21911121` → 0 hits). Use `formatApn` from Task 1.
-- Street-name normaliser: uppercase, strip suffixes `RD/ROAD, DR/DRIVE, ST/STREET, AVE/AVENUE, LN/LANE, BLVD, WAY, CT, PL, CIR, TRL`. Scoring: `+3` street direction match, `+2` city match, `+2` ZIP match, `+3` subdivision match, `+2` lot match, `−∞` APN present and ≠ ours, `+0` APN blank. Top score `≥ 5` with a gap `≥ 3` to the next → auto-select; otherwise up to `8` candidates → `awaiting_selection`; zero rows → `not_found` with the searched terms in `stages.permits.summary`.
+- Street-name normaliser: uppercase, strip suffixes `RD/ROAD, DR/DRIVE, ST/STREET, AVE/AVENUE, LN/LANE, BLVD, WAY, CT, PL, CIR, TRL` — phase 1's `normalizeStreetName` in `src/lib/prefill/input.ts` already does this (with a superset suffix list); reuse it, never write a second one. Scoring: `+3` street direction match, `+2` city match, `+2` ZIP match, `+3` subdivision match, `+2` lot match, `−∞` APN present and ≠ ours, `+0` APN blank. Top score `≥ 5` with a gap `≥ 3` to the next → auto-select; otherwise up to `8` candidates → `awaiting_selection`; zero rows → `not_found` with the searched terms in `stages.permits.summary`.
 - Extraction ranking: `PERMIT` / `FINAL DA` / Discharge Authorization (newest first) → `PERMIT SUB` → `NOTICE OF TRANSFER` → `ABANDONMENT` (flag) → `PLAN REVIEW` / `SUB` (skipped). At most `MAX_DOCUMENTS_PER_RUN` (3) records get `extraction_status = "pending"`; the rest are stored with `"skipped"`.
 - Documents larger than `MAX_DOCUMENT_BYTES` (25 MB) are listed but not downloaded (`skipped` with a note). Storage bucket `inspection-media` (private), object path `records/{inspectionId}/{recordId}.pdf`.
 - Download links are plain `<a target="_blank" rel="noopener">` — **never `next/link`** (its prefetch would fire the GET and burn a signed URL).
@@ -35,7 +35,7 @@
 |---|---|
 | `src/lib/prefill/apn.ts` (new) | `formatApn()` — canonical dashed APN or `null` |
 | `src/lib/prefill/permits/edms-client.ts` (new) | Archive configs, `searchKeywords`, `getDocumentInfo`, `fetchDocumentBytes`, `documentUrl`, `parseSearchResponse`, `EdmsError`, timeouts + single retry |
-| `src/lib/prefill/permits/normalize.ts` (new) | `normalisePermitNumber`, `normaliseStreetName`, `parseUsDate`, `decodeHtmlEntities`, `candidateKey`, `propertyGroupKey` |
+| `src/lib/prefill/permits/normalize.ts` (new) | `normalisePermitNumber`, `normalizeStreetName`, `parseUsDate`, `decodeHtmlEntities`, `candidateKey`, `propertyGroupKey` |
 | `src/lib/prefill/permits/doc-types.ts` (new) | `classifyDocType`, `DOC_CLASS_RANK`, `deriveEplpavDocType`, `rankForExtraction`, `isAbandonmentDocType` |
 | `src/lib/prefill/permits/candidates.ts` (new) | `rowToCandidate(archive, row)` → `PermitCandidate`; `SearchHit` type |
 | `src/lib/prefill/permits/search.ts` (new) | `searchPermits`, `scoreCandidate`, `dedupeHits`, `decideFallback` |
@@ -774,7 +774,8 @@ git commit -m "feat(prefill): OnBase EDMS JSON client with recorded fixtures"
 
 **Interfaces:**
 - Consumes: `PermitArchive` from `src/lib/prefill/types.ts`.
-- Produces (`normalize.ts`): `normalisePermitNumber(raw): string`, `normaliseStreetName(raw): string`, `normaliseStreetDir(raw): string`, `splitStreetAddress(streetAddress?: string): { number: string; dir: string; street: string }`, `normaliseSubdivision(raw): string`, `normaliseLot(raw): string`, `zip5(raw): string`, `parseUsDate(raw?: string): string | undefined`, `decodeHtmlEntities(raw): string`, `candidateKey(archive, permitNumber, docType, docDate?): string`, `isSafeKeywordValue(v): boolean`.
+- Consumes: `normalizeStreetName` from phase-1 `src/lib/prefill/input.ts` (re-exported here so every permits module imports one normaliser).
+- Produces (`normalize.ts`): `normalisePermitNumber(raw): string`, `normalizeStreetName(raw): string` (re-export), `normaliseStreetDir(raw): string`, `splitStreetAddress(streetAddress?: string): { number: string; dir: string; street: string }`, `normaliseSubdivision(raw): string`, `normaliseLot(raw): string`, `zip5(raw): string`, `parseUsDate(raw?: string): string | undefined`, `decodeHtmlEntities(raw): string`, `candidateKey(archive, permitNumber, docType, docDate?): string`, `isSafeKeywordValue(v): boolean`.
 - Produces (`doc-types.ts`): `type DocClass`, `DOC_CLASS_RANK`, `classifyDocType(docType): DocClass`, `isAbandonmentDocType(docType): boolean`, `isExtractableDocType(docType): boolean`, `deriveEplpavDocType(subtype, fileName): string`, `rankForExtraction<T extends { docType: string; docDate?: string }>(docs: T[]): T[]`.
 
 - [ ] **Step 1: Write the failing normaliser test**
@@ -789,7 +790,7 @@ import {
   normaliseLot,
   normalisePermitNumber,
   normaliseStreetDir,
-  normaliseStreetName,
+  normalizeStreetName,
   normaliseSubdivision,
   parseUsDate,
   splitStreetAddress,
@@ -804,24 +805,24 @@ describe("normalisePermitNumber", () => {
   });
 });
 
-describe("normaliseStreetName", () => {
+describe("normalizeStreetName (re-exported from phase-1 input.ts)", () => {
   it("uppercases and strips a trailing suffix", () => {
-    expect(normaliseStreetName("Cave Creek Rd")).toBe("CAVE CREEK");
-    expect(normaliseStreetName("CAVE CREEK ROAD")).toBe("CAVE CREEK");
-    expect(normaliseStreetName("Princess Dr.")).toBe("PRINCESS");
-    expect(normaliseStreetName("Sunland Avenue")).toBe("SUNLAND");
-    expect(normaliseStreetName("Villa Chula")).toBe("VILLA CHULA");
-    expect(normaliseStreetName("95th")).toBe("95TH");
+    expect(normalizeStreetName("Cave Creek Rd")).toBe("CAVE CREEK");
+    expect(normalizeStreetName("CAVE CREEK ROAD")).toBe("CAVE CREEK");
+    expect(normalizeStreetName("Princess Dr.")).toBe("PRINCESS");
+    expect(normalizeStreetName("Sunland Avenue")).toBe("SUNLAND");
+    expect(normalizeStreetName("Villa Chula")).toBe("VILLA CHULA");
+    expect(normalizeStreetName("95th")).toBe("95TH");
   });
 
   it("strips a leading direction token if the caller left it in", () => {
-    expect(normaliseStreetName("E Cave Creek Rd")).toBe("CAVE CREEK");
-    expect(normaliseStreetName("W Villa Chula")).toBe("VILLA CHULA");
+    expect(normalizeStreetName("E Cave Creek Rd")).toBe("CAVE CREEK");
+    expect(normalizeStreetName("W Villa Chula")).toBe("VILLA CHULA");
   });
 
   it("never strips the only token", () => {
-    expect(normaliseStreetName("Way")).toBe("WAY");
-    expect(normaliseStreetName("E")).toBe("E");
+    expect(normalizeStreetName("Way")).toBe("WAY");
+    expect(normalizeStreetName("E")).toBe("E");
   });
 });
 
@@ -1027,10 +1028,10 @@ export function normalisePermitNumber(raw: string): string {
   return raw.toUpperCase().replace(/[^0-9A-Z]/g, "");
 }
 
-const STREET_SUFFIXES = new Set([
-  "RD", "ROAD", "DR", "DRIVE", "ST", "STREET", "AVE", "AVENUE", "LN", "LANE",
-  "BLVD", "WAY", "CT", "PL", "CIR", "TRL",
-]);
+// Phase 1 already normalises street names for the assessor query (uppercase,
+// drop leading direction + trailing suffix — a superset of the spec's list).
+// One implementation, re-exported so the permits code and the UI share it.
+export { normalizeStreetName } from "../input";
 
 const DIRECTIONS: Record<string, string> = {
   N: "N", S: "S", E: "E", W: "W", NE: "NE", NW: "NW", SE: "SE", SW: "SW",
@@ -1040,14 +1041,6 @@ const DIRECTIONS: Record<string, string> = {
 
 function tokens(raw: string): string[] {
   return raw.toUpperCase().replace(/[^0-9A-Z ]+/g, " ").split(/\s+/).filter(Boolean);
-}
-
-/** Uppercase, drop a leading direction and a trailing suffix: "E Cave Creek Rd" → "CAVE CREEK" */
-export function normaliseStreetName(raw: string): string {
-  const parts = tokens(raw);
-  if (parts.length > 1 && DIRECTIONS[parts[0]]) parts.shift();
-  if (parts.length > 1 && STREET_SUFFIXES.has(parts[parts.length - 1])) parts.pop();
-  return parts.join(" ");
 }
 
 /** "east" → "E"; anything that is not a direction → "" */
@@ -1844,7 +1837,7 @@ import {
   normaliseLot,
   normalisePermitNumber,
   normaliseStreetDir,
-  normaliseStreetName,
+  normalizeStreetName,
   normaliseSubdivision,
   splitStreetAddress,
   zip5,
@@ -1926,7 +1919,7 @@ export function dedupeHits(hits: SearchHit[]): SearchHit[] {
 export function propertyGroupKey(candidate: PermitCandidate): string {
   const parts = splitStreetAddress(candidate.streetAddress);
   return [
-    normaliseStreetName(parts.street),
+    normalizeStreetName(parts.street),
     parts.number,
     parts.dir,
     (candidate.city ?? "").trim().toUpperCase(),
@@ -1942,8 +1935,8 @@ function matchesStreet(candidate: PermitCandidate, input: PrefillInput): boolean
   if (theirs.number && addr.streetNumber && theirs.number !== addr.streetNumber.trim()) {
     return false;
   }
-  const ours = normaliseStreetName(addr.streetName);
-  return ours === "" || normaliseStreetName(theirs.street).startsWith(ours);
+  const ours = normalizeStreetName(addr.streetName);
+  return ours === "" || normalizeStreetName(theirs.street).startsWith(ours);
 }
 
 /** Spec §5.2 step 2 decision, applied to property groups (see design notes). */
@@ -2052,7 +2045,7 @@ export async function searchPermits(
 
   // 2. Street fallback — the house number must look like one (digits + optional letter)
   const number = (input.address?.streetNumber ?? "").trim().toUpperCase();
-  const street = normaliseStreetName(input.address?.streetName ?? "");
+  const street = normalizeStreetName(input.address?.streetName ?? "");
   if (/^\d{1,8}[A-Z]?$/.test(number) && street && isSafeKeywordValue(`${street}*`)) {
     searched.push(`${number} ${street}`);
     const queries: ArchiveQuery[] = [
@@ -2671,11 +2664,11 @@ git commit -m "feat(prefill): download permit PDFs to storage and insert inspect
 ### Task 8: `runPermitsStage` / `runPermitsSelection` — search → rank → store
 
 **Files:**
-- Create: `src/lib/prefill/permits/index.ts`
+- Modify (replace the phase-1 stub wholesale): `src/lib/prefill/permits/index.ts`
 - Test: `src/lib/prefill/permits/__tests__/index.test.ts`
 
 **Interfaces:**
-- Consumes: `StageContext`, `StageResult` (type-only, from phase-1 `src/lib/prefill/run-prefill.ts`); `MAX_DOCUMENTS_PER_RUN`, `PermitCandidate`, `PrefillInput`, `PrefillStage`, `ProposedField`, `StageLink`, `ExtractionStatus` (`types.ts`); `searchPermits`, `PermitSearchOutcome` (Task 5); `storeDocument`, `StoreDocumentInput`, `StoreDocumentResult` (Task 7); `rankForExtraction`, `isExtractableDocType`, `isAbandonmentDocType` (Task 3); `SearchHit` (Task 4); `EDMS_ARCHIVES` (Task 2).
+- Consumes: `StageContext`, `StageResult` (type-only, from phase-1 `src/lib/prefill/stage.ts`); `MAX_DOCUMENTS_PER_RUN`, `PermitCandidate`, `PrefillInput`, `PrefillStage`, `ProposedField`, `StageLink`, `ExtractionStatus` (`types.ts`); `searchPermits`, `PermitSearchOutcome` (Task 5); `storeDocument`, `StoreDocumentInput`, `StoreDocumentResult` (Task 7); `rankForExtraction`, `isExtractableDocType`, `isAbandonmentDocType` (Task 3); `SearchHit` (Task 4); `EDMS_ARCHIVES` (Task 2).
 - Produces:
   ```ts
   export const EDMS_LINKS: StageLink[];   // "Open on Maricopa EDMS" (env) + "EDMS 2024+ archive" (eplpav)
@@ -2696,7 +2689,7 @@ git commit -m "feat(prefill): download permit PDFs to storage and insert inspect
 // src/lib/prefill/permits/__tests__/index.test.ts
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { StageContext } from "../../run-prefill";
+import type { StageContext } from "../../stage";
 import type { PermitCandidate } from "../../types";
 import type { SearchHit } from "../candidates";
 import type { StoreDocumentInput, StoreDocumentResult } from "../fetch-document";
@@ -2999,9 +2992,9 @@ describe("runPermitsSelection", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run src/lib/prefill/permits/__tests__/index.test.ts`
-Expected: FAIL — `Cannot find module '../index'`.
+Expected: FAIL — the phase-1 stub returns `{ status: "skipped", summary: "Not available yet" }` and exports no `runPermitsSelection` / `notFoundSummary`.
 
-- [ ] **Step 3: Write `permits/index.ts`**
+- [ ] **Step 3: Replace `permits/index.ts`** (the whole file — the phase-1 stub body goes away)
 
 ```ts
 // src/lib/prefill/permits/index.ts
@@ -3315,7 +3308,7 @@ Expected: PASS (11 tests).
 - [ ] **Step 5: Run the whole permits folder together**
 
 Run: `npx vitest run src/lib/prefill`
-Expected: all green (apn, edms-client, normalize, doc-types, candidates, search, fetch-document, index + phase-1's own tests).
+Expected: all green except phase-1's `run-prefill.test.ts` assertion that `stages.permits` equals the `"Not available yet"` stub — that expectation is retired in Task 10 (it now asserts the real stage result).
 
 - [ ] **Step 6: Commit**
 
@@ -3583,92 +3576,72 @@ git commit -m "feat(api): auth-gated signed-URL redirect for stored permit recor
 
 ---
 
-### Task 10: Wire the permits stage into `run-prefill.ts` and make `/select` real
+### Task 10: Wire the permits stage into the orchestrator (`awaiting_selection`, real `continuePrefillAfterSelection`, DTO `downloadUrl`)
 
 **Files:**
-- Modify: `src/lib/prefill/run-prefill.ts` (phase-1 file: replace the permits stub, real `continuePrefillAfterSelection`, record DTO `downloadUrl` / `isAbandonment`)
-- Modify: `src/app/api/inspections/[id]/prefill/[runId]/select/route.ts` (phase-1 stub → real)
+- Modify: `src/lib/prefill/run-prefill.ts` (phase-1 Task 5 file — `runPrefill` learns about candidates; `continuePrefillAfterSelection` becomes real)
+- Modify: `src/lib/prefill/run-dto.ts` (phase-1 Task 5 file — `downloadUrl = ""` for records that were never stored; `isAbandonmentDocType` re-exported from `permits/doc-types`)
+- Modify: `src/lib/prefill/__tests__/run-prefill.test.ts` (phase-1 test — retire the one assertion that pinned the permits stub)
 - Test: `src/lib/prefill/__tests__/run-prefill.permits.test.ts`
-- Test: `src/app/api/inspections/[id]/prefill/[runId]/select/__tests__/route.test.ts`
+- Test: `src/lib/prefill/__tests__/run-dto.records.test.ts`
 
 **Interfaces:**
-- Consumes: `runPermitsStage`, `runPermitsSelection` (Task 8); `isAbandonmentDocType` (Task 3); phase-1 `runPrefill`, `continuePrefillAfterSelection`, `StageContext`, `StageResult`, `emptyStages`, `PrefillInput`, `PrefillStages`, `ProposedField`, `InspectionRecordDTO`, `PermitArchive`, `ExtractionStatus`; schema `inspectionPrefillRuns`, `inspectionRecords`, `inspections`; `after` from `next/server`; `checkInspectionAccess` / `getUserRole` (`auth-helpers.ts`).
-- Produces: `runPrefill` now runs the real permits stage and moves the run to `awaiting_selection` when candidates come back; `continuePrefillAfterSelection(runId, candidateKeys)` re-runs the permit search, stores the chosen documents and finishes the run; `recordToDTO(inspectionId, row): InspectionRecordDTO` (exported from `run-prefill.ts`) sets `downloadUrl = ""` for rows that were never stored and `isAbandonment` from the doc type; `POST …/select` validates `{ candidateKeys: string[] }` (1–3), flips the run to `running`, schedules the continuation with `after()`.
+- Consumes: phase-1 `loadRunRow`, `updateRun`, `PrefillRunRow`, `InspectionRecordRow` (`src/lib/prefill/run-store.ts`); `StageContext`, `StageResult` (`src/lib/prefill/stage.ts`); `runAssessorStage` (`assessor.ts`); `runListingStage` (`listing/index.ts`, still the phase-1 stub); `runPermitsStage`, `runPermitsSelection` (Task 8); `isAbandonmentDocType` (Task 3); `emptyStages`, `PrefillInput`, `PrefillStages`, `ProposedField`, `PermitCandidate` (`types.ts`).
+- Produces: `runPrefill(runId)` persists `status: "awaiting_selection"` + `candidates` (and `finishedAt: null`) when the permits stage returns candidates; `continuePrefillAfterSelection(runId, candidateKeys)` re-runs the permit search for a `running` run, stores the chosen documents, and finishes the run with the assessor/listing proposals kept; `toInspectionRecordDTO(row)` sets `downloadUrl: ""` when `row.storagePath === ""`.
+- **`/select` route: no change.** Phase 1's `src/app/api/inspections/[id]/prefill/[runId]/select/route.ts` already validates `{ candidateKeys }` (1–3), checks `awaiting_selection` (409), flips the run to `running` and calls `after(() => continuePrefillAfterSelection(runId, keys))`; its tests stay as they are. The route "becomes real" purely by this task making the continuation real. `usePrefill().selectCandidates` (phase 1) already POSTs it and sets the run back to `running`, which resumes polling.
 
-**Phase-1 name assumptions.** This task was written against the shared-contracts file while phase 1 was still being planned. It assumes `run-prefill.ts` has a `runPrefill` shaped like the code below with local helpers `TOTAL_BUDGET_MS = 240_000`, `persistStages()`, `ctxFor(name)`, and an inline permits stub (`{ status: "skipped", summary: "Not available yet", links: [] }`), and that the `PrefillRunDTO` mapper (records branch) lives in the same file. If phase 1 named these differently, **keep phase 1's names** and apply only the five edits listed under Step 3; the tests in Step 1 are written against public behaviour (what gets persisted) and a chain-agnostic DB mock, so they hold regardless of the local helper names.
-
-- [ ] **Step 1: Write the failing orchestrator test**
+- [ ] **Step 1: Write the failing orchestrator test** (same mocking style as phase 1's `run-prefill.test.ts`)
 
 ```ts
 // src/lib/prefill/__tests__/run-prefill.permits.test.ts
-// @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PermitCandidate, ProposedField } from "../types";
 
-// ---------------------------------------------------------------------------
-// Chain-agnostic Drizzle mock: any select().from(table)…  resolves to the rows
-// registered for that table; any update(table).set(v).where(…) records v.
-// ---------------------------------------------------------------------------
-const { state, mockRunAssessorStage, mockRunPermitsStage, mockRunPermitsSelection } = vi.hoisted(
-  () => ({
-    state: {
-      rows: new Map<string, Record<string, unknown>[]>(),
-      updates: [] as Array<{ table: string; values: Record<string, unknown> }>,
-    },
-    mockRunAssessorStage: vi.fn(),
-    mockRunPermitsStage: vi.fn(),
-    mockRunPermitsSelection: vi.fn(),
-  }),
-);
-
-vi.mock("@/lib/db/schema", () => ({
-  inspectionPrefillRuns: { __table: "runs", id: "id", inspectionId: "inspection_id", status: "status", createdAt: "created_at" },
-  inspectionRecords: { __table: "records", id: "id", inspectionId: "inspection_id", runId: "run_id", createdAt: "created_at" },
-  inspections: { __table: "inspections", id: "id", inspectorId: "inspector_id" },
+const {
+  mockLoadRunRow,
+  mockUpdateRun,
+  mockRunAssessorStage,
+  mockRunListingStage,
+  mockRunPermitsStage,
+  mockRunPermitsSelection,
+} = vi.hoisted(() => ({
+  mockLoadRunRow: vi.fn(),
+  mockUpdateRun: vi.fn(),
+  mockRunAssessorStage: vi.fn(),
+  mockRunListingStage: vi.fn(),
+  mockRunPermitsStage: vi.fn(),
+  mockRunPermitsSelection: vi.fn(),
 }));
 
-vi.mock("drizzle-orm", () => ({
-  eq: vi.fn((col: unknown, val: unknown) => ({ col, val })),
-  and: vi.fn((...c: unknown[]) => ({ and: c })),
-  desc: vi.fn((c: unknown) => ({ desc: c })),
-  asc: vi.fn((c: unknown) => ({ asc: c })),
-  gt: vi.fn((c: unknown, v: unknown) => ({ gt: [c, v] })),
-  inArray: vi.fn((c: unknown, v: unknown) => ({ inArray: [c, v] })),
-  sql: Object.assign(vi.fn(() => ({})), { raw: vi.fn() }),
+vi.mock("@/lib/prefill/run-store", () => ({
+  loadRunRow: mockLoadRunRow,
+  updateRun: mockUpdateRun,
 }));
-
-vi.mock("@/lib/db", () => {
-  const tableName = (t: unknown) => (t as { __table: string }).__table;
-  const select = () => {
-    let table = "";
-    const chain: Record<string, unknown> = {};
-    const resolve = () => Promise.resolve(state.rows.get(table) ?? []);
-    for (const m of ["where", "orderBy", "limit", "offset"]) chain[m] = () => chain;
-    chain.from = (t: unknown) => {
-      table = tableName(t);
-      return chain;
-    };
-    chain.then = (onOk: (v: unknown) => unknown, onErr?: (e: unknown) => unknown) => resolve().then(onOk, onErr);
-    return chain;
-  };
-  const update = (t: unknown) => ({
-    set: (values: Record<string, unknown>) => ({
-      where: () => {
-        state.updates.push({ table: tableName(t), values });
-        return Promise.resolve();
-      },
-    }),
-  });
-  return { db: { select, update, insert: vi.fn() } };
-});
-
 vi.mock("@/lib/prefill/assessor", () => ({ runAssessorStage: mockRunAssessorStage }));
+vi.mock("@/lib/prefill/listing", () => ({ runListingStage: mockRunListingStage }));
 vi.mock("@/lib/prefill/permits", () => ({
   runPermitsStage: mockRunPermitsStage,
   runPermitsSelection: mockRunPermitsSelection,
 }));
 
-import { continuePrefillAfterSelection, recordToDTO, runPrefill } from "../run-prefill";
+import { continuePrefillAfterSelection, runPrefill } from "@/lib/prefill/run-prefill";
+import type { StageContext } from "@/lib/prefill/stage";
+import type { PermitCandidate, PrefillInput, ProposedField } from "@/lib/prefill/types";
+
+const RUN = {
+  id: "run-1",
+  inspectionId: "insp-1",
+  trigger: "manual",
+  status: "queued",
+  input: { apn: "219-11-121", address: { streetNumber: "8911", streetName: "Princess Dr" } },
+  stages: {},
+  proposals: [],
+  candidates: [],
+  error: null,
+  appliedAt: null,
+  createdBy: "user-1",
+  createdAt: new Date(),
+  finishedAt: null,
+};
 
 const CANDIDATE: PermitCandidate = {
   key: "edms_env:OWR-20-04198:NOTICE OF TRANSFER:2020-10-27",
@@ -3683,8 +3656,8 @@ const CANDIDATE: PermitCandidate = {
 };
 
 const ASSESSOR_PROPOSAL: ProposedField = {
-  fieldPath: "facilityInfo.facilityName",
-  value: "Owner",
+  fieldPath: "facilityInfo.taxParcelNumber",
+  value: "219-11-121",
   kind: "fill",
   provenance: { source: "assessor", confidence: 1, explanation: "Assessor" },
 };
@@ -3696,147 +3669,180 @@ const PERMIT_PROPOSAL: ProposedField = {
   provenance: { source: "permit", confidence: 1, explanation: "Permit found" },
 };
 
-function baseRun(over: Record<string, unknown> = {}) {
-  return {
-    id: "run-1",
-    inspectionId: "insp-1",
-    trigger: "manual",
-    status: "queued",
-    input: { apn: "219-11-121", address: { streetNumber: "8911", streetName: "Princess Dr" } },
-    stages: {},
-    proposals: [],
-    candidates: [],
-    error: null,
-    appliedAt: null,
-    createdBy: null,
-    createdAt: new Date("2026-09-11T10:00:00Z"),
-    finishedAt: null,
-    ...over,
-  };
+function lastPatch() {
+  const call = mockUpdateRun.mock.calls[mockUpdateRun.mock.calls.length - 1];
+  return call[1];
 }
 
-const lastRunUpdate = () => [...state.updates].reverse().find((u) => u.table === "runs")?.values;
-
 beforeEach(() => {
-  state.rows.clear();
-  state.updates.length = 0;
   vi.clearAllMocks();
+  mockLoadRunRow.mockResolvedValue(RUN);
+  mockUpdateRun.mockResolvedValue(undefined);
   mockRunAssessorStage.mockResolvedValue({
-    stage: { status: "done", links: [], summary: "Assessor ok" },
+    stage: { status: "done", summary: "Parcel 219-11-121", links: [] },
     proposals: [ASSESSOR_PROPOSAL],
   });
+  mockRunListingStage.mockResolvedValue({
+    stage: { status: "skipped", summary: "Not available yet", links: [] },
+    proposals: [],
+  });
   mockRunPermitsStage.mockResolvedValue({
-    stage: { status: "done", links: [], summary: "1 permit document found: 000972 PERMIT" },
+    stage: { status: "done", summary: "1 permit document found: 000972 PERMIT", links: [] },
     proposals: [PERMIT_PROPOSAL],
   });
   mockRunPermitsSelection.mockResolvedValue({
-    stage: { status: "done", links: [], summary: "1 permit document found: OWR-20-04198 NOTICE OF TRANSFER" },
+    stage: { status: "done", summary: "1 permit document found: OWR-20-04198 NOTICE OF TRANSFER", links: [] },
     proposals: [PERMIT_PROPOSAL],
   });
 });
 
 describe("runPrefill — permits stage", () => {
-  it("calls runPermitsStage with the run input and a StageContext, then finishes done", async () => {
-    state.rows.set("runs", [baseRun()]);
+  it("passes the run input and a StageContext to the permits stage and finishes done", async () => {
     await runPrefill("run-1");
 
-    expect(mockRunPermitsStage).toHaveBeenCalledTimes(1);
-    const [input, ctx] = mockRunPermitsStage.mock.calls[0];
-    expect(input).toEqual({ apn: "219-11-121", address: { streetNumber: "8911", streetName: "Princess Dr" } });
+    const [input, ctx] = mockRunPermitsStage.mock.calls[0] as [PrefillInput, StageContext];
+    expect(input).toEqual(RUN.input);
     expect(ctx).toMatchObject({ inspectionId: "insp-1", runId: "run-1" });
     expect(ctx.signal).toBeInstanceOf(AbortSignal);
-    expect(typeof ctx.progress).toBe("function");
 
-    const final = lastRunUpdate();
-    expect(final).toMatchObject({ status: "done" });
-    expect((final?.stages as { permits: { summary: string } }).permits.summary).toContain("000972");
-    expect(final?.proposals).toEqual([ASSESSOR_PROPOSAL, PERMIT_PROPOSAL]);
+    const final = lastPatch();
+    expect(final.status).toBe("done");
+    expect(final.stages.permits.summary).toContain("000972");
+    expect(final.proposals).toEqual([ASSESSOR_PROPOSAL, PERMIT_PROPOSAL]);
+    expect(final.candidates).toEqual([]);
+    expect(final.finishedAt).toBeInstanceOf(Date);
   });
 
   it("persists a permits progress update mid-run", async () => {
-    state.rows.set("runs", [baseRun()]);
-    mockRunPermitsStage.mockImplementationOnce(async (_input, ctx) => {
+    mockRunPermitsStage.mockImplementationOnce(async (_input: PrefillInput, ctx: StageContext) => {
       await ctx.progress({ status: "running", summary: "Searching Maricopa EDMS…" });
-      return { stage: { status: "done", links: [], summary: "0" }, proposals: [] };
+      return { stage: { status: "done", summary: "0", links: [] }, proposals: [] };
     });
     await runPrefill("run-1");
-    const progressWrite = state.updates.find(
-      (u) => u.table === "runs" && (u.values.stages as { permits?: { summary?: string } })?.permits?.summary === "Searching Maricopa EDMS…",
+    const progressCall = mockUpdateRun.mock.calls.find(
+      (c) => c[1].stages?.permits?.summary === "Searching Maricopa EDMS…",
     );
-    expect(progressWrite).toBeTruthy();
+    expect(progressCall).toBeDefined();
   });
 
   it("moves the run to awaiting_selection with the candidates when the stage returns them", async () => {
-    state.rows.set("runs", [baseRun()]);
     mockRunPermitsStage.mockResolvedValueOnce({
-      stage: { status: "pending", links: [], summary: "3 possible permits — pick the right one" },
+      stage: { status: "pending", summary: "3 possible permits — pick the right one", links: [] },
       proposals: [],
       candidates: [CANDIDATE],
     });
     await runPrefill("run-1");
-    const final = lastRunUpdate();
-    expect(final).toMatchObject({ status: "awaiting_selection", candidates: [CANDIDATE], finishedAt: null });
+    const final = lastPatch();
+    expect(final).toMatchObject({
+      status: "awaiting_selection",
+      candidates: [CANDIDATE],
+      finishedAt: null,
+    });
     // assessor proposals are persisted now so the client can apply them while waiting
-    expect(final?.proposals).toEqual([ASSESSOR_PROPOSAL]);
+    expect(final.proposals).toEqual([ASSESSOR_PROPOSAL]);
+    expect(final.stages.permits.status).toBe("pending");
   });
 });
 
 describe("continuePrefillAfterSelection", () => {
   it("re-runs the permit search for the chosen keys and merges proposals", async () => {
-    state.rows.set("runs", [
-      baseRun({ status: "running", candidates: [CANDIDATE], proposals: [ASSESSOR_PROPOSAL] }),
-    ]);
+    mockLoadRunRow.mockResolvedValueOnce({
+      ...RUN,
+      status: "running",
+      candidates: [CANDIDATE],
+      proposals: [ASSESSOR_PROPOSAL],
+      stages: { assessor: { status: "done", links: [] }, listing: { status: "skipped", links: [] }, permits: { status: "pending", links: [] } },
+    });
     await continuePrefillAfterSelection("run-1", [CANDIDATE.key]);
 
     expect(mockRunPermitsSelection).toHaveBeenCalledTimes(1);
-    const [input, ctx, keys] = mockRunPermitsSelection.mock.calls[0];
-    expect(input).toEqual({ apn: "219-11-121", address: { streetNumber: "8911", streetName: "Princess Dr" } });
+    const [input, ctx, keys] = mockRunPermitsSelection.mock.calls[0] as [PrefillInput, StageContext, string[]];
+    expect(input).toEqual(RUN.input);
     expect(ctx).toMatchObject({ inspectionId: "insp-1", runId: "run-1" });
+    expect(ctx.signal).toBeInstanceOf(AbortSignal);
     expect(keys).toEqual([CANDIDATE.key]);
 
-    const final = lastRunUpdate();
+    const final = lastPatch();
     expect(final).toMatchObject({ status: "done", candidates: [] });
-    expect(final?.finishedAt).toBeInstanceOf(Date);
-    expect(final?.proposals).toEqual([ASSESSOR_PROPOSAL, PERMIT_PROPOSAL]);
+    expect(final.finishedAt).toBeInstanceOf(Date);
+    expect(final.stages.assessor.status).toBe("done");
+    expect(final.stages.permits.summary).toContain("OWR-20-04198");
+    expect(final.proposals).toEqual([ASSESSOR_PROPOSAL, PERMIT_PROPOSAL]);
+    expect(mockRunPermitsStage).not.toHaveBeenCalled();
   });
 
-  it("does nothing when the run is not in the running state", async () => {
-    state.rows.set("runs", [baseRun({ status: "done" })]);
+  it("persists permit progress while the selection is being fetched", async () => {
+    mockLoadRunRow.mockResolvedValueOnce({ ...RUN, status: "running" });
+    mockRunPermitsSelection.mockImplementationOnce(
+      async (_i: PrefillInput, ctx: StageContext) => {
+        await ctx.progress({ status: "running", summary: "Fetching the selected permits…" });
+        return { stage: { status: "done", links: [] }, proposals: [] };
+      },
+    );
+    await continuePrefillAfterSelection("run-1", [CANDIDATE.key]);
+    expect(
+      mockUpdateRun.mock.calls.find(
+        (c) => c[1].stages?.permits?.summary === "Fetching the selected permits…",
+      ),
+    ).toBeDefined();
+  });
+
+  it("does nothing when the run is missing or not running", async () => {
+    mockLoadRunRow.mockResolvedValueOnce(null);
+    await continuePrefillAfterSelection("run-1", [CANDIDATE.key]);
+    mockLoadRunRow.mockResolvedValueOnce({ ...RUN, status: "done" });
     await continuePrefillAfterSelection("run-1", [CANDIDATE.key]);
     expect(mockRunPermitsSelection).not.toHaveBeenCalled();
-    expect(state.updates).toEqual([]);
+    expect(mockUpdateRun).not.toHaveBeenCalled();
   });
 
   it("marks the run failed if the continuation throws", async () => {
-    state.rows.set("runs", [baseRun({ status: "running" })]);
+    mockLoadRunRow.mockResolvedValueOnce({ ...RUN, status: "running" });
     mockRunPermitsSelection.mockRejectedValueOnce(new Error("unexpected"));
     await continuePrefillAfterSelection("run-1", [CANDIDATE.key]);
-    expect(lastRunUpdate()).toMatchObject({ status: "failed", error: "unexpected" });
+    expect(lastPatch()).toMatchObject({ status: "failed", error: "unexpected" });
+    expect(lastPatch().finishedAt).toBeInstanceOf(Date);
   });
 });
+```
 
-describe("recordToDTO", () => {
-  const row = {
-    id: "rec-1",
-    inspectionId: "insp-1",
-    runId: "run-1",
-    source: "edms_env",
-    permitNumber: "OWR-22-01512",
-    docType: "ABANDONMENT",
-    docDate: "2025-04-14",
-    description: null,
-    pageCount: 4,
-    sizeBytes: 255378,
-    storagePath: "records/insp-1/rec-1.pdf",
-    selected: true,
-    extractionStatus: "pending",
-    extractionError: null,
-    extracted: null,
-    createdAt: new Date(),
-  };
+- [ ] **Step 2: Write the failing DTO test**
 
-  it("builds the download URL and flags abandonment from the doc type", () => {
-    expect(recordToDTO("insp-1", row)).toEqual({
+```ts
+// src/lib/prefill/__tests__/run-dto.records.test.ts
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/prefill/run-store", () => ({
+  listRecordRows: vi.fn(),
+  loadLatestRunRow: vi.fn(),
+  loadRunRow: vi.fn(),
+}));
+
+import { isAbandonmentDocType, toInspectionRecordDTO } from "@/lib/prefill/run-dto";
+import type { InspectionRecordRow } from "@/lib/prefill/run-store";
+
+const ROW: InspectionRecordRow = {
+  id: "rec-1",
+  inspectionId: "insp-1",
+  runId: "run-1",
+  source: "edms_env",
+  permitNumber: "OWR-22-01512",
+  docType: "ABANDONMENT",
+  docDate: "2025-04-14",
+  description: null,
+  pageCount: 4,
+  sizeBytes: 255378,
+  storagePath: "records/insp-1/rec-1.pdf",
+  selected: true,
+  extractionStatus: "pending",
+  extractionError: null,
+  extracted: null,
+  createdAt: new Date("2026-09-11T10:00:03.000Z"),
+};
+
+describe("toInspectionRecordDTO (phase 2)", () => {
+  it("links stored documents and flags abandonment from the doc type", () => {
+    expect(toInspectionRecordDTO(ROW)).toEqual({
       id: "rec-1",
       source: "edms_env",
       permitNumber: "OWR-22-01512",
@@ -3854,491 +3860,291 @@ describe("recordToDTO", () => {
   });
 
   it("leaves downloadUrl empty for a record that was never stored", () => {
-    const dto = recordToDTO("insp-1", { ...row, storagePath: "", extractionStatus: "skipped", extractionError: "Larger than 25 MB" });
+    const dto = toInspectionRecordDTO({
+      ...ROW,
+      storagePath: "",
+      pageCount: null,
+      extractionStatus: "skipped",
+      extractionError: "Larger than 25 MB (25.0 MB) — open it on Maricopa EDMS",
+    });
     expect(dto.downloadUrl).toBe("");
-    expect(dto.extractionError).toBe("Larger than 25 MB");
+    expect(dto.extractionError).toContain("Larger than 25 MB");
+  });
+
+  it("isAbandonmentDocType comes from permits/doc-types (shared vocabulary)", () => {
+    expect(isAbandonmentDocType("abandonment")).toBe(true);
+    expect(isAbandonmentDocType("NOTICE OF TRANSFER")).toBe(false);
   });
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Run both tests to verify they fail**
 
-Run: `npx vitest run src/lib/prefill/__tests__/run-prefill.permits.test.ts`
-Expected: FAIL — `recordToDTO` is not exported / `runPermitsStage` never called (the phase-1 stub is still in place) / `awaiting_selection` never written.
+Run: `npx vitest run src/lib/prefill/__tests__/run-prefill.permits.test.ts src/lib/prefill/__tests__/run-dto.records.test.ts`
+Expected: FAIL — `awaiting_selection` is never written; `continuePrefillAfterSelection` writes `status: "failed"` without calling `runPermitsSelection`; `downloadUrl` is non-empty for the unstored row.
 
-> If `run-prefill.ts` imports server modules beyond those mocked above (check its import block — e.g. `@/lib/supabase/admin`, `./listing`), add a `vi.mock("<module>", () => ({ ... }))` line per module next to the others so the file loads without a DB or API key. Do not weaken the assertions.
+- [ ] **Step 4: Modify `run-dto.ts`**
 
-- [ ] **Step 3: Modify `run-prefill.ts`** (five edits; complete resulting functions shown)
-
-1. Add the imports (keep the file's existing import order style):
+Replace the phase-1 `isAbandonmentDocType` function and the `downloadUrl` line:
 
 ```ts
+// src/lib/prefill/run-dto.ts — imports: add
 import { isAbandonmentDocType } from "./permits/doc-types";
-import { runPermitsSelection, runPermitsStage } from "./permits";
-import type { ExtractionStatus, InspectionRecordDTO, PermitArchive, ProposedField } from "./types";
-```
 
-2. Replace the permits stub inside `runPrefill` so the function reads (listing stays the phase-1 stub — phase 4 replaces it):
+// … delete the local `export function isAbandonmentDocType` and re-export the shared one:
+export { isAbandonmentDocType };
 
-```ts
-const TOTAL_BUDGET_MS = 240_000;
-
-export async function runPrefill(runId: string): Promise<void> {
-  const [run] = await db
-    .select()
-    .from(inspectionPrefillRuns)
-    .where(eq(inspectionPrefillRuns.id, runId))
-    .limit(1);
-  if (!run || run.status !== "queued") return;
-
-  const input = (run.input ?? {}) as PrefillInput;
-  const stages: PrefillStages = { ...emptyStages(), ...(run.stages as Partial<PrefillStages>) };
-  const controller = new AbortController();
-  const budget = setTimeout(() => controller.abort(), TOTAL_BUDGET_MS);
-
-  const persistStages = () =>
-    db.update(inspectionPrefillRuns).set({ stages }).where(eq(inspectionPrefillRuns.id, runId));
-
-  const ctxFor = (name: keyof PrefillStages): StageContext => ({
-    inspectionId: run.inspectionId,
-    runId,
-    signal: controller.signal,
-    progress: async (partial) => {
-      stages[name] = { ...stages[name], ...partial };
-      await persistStages();
-    },
-  });
-
-  try {
-    await db
-      .update(inspectionPrefillRuns)
-      .set({ status: "running", stages })
-      .where(eq(inspectionPrefillRuns.id, runId));
-
-    // Stages are independent (spec §3) and never throw — run them concurrently.
-    // Listing stays a phase-1 stub until phase 4.
-    const [assessor, permits] = await Promise.all([
-      runAssessorStage(input, ctxFor("assessor")),
-      runPermitsStage(input, ctxFor("permits")),
-    ]);
-    stages.assessor = assessor.stage;
-    stages.listing = { status: "skipped", summary: "Not available yet", links: [] };
-    stages.permits = permits.stage;
-
-    const proposals: ProposedField[] = [...assessor.proposals, ...permits.proposals];
-    const candidates = permits.candidates ?? [];
-    const awaiting = candidates.length > 0;
-
-    await db
-      .update(inspectionPrefillRuns)
-      .set({
-        status: awaiting ? "awaiting_selection" : "done",
-        stages,
-        proposals,
-        candidates,
-        finishedAt: awaiting ? null : new Date(),
-      })
-      .where(eq(inspectionPrefillRuns.id, runId));
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Prefill failed";
-    await db
-      .update(inspectionPrefillRuns)
-      .set({ status: "failed", error: message, stages, finishedAt: new Date() })
-      .where(eq(inspectionPrefillRuns.id, runId))
-      .catch(() => undefined);
-  } finally {
-    clearTimeout(budget);
-  }
+/** Never exposes storage_path — documents are reached only through the auth-gated records route */
+export function toInspectionRecordDTO(row: InspectionRecordRow): InspectionRecordDTO {
+  return {
+    id: row.id,
+    source: row.source as PermitArchive,
+    permitNumber: row.permitNumber,
+    docType: row.docType,
+    docDate: row.docDate,
+    description: row.description,
+    pageCount: row.pageCount,
+    sizeBytes: row.sizeBytes,
+    selected: row.selected,
+    extractionStatus: row.extractionStatus as ExtractionStatus,
+    extractionError: row.extractionError,
+    isAbandonment: isAbandonmentDocType(row.docType),
+    // "" = never stored (over 25 MB / download failed) — the tile hides the link, the route 404s
+    downloadUrl: row.storagePath ? `/api/inspections/${row.inspectionId}/records/${row.id}` : "",
+  };
 }
 ```
 
-3. Replace the phase-1 `continuePrefillAfterSelection` body with the real continuation:
+Everything else in `run-dto.ts` (`toPrefillRunDTO`, `loadRunDTO`, `loadLatestRunDTO`) is unchanged.
+
+- [ ] **Step 5: Modify `run-prefill.ts`**
+
+Replace the whole file with the version below — it is phase 1's orchestrator plus (a) a `PermitsStageResult` type for the permits slot, (b) `awaiting_selection` handling, (c) a shared `finishRun` helper, and (d) the real `continuePrefillAfterSelection`:
 
 ```ts
+// src/lib/prefill/run-prefill.ts
+import { runAssessorStage } from "./assessor";
+import { runListingStage } from "./listing";
+import { runPermitsSelection, runPermitsStage } from "./permits";
+import type { PrefillRunRow } from "./run-store";
+import { loadRunRow, updateRun } from "./run-store";
+import type { StageContext, StageResult } from "./stage";
+import type { PermitCandidate, PrefillInput, PrefillStages, ProposedField } from "./types";
+import { emptyStages } from "./types";
+
+/** Hard stop for a whole run; whatever finished is persisted */
+export const PREFILL_TOTAL_BUDGET_MS = 240_000;
+
+const STAGE_NAMES: Array<keyof PrefillStages> = ["assessor", "listing", "permits"];
+
+type PermitsStageResult = StageResult & { candidates?: PermitCandidate[] };
+
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
+
+/** Builds the StageContext for one stage; `progress` persists a snapshot of all stages. */
+function makeContext(
+  run: PrefillRunRow,
+  runId: string,
+  stages: PrefillStages,
+  signal: AbortSignal,
+  name: keyof PrefillStages,
+): StageContext {
+  return {
+    inspectionId: run.inspectionId,
+    runId,
+    signal,
+    progress: async (patch) => {
+      stages[name] = { ...stages[name], ...patch };
+      await updateRun(runId, { stages: { ...stages } });
+    },
+  };
+}
+
+async function failRun(runId: string, stages: PrefillStages, err: unknown): Promise<void> {
+  console.error("[prefill] run failed", runId, err);
+  try {
+    await updateRun(runId, {
+      status: "failed",
+      stages: { ...stages },
+      error: errorMessage(err, "Prefill failed"),
+      finishedAt: new Date(),
+    });
+  } catch (persistErr) {
+    console.error("[prefill] could not record failure", runId, persistErr);
+  }
+}
+
+/**
+ * Runs all stages for a run row that is `queued`, persisting progress after each stage.
+ * Safe to call from `after()`. Never throws; on unexpected error marks the run `failed`.
+ * When the permits stage returns candidates the run parks in `awaiting_selection`
+ * (assessor/listing proposals are persisted so the client can apply them meanwhile)
+ * and resumes through `continuePrefillAfterSelection`.
+ */
+export async function runPrefill(runId: string): Promise<void> {
+  let run: PrefillRunRow | null;
+  try {
+    run = await loadRunRow(runId);
+  } catch (err) {
+    console.error("[prefill] could not load run", runId, err);
+    return;
+  }
+  if (!run || run.status !== "queued") return;
+
+  const input = (run.input ?? {}) as PrefillInput;
+  const stages = emptyStages();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PREFILL_TOTAL_BUDGET_MS);
+  const ctx = (name: keyof PrefillStages) => makeContext(run, runId, stages, controller.signal, name);
+
+  try {
+    await updateRun(runId, { status: "running", stages: { ...stages } });
+
+    const settled = await Promise.allSettled<StageResult | PermitsStageResult>([
+      runAssessorStage(input, ctx("assessor")),
+      runListingStage(input, ctx("listing")),
+      runPermitsStage(input, ctx("permits")),
+    ]);
+
+    const proposals: ProposedField[] = [];
+    let candidates: PermitCandidate[] = [];
+    settled.forEach((result, i) => {
+      const name = STAGE_NAMES[i];
+      if (result.status === "fulfilled") {
+        stages[name] = result.value.stage;
+        proposals.push(...result.value.proposals);
+        if (name === "permits") {
+          candidates = (result.value as PermitsStageResult).candidates ?? [];
+        }
+      } else {
+        // Stage modules are contracted never to throw; this is the belt-and-braces path
+        stages[name] = {
+          ...stages[name],
+          status: "error",
+          error: errorMessage(result.reason, "Stage failed"),
+          finishedAt: new Date().toISOString(),
+          links: stages[name].links ?? [],
+        };
+      }
+    });
+
+    const awaiting = candidates.length > 0;
+    await updateRun(runId, {
+      status: awaiting ? "awaiting_selection" : "done",
+      stages: { ...stages },
+      proposals,
+      candidates,
+      finishedAt: awaiting ? null : new Date(),
+    });
+  } catch (err) {
+    await failRun(runId, stages, err);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Called by POST /prefill/[runId]/select via after(). The route has already
- * validated the keys and flipped the run to `running`; here we re-run the
- * permit search (EDMS document IDs are ephemeral), store the chosen
- * documents, and finish the run keeping the assessor/listing proposals that
- * were persisted before `awaiting_selection`.
+ * validated the keys and flipped the run to `running`. EDMS document IDs are
+ * ephemeral, so the permits module re-runs the same search and matches the
+ * chosen candidates by their stable `key`, then stores them. Proposals from the
+ * other stages (persisted at `awaiting_selection`) are kept; permit proposals
+ * are replaced by the selection's.
  */
 export async function continuePrefillAfterSelection(
   runId: string,
   candidateKeys: string[],
 ): Promise<void> {
-  const [run] = await db
-    .select()
-    .from(inspectionPrefillRuns)
-    .where(eq(inspectionPrefillRuns.id, runId))
-    .limit(1);
+  let run: PrefillRunRow | null;
+  try {
+    run = await loadRunRow(runId);
+  } catch (err) {
+    console.error("[prefill] could not load run for selection", runId, err);
+    return;
+  }
   if (!run || run.status !== "running") return;
 
   const input = (run.input ?? {}) as PrefillInput;
-  const stages: PrefillStages = { ...emptyStages(), ...(run.stages as Partial<PrefillStages>) };
+  const stages: PrefillStages = { ...emptyStages(), ...((run.stages ?? {}) as Partial<PrefillStages>) };
   const controller = new AbortController();
-  const budget = setTimeout(() => controller.abort(), TOTAL_BUDGET_MS);
-
-  const persistStages = () =>
-    db.update(inspectionPrefillRuns).set({ stages }).where(eq(inspectionPrefillRuns.id, runId));
-
-  const ctx: StageContext = {
-    inspectionId: run.inspectionId,
-    runId,
-    signal: controller.signal,
-    progress: async (partial) => {
-      stages.permits = { ...stages.permits, ...partial };
-      await persistStages();
-    },
-  };
+  const timer = setTimeout(() => controller.abort(), PREFILL_TOTAL_BUDGET_MS);
 
   try {
-    const selection = await runPermitsSelection(input, ctx, candidateKeys);
+    const selection = await runPermitsSelection(
+      input,
+      makeContext(run, runId, stages, controller.signal, "permits"),
+      candidateKeys,
+    );
     stages.permits = selection.stage;
 
-    const existing = ((run.proposals ?? []) as ProposedField[]).filter(
+    const kept = ((run.proposals ?? []) as ProposedField[]).filter(
       (p) => p.provenance.source !== "permit",
     );
-    const proposals: ProposedField[] = [...existing, ...selection.proposals];
-
-    await db
-      .update(inspectionPrefillRuns)
-      .set({ status: "done", stages, proposals, candidates: [], finishedAt: new Date() })
-      .where(eq(inspectionPrefillRuns.id, runId));
+    await updateRun(runId, {
+      status: "done",
+      stages: { ...stages },
+      proposals: [...kept, ...selection.proposals],
+      candidates: [],
+      finishedAt: new Date(),
+    });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Prefill failed";
-    await db
-      .update(inspectionPrefillRuns)
-      .set({ status: "failed", error: message, stages, finishedAt: new Date() })
-      .where(eq(inspectionPrefillRuns.id, runId))
-      .catch(() => undefined);
+    await failRun(runId, stages, err);
   } finally {
-    clearTimeout(budget);
+    clearTimeout(timer);
   }
 }
 ```
 
-4. Add / replace the record → DTO mapper (exported so the route tests and phase 3 can target it). If phase 1 builds the records branch of `PrefillRunDTO` inline (search the file for `downloadUrl`), extract it into this function and call it from there:
+- [ ] **Step 6: Retire the stub assertion in phase 1's `run-prefill.test.ts`**
+
+In `src/lib/prefill/__tests__/run-prefill.test.ts`:
+
+1. Next to the existing `vi.mock("@/lib/prefill/assessor", …)` add mocks for the other two stages so the test never touches EDMS:
 
 ```ts
-/** `inspection_records` row → `InspectionRecordDTO`. `downloadUrl` is "" when the PDF was never stored. */
-export function recordToDTO(
-  inspectionId: string,
-  r: typeof inspectionRecords.$inferSelect,
-): InspectionRecordDTO {
-  return {
-    id: r.id,
-    source: r.source as PermitArchive,
-    permitNumber: r.permitNumber,
-    docType: r.docType,
-    docDate: r.docDate ?? null,
-    description: r.description ?? null,
-    pageCount: r.pageCount ?? null,
-    sizeBytes: r.sizeBytes ?? null,
-    selected: r.selected,
-    extractionStatus: r.extractionStatus as ExtractionStatus,
-    extractionError: r.extractionError ?? null,
-    isAbandonment: isAbandonmentDocType(r.docType),
-    downloadUrl: r.storagePath ? `/api/inspections/${inspectionId}/records/${r.id}` : "",
-  };
-}
+const { mockRunListingStage, mockRunPermitsStage } = vi.hoisted(() => ({
+  mockRunListingStage: vi.fn(async () => ({
+    stage: { status: "skipped", summary: "Not available yet", links: [] },
+    proposals: [],
+  })),
+  mockRunPermitsStage: vi.fn(async () => ({
+    stage: { status: "not_found", summary: "No permit records found", links: [] },
+    proposals: [],
+  })),
+}));
+vi.mock("@/lib/prefill/listing", () => ({ runListingStage: mockRunListingStage }));
+vi.mock("@/lib/prefill/permits", () => ({
+  runPermitsStage: mockRunPermitsStage,
+  runPermitsSelection: vi.fn(),
+}));
 ```
 
-and in the `PrefillRunDTO` builder use `records: recordRows.map((r) => recordToDTO(run.inspectionId, r))`.
+2. Change the single line
 
-5. Delete the phase-1 permits stub (the inline `{ status: "skipped", summary: "Not available yet", links: [] }` result for `permits` and its empty `proposals`). Nothing else in the file changes.
+```ts
+    expect(final.stages.permits).toEqual({ status: "skipped", summary: "Not available yet", links: [] });
+```
 
-- [ ] **Step 4: Run the orchestrator tests**
+to
+
+```ts
+    expect(final.stages.permits).toEqual({ status: "not_found", summary: "No permit records found", links: [] });
+```
+
+3. If phase 1's file has a `continuePrefillAfterSelection` test asserting the `"Candidate selection is not available yet"` failure, delete that test (the behaviour is now covered by `run-prefill.permits.test.ts`).
+
+- [ ] **Step 7: Run the orchestrator + DTO tests**
 
 Run: `npx vitest run src/lib/prefill/__tests__/`
-Expected: PASS — `run-prefill.permits.test.ts` (8 tests) green; phase-1 tests in the same folder unchanged. If a phase-1 `run-prefill` test asserted the permits stub summary `"Not available yet"` for `stages.permits`, update that single expectation to `expect.any(Object)` — the stub is gone by design.
+Expected: PASS — `run-prefill.permits.test.ts` (7 tests), `run-dto.records.test.ts` (3 tests), phase-1's `run-prefill.test.ts` / `run-dto.test.ts` still green (phase 1's DTO fixture has a non-empty `storagePath`, so its `downloadUrl` expectation holds).
 
-- [ ] **Step 5: Write the failing `/select` route test**
-
-```ts
-// src/app/api/inspections/[id]/prefill/[runId]/select/__tests__/route.test.ts
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const {
-  mockGetUser,
-  mockGetSession,
-  mockCreateClient,
-  mockSelectInspection,
-  mockSelectRun,
-  mockUpdateWhere,
-  mockAfter,
-  mockContinue,
-  mockGetUserRole,
-  state,
-} = vi.hoisted(() => {
-  const mockGetUser = vi.fn();
-  const mockGetSession = vi.fn();
-  const mockCreateClient = vi.fn().mockResolvedValue({
-    auth: { getUser: mockGetUser, getSession: mockGetSession },
-  });
-  return {
-    mockGetUser,
-    mockGetSession,
-    mockCreateClient,
-    mockSelectInspection: vi.fn(),
-    mockSelectRun: vi.fn(),
-    mockUpdateWhere: vi.fn().mockResolvedValue(undefined),
-    mockAfter: vi.fn(),
-    mockContinue: vi.fn().mockResolvedValue(undefined),
-    mockGetUserRole: vi.fn(),
-    state: { selectCall: 0 },
-  };
-});
-
-vi.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
-vi.mock("@/lib/supabase/auth-helpers", () => ({ getUserRole: mockGetUserRole }));
-
-// 1st select = inspection, 2nd select = run (both end in .limit(1))
-vi.mock("@/lib/db", () => {
-  const chain = {
-    from: vi.fn().mockReturnThis(),
-    where: vi.fn().mockReturnThis(),
-    limit: vi.fn(() => (++state.selectCall === 1 ? mockSelectInspection() : mockSelectRun())),
-  };
-  const updateChain = { set: vi.fn().mockReturnThis(), where: mockUpdateWhere };
-  return { db: { select: vi.fn(() => chain), update: vi.fn(() => updateChain) } };
-});
-
-vi.mock("@/lib/db/schema", () => ({
-  inspections: { id: "id", inspectorId: "inspector_id", status: "status" },
-  inspectionPrefillRuns: { id: "id", inspectionId: "inspection_id", status: "status" },
-}));
-
-vi.mock("drizzle-orm", () => ({
-  eq: vi.fn((_col: unknown, val: unknown) => ({ _col, val })),
-  and: vi.fn((...conds: unknown[]) => ({ and: conds })),
-}));
-
-vi.mock("next/server", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("next/server")>();
-  return { ...actual, after: mockAfter };
-});
-
-vi.mock("@/lib/prefill/run-prefill", () => ({ continuePrefillAfterSelection: mockContinue }));
-
-import { POST } from "../route";
-
-function makeParams(id: string, runId: string) {
-  return { params: Promise.resolve({ id, runId }) };
-}
-
-function post(body: unknown) {
-  return new Request("http://localhost", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: typeof body === "string" ? body : JSON.stringify(body),
-  });
-}
-
-const KEY = "edms_env:OWR-20-04198:NOTICE OF TRANSFER:2020-10-27";
-const USER = { id: "user-1" };
-const INSPECTION = { id: "insp-1", inspectorId: "user-1", status: "draft" };
-const RUN = { id: "run-1", inspectionId: "insp-1", status: "awaiting_selection" };
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  state.selectCall = 0;
-  mockGetUser.mockResolvedValue({ data: { user: USER } });
-  mockGetUserRole.mockResolvedValue("field_tech");
-  mockSelectInspection.mockResolvedValue([INSPECTION]);
-  mockSelectRun.mockResolvedValue([RUN]);
-  mockUpdateWhere.mockResolvedValue(undefined);
-  mockAfter.mockImplementation((fn: () => unknown) => {
-    fn();
-  });
-});
-
-describe("POST /api/inspections/[id]/prefill/[runId]/select", () => {
-  it("returns 401 when not authenticated", async () => {
-    mockGetUser.mockResolvedValueOnce({ data: { user: null } });
-    const res = await POST(post({ candidateKeys: [KEY] }), makeParams("insp-1", "run-1"));
-    expect(res.status).toBe(401);
-  });
-
-  it("returns 404 when the inspection does not exist", async () => {
-    mockSelectInspection.mockResolvedValueOnce([]);
-    const res = await POST(post({ candidateKeys: [KEY] }), makeParams("insp-1", "run-1"));
-    expect(res.status).toBe(404);
-  });
-
-  it("returns 403 for a tech who does not own the inspection", async () => {
-    mockSelectInspection.mockResolvedValueOnce([{ ...INSPECTION, inspectorId: "someone-else" }]);
-    const res = await POST(post({ candidateKeys: [KEY] }), makeParams("insp-1", "run-1"));
-    expect(res.status).toBe(403);
-    expect(mockAfter).not.toHaveBeenCalled();
-  });
-
-  it("returns 403 for the owning tech once the inspection is no longer a draft", async () => {
-    mockSelectInspection.mockResolvedValueOnce([{ ...INSPECTION, status: "submitted" }]);
-    const res = await POST(post({ candidateKeys: [KEY] }), makeParams("insp-1", "run-1"));
-    expect(res.status).toBe(403);
-  });
-
-  it("lets office_staff select on someone else's submitted inspection", async () => {
-    mockGetUserRole.mockResolvedValueOnce("office_staff");
-    mockSelectInspection.mockResolvedValueOnce([{ ...INSPECTION, inspectorId: "x", status: "submitted" }]);
-    const res = await POST(post({ candidateKeys: [KEY] }), makeParams("insp-1", "run-1"));
-    expect(res.status).toBe(200);
-  });
-
-  it("returns 400 for a malformed body", async () => {
-    for (const body of ["not json", {}, { candidateKeys: [] }, { candidateKeys: "x" }, { candidateKeys: [1] }, { candidateKeys: ["a", "b", "c", "d"] }, { candidateKeys: ["x".repeat(301)] }]) {
-      state.selectCall = 0;
-      const res = await POST(post(body), makeParams("insp-1", "run-1"));
-      expect(res.status).toBe(400);
-    }
-    expect(mockAfter).not.toHaveBeenCalled();
-  });
-
-  it("returns 404 when the run belongs to another inspection", async () => {
-    mockSelectRun.mockResolvedValueOnce([]);
-    const res = await POST(post({ candidateKeys: [KEY] }), makeParams("insp-1", "run-1"));
-    expect(res.status).toBe(404);
-  });
-
-  it("returns 409 when the run is not awaiting selection", async () => {
-    mockSelectRun.mockResolvedValueOnce([{ ...RUN, status: "done" }]);
-    const res = await POST(post({ candidateKeys: [KEY] }), makeParams("insp-1", "run-1"));
-    expect(res.status).toBe(409);
-    expect(mockAfter).not.toHaveBeenCalled();
-  });
-
-  it("flips the run to running and schedules the continuation with after()", async () => {
-    const res = await POST(post({ candidateKeys: [KEY, `${KEY}b`] }), makeParams("insp-1", "run-1"));
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
-    expect(mockUpdateWhere).toHaveBeenCalledTimes(1);
-    expect(mockAfter).toHaveBeenCalledTimes(1);
-    expect(mockContinue).toHaveBeenCalledWith("run-1", [KEY, `${KEY}b`]);
-  });
-});
-```
-
-- [ ] **Step 6: Run test to verify it fails**
-
-Run: `npx vitest run "src/app/api/inspections/[id]/prefill/[runId]/select/__tests__/route.test.ts"`
-Expected: FAIL — the phase-1 stub does not validate keys / call `after` (or `POST` is not exported).
-
-- [ ] **Step 7: Write the route (full file)**
-
-```ts
-// src/app/api/inspections/[id]/prefill/[runId]/select/route.ts
-import { and, eq } from "drizzle-orm";
-import { NextResponse, after } from "next/server";
-import { db } from "@/lib/db";
-import { inspectionPrefillRuns, inspections } from "@/lib/db/schema";
-import { continuePrefillAfterSelection } from "@/lib/prefill/run-prefill";
-import { getUserRole } from "@/lib/supabase/auth-helpers";
-import { createClient } from "@/lib/supabase/server";
-
-export const maxDuration = 300;
-
-const MAX_KEYS = 3;
-const MAX_KEY_LENGTH = 300;
-
-/**
- * POST /api/inspections/[id]/prefill/[runId]/select
- * Body: { candidateKeys: string[] } (1–3 PermitCandidate.key values)
- * Access: same as the inspection PATCH — owner of a draft, or admin/office_staff.
- * Flips the run from awaiting_selection → running and continues in after().
- */
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string; runId: string }> },
-) {
-  const { id, runId } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const [inspection] = await db
-    .select({ inspectorId: inspections.inspectorId, status: inspections.status })
-    .from(inspections)
-    .where(eq(inspections.id, id))
-    .limit(1);
-
-  if (!inspection) {
-    return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
-  }
-
-  const role = await getUserRole(supabase);
-  const isPrivileged = role === "admin" || role === "office_staff";
-  if (!isPrivileged) {
-    if (inspection.inspectorId !== user.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-    if (inspection.status !== "draft") {
-      return NextResponse.json(
-        { error: "Cannot edit: inspection is no longer a draft" },
-        { status: 403 },
-      );
-    }
-  }
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-  const keys = (body as { candidateKeys?: unknown } | null)?.candidateKeys;
-  const valid =
-    Array.isArray(keys) &&
-    keys.length >= 1 &&
-    keys.length <= MAX_KEYS &&
-    keys.every((k) => typeof k === "string" && k.length > 0 && k.length <= MAX_KEY_LENGTH);
-  if (!valid) {
-    return NextResponse.json(
-      { error: `candidateKeys must be 1–${MAX_KEYS} candidate keys` },
-      { status: 400 },
-    );
-  }
-  const candidateKeys = keys as string[];
-
-  const [run] = await db
-    .select({ id: inspectionPrefillRuns.id, status: inspectionPrefillRuns.status })
-    .from(inspectionPrefillRuns)
-    .where(and(eq(inspectionPrefillRuns.id, runId), eq(inspectionPrefillRuns.inspectionId, id)))
-    .limit(1);
-
-  if (!run) {
-    return NextResponse.json({ error: "Run not found" }, { status: 404 });
-  }
-  if (run.status !== "awaiting_selection") {
-    return NextResponse.json({ error: "Run is not awaiting a selection" }, { status: 409 });
-  }
-
-  await db
-    .update(inspectionPrefillRuns)
-    .set({ status: "running" })
-    .where(eq(inspectionPrefillRuns.id, runId));
-
-  // Background continuation — never a floating promise on Vercel.
-  after(() => continuePrefillAfterSelection(runId, candidateKeys));
-
-  return NextResponse.json({ ok: true });
-}
-```
-
-- [ ] **Step 8: Run test to verify it passes**
-
-Run: `npx vitest run "src/app/api/inspections/[id]/prefill/[runId]/select/__tests__/route.test.ts"`
-Expected: PASS (9 tests). If phase 1 shipped its own test for this route asserting stub behaviour, delete that stub test file in the same commit.
-
-- [ ] **Step 9: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/lib/prefill/run-prefill.ts src/lib/prefill/__tests__/run-prefill.permits.test.ts "src/app/api/inspections/[id]/prefill/[runId]/select/"
-git commit -m "feat(prefill): run the real permits stage; /select continues with the chosen candidates"
+git add src/lib/prefill/run-prefill.ts src/lib/prefill/run-dto.ts src/lib/prefill/__tests__/run-prefill.test.ts src/lib/prefill/__tests__/run-prefill.permits.test.ts src/lib/prefill/__tests__/run-dto.records.test.ts
+git commit -m "feat(prefill): permits stage drives awaiting_selection; real post-selection continuation; unstored records have no download link"
 ```
 
 ---
@@ -4942,3 +4748,368 @@ Expected: PASS — phase-1 tile/badge/chip tests unchanged, plus the two new fil
 git add src/components/prefill/permit-records-list.tsx src/components/prefill/prefill-sources-tile.tsx src/components/prefill/__tests__/permit-records-list.test.tsx src/components/prefill/__tests__/prefill-sources-tile.permits.test.tsx
 git commit -m "feat(prefill-ui): permit record rows, candidate picker, copy-APN and abandonment banner"
 ```
+
+---
+
+### Task 12: Live smoke script against the real EDMS API
+
+**Files:**
+- Create: `scripts/prefill-permits-smoke.mts`
+- Modify: `package.json` (`tsx` dev dependency + `smoke:permits` script)
+
+**Interfaces:**
+- Consumes: `formatApn` (Task 1); `EDMS_ARCHIVES`, `getDocumentInfo`, `fetchDocumentBytes` (Task 2); `rankForExtraction`, `isExtractableDocType` (Task 3); `searchPermits` (Task 5); `MAX_DOCUMENT_BYTES`, `MAX_DOCUMENTS_PER_RUN`, `PrefillInput` (`types.ts`). Only pure/relative-import modules — **no** `@/lib/db`, no storage, so nothing is written except optional PDFs to a local directory.
+- Produces: `npm run smoke:permits` (alias for `npx tsx scripts/prefill-permits-smoke.mts`) printing candidates and the extraction ranking for parcels `219-11-121` and `200-08-079` (defaults), any APNs passed as arguments, `--fallback` to exercise the street search with the APN blanked, and `--download` to fetch the PDFs into `SMOKE_OUT_DIR` (default `$TMPDIR/prefill-permits-smoke`). Exit code 1 when a built-in parcel does not yield its expected permit.
+
+- [ ] **Step 1: Add `tsx` and the npm script**
+
+`tsx` is not in `node_modules/.bin` (checked 2026-09-11) even though older scripts say `npx tsx …`. Pin it:
+
+```bash
+npm install -D tsx
+```
+
+Then in `package.json` `"scripts"` add (keep the existing keys):
+
+```json
+"smoke:permits": "tsx scripts/prefill-permits-smoke.mts"
+```
+
+- [ ] **Step 2: Write the script**
+
+```ts
+// scripts/prefill-permits-smoke.mts
+/**
+ * Live smoke test for the phase-2 permit search against the REAL Maricopa
+ * EDMS API (both archives). Read-only unless --download is given, and even
+ * then it only writes PDFs to a local directory — never Storage or the DB.
+ *
+ * Usage:
+ *   npm run smoke:permits                       # 219-11-121 and 200-08-079
+ *   npm run smoke:permits -- 219-12-165         # any APN(s)
+ *   npm run smoke:permits -- --fallback         # blank the APN, exercise the street search
+ *   npm run smoke:permits -- --download         # also download the PDFs
+ *   SMOKE_OUT_DIR=/path npm run smoke:permits -- --download
+ *
+ * Expected (verified 2026-09-11):
+ *   219-11-121 → env 000972 PERMIT (2015-09-11 scan, 8911 E CAVE CREEK RD, CAREFREE)
+ *   200-08-079 → env OW-17-00474 PERMIT (2018-02-08) + OWR-22-04475 NOTICE OF TRANSFER (2022-09-21)
+ */
+
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { formatApn } from "../src/lib/prefill/apn";
+import { isExtractableDocType, rankForExtraction } from "../src/lib/prefill/permits/doc-types";
+import {
+  EDMS_ARCHIVES,
+  fetchDocumentBytes,
+  getDocumentInfo,
+} from "../src/lib/prefill/permits/edms-client";
+import { searchPermits } from "../src/lib/prefill/permits/search";
+import type { SearchHit } from "../src/lib/prefill/permits/candidates";
+import {
+  MAX_DOCUMENT_BYTES,
+  MAX_DOCUMENTS_PER_RUN,
+  type PrefillInput,
+} from "../src/lib/prefill/types";
+
+interface KnownParcel {
+  input: PrefillInput;
+  expectPermits: string[];
+}
+
+const KNOWN: Record<string, KnownParcel> = {
+  "219-11-121": {
+    input: {
+      apn: "219-11-121",
+      address: { streetNumber: "8911", streetName: "Cave Creek Rd", streetDir: "E", city: "Carefree" },
+    },
+    expectPermits: ["000972"],
+  },
+  "200-08-079": {
+    input: {
+      apn: "200-08-079",
+      address: { streetNumber: "8911", streetName: "Villa Chula", streetDir: "W", city: "Peoria", zip: "85383" },
+      subdivision: "Sunrise 4",
+      lot: "2",
+    },
+    expectPermits: ["OW-17-00474", "OWR-22-04475"],
+  },
+};
+
+const args = process.argv.slice(2);
+const download = args.includes("--download");
+const fallback = args.includes("--fallback");
+const apns = args.filter((a) => !a.startsWith("--"));
+const targets = apns.length > 0 ? apns : Object.keys(KNOWN);
+const outDir = process.env.SMOKE_OUT_DIR ?? join(tmpdir(), "prefill-permits-smoke");
+
+function archiveFor(hit: SearchHit) {
+  return hit.candidate.archive === "edms_env" ? EDMS_ARCHIVES.env : EDMS_ARCHIVES.eplpav;
+}
+
+function safeName(s: string): string {
+  return s.replace(/[^A-Za-z0-9._-]+/g, "_");
+}
+
+async function downloadHits(apn: string, hits: SearchHit[], signal: AbortSignal): Promise<void> {
+  mkdirSync(outDir, { recursive: true });
+  for (const hit of hits) {
+    const { permitNumber, docType } = hit.candidate;
+    const archive = archiveFor(hit);
+    const info = await getDocumentInfo(archive, hit.documentId, signal);
+    const mb = (info.size / (1024 * 1024)).toFixed(1);
+    if (info.size > MAX_DOCUMENT_BYTES) {
+      console.log(`    ${permitNumber} ${docType}: ${mb} MB — over the 25 MB cap, skipped`);
+      continue;
+    }
+    const started = Date.now();
+    const doc = await fetchDocumentBytes(archive, hit.documentId, signal);
+    const file = join(outDir, safeName(`${apn}-${permitNumber}-${docType}.pdf`));
+    writeFileSync(file, doc.bytes);
+    console.log(
+      `    ${permitNumber} ${docType}: ${doc.bytes.byteLength} bytes in ${Date.now() - started} ms` +
+        ` (server said ${info.size}; filename "${doc.filename ?? "?"}") → ${file}`,
+    );
+  }
+}
+
+async function main(): Promise<number> {
+  let failures = 0;
+  const controller = new AbortController();
+  const budget = setTimeout(() => controller.abort(), 240_000);
+
+  for (const raw of targets) {
+    const apn = formatApn(raw);
+    const known = apn ? KNOWN[apn] : undefined;
+    const input: PrefillInput = known?.input ?? { apn: apn ?? raw };
+    const effective: PrefillInput = fallback ? { ...input, apn: undefined } : input;
+
+    console.log(`\n=== ${raw}${fallback ? " (street fallback — APN blanked)" : ""} ===`);
+    if (fallback && !effective.address) {
+      console.log("  no address known for this APN — nothing to search");
+      continue;
+    }
+    const started = Date.now();
+    const outcome = await searchPermits(effective, controller.signal);
+    console.log(`  outcome: ${outcome.kind}${"via" in outcome ? ` via ${outcome.via}` : ""} in ${Date.now() - started} ms`);
+    console.log(`  searched: ${outcome.searched.join(" | ") || "(nothing)"}`);
+    if (outcome.kind === "error") {
+      console.log(`  error: ${outcome.message}`);
+      failures++;
+      continue;
+    }
+    if (outcome.kind === "not_found") {
+      if (known) failures++;
+      continue;
+    }
+
+    const hits = outcome.hits;
+    console.log(`  ${outcome.kind === "ambiguous" ? "candidates" : "documents"} (${hits.length}):`);
+    for (const h of hits) {
+      const c = h.candidate;
+      console.log(
+        `    [${c.archive}] ${c.permitNumber.padEnd(13)} ${c.docType.padEnd(20)} ${c.docDate ?? "          "}` +
+          `  ${(c.streetAddress ?? "").padEnd(26)} ${(c.city ?? "").padEnd(14)} ${c.zip ?? "     "}` +
+          `  apn=${c.apn ?? "-"} score=${c.score} key=${c.key}`,
+      );
+    }
+
+    if (outcome.kind === "found") {
+      const ranked = rankForExtraction(hits.map((h) => ({ h, docType: h.candidate.docType, docDate: h.candidate.docDate })));
+      let pending = 0;
+      console.log("  extraction ranking:");
+      for (const { h } of ranked) {
+        const { permitNumber, docType } = h.candidate;
+        let status = "skipped (not extractable)";
+        if (isExtractableDocType(docType)) {
+          status = pending < MAX_DOCUMENTS_PER_RUN ? "pending" : "skipped (over limit)";
+          if (status === "pending") pending++;
+        }
+        console.log(`    ${permitNumber} ${docType} → ${status}`);
+      }
+      if (known) {
+        const got = new Set(hits.map((h) => h.candidate.permitNumber));
+        for (const expected of known.expectPermits) {
+          if (!got.has(expected)) {
+            console.log(`  MISSING expected permit ${expected}`);
+            failures++;
+          }
+        }
+      }
+      if (download) {
+        console.log(`  downloading to ${outDir}:`);
+        await downloadHits(apn ?? raw, hits, controller.signal);
+      }
+    }
+  }
+
+  clearTimeout(budget);
+  console.log(`\n${failures === 0 ? "OK" : `${failures} problem(s)`}`);
+  return failures === 0 ? 0 : 1;
+}
+
+main()
+  .then((code) => process.exit(code))
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+```
+
+- [ ] **Step 3: Run it against the live API (read-only)**
+
+Run: `npm run smoke:permits`
+Expected output (times vary; IDs are not printed):
+
+```
+=== 219-11-121 ===
+  outcome: found via apn in ~600 ms
+  searched: APN 219-11-121
+  documents (1):
+    [edms_env] 000972        PERMIT               2015-09-11  8911 E CAVE CREEK RD       CAREFREE              apn=219-11-121 score=10 key=edms_env:000972:PERMIT:2015-09-11
+  extraction ranking:
+    000972 PERMIT → pending
+
+=== 200-08-079 ===
+  outcome: found via apn in ~700 ms
+  searched: APN 200-08-079
+  documents (2):
+    [edms_env] OW-17-00474   PERMIT               2018-02-08  8911 W VILLA CHULA         PEORIA         85383  apn=200-08-079 score=10 key=edms_env:OW-17-00474:PERMIT:2018-02-08
+    [edms_env] OWR-22-04475  NOTICE OF TRANSFER   2022-09-21  8911 W VILLA CHULA         PEORIA         85383  apn=200-08-079 score=10 key=edms_env:OWR-22-04475:NOTICE OF TRANSFER:2022-09-21
+  extraction ranking:
+    OW-17-00474 PERMIT → pending
+    OWR-22-04475 NOTICE OF TRANSFER → pending
+
+OK
+```
+
+- [ ] **Step 4: Exercise the street fallback and the ePLPAV archive**
+
+Run: `npm run smoke:permits -- --fallback`
+Expected: both parcels report `outcome: found via street`, `searched: 8911 CAVE CREEK` / `8911 VILLA CHULA`, and the same permits (the row APN equals the blanked-out one, so the score is direction + city [+ ZIP/subdivision/lot] without the APN bonus — 5 for Cave Creek, 12 for Villa Chula), `OK`.
+
+Run: `npm run smoke:permits -- 219-12-165`
+Expected: `found via apn`, one `[edms_eplpav] OW-24-00070 FINAL DA 2025-11-21 11425 COTTONTAIL Cave Creek 85331`, ranking `pending`.
+
+- [ ] **Step 5: Download check (writes PDFs to a local directory only)**
+
+Run: `SMOKE_OUT_DIR=/private/tmp/claude-501/-Users-danielendres/848c657c-f691-45f7-bd73-e7c3d9514d56/scratchpad/smoke-permits npm run smoke:permits -- --download`
+Expected: three files — `219-11-121-000972-PERMIT.pdf` (712,751 bytes, filename `EnvSeptic - 9/11/2015 - 000972 - PERMIT.pdf`), `200-08-079-OW-17-00474-PERMIT.pdf` (1,968,056 bytes), `200-08-079-OWR-22-04475-NOTICE_OF_TRANSFER.pdf` (147,386 bytes); `file <name>.pdf` reports `PDF document`. Then `npm run smoke:permits -- 219-12-165 --download` fetches the 17.8 MB FINAL DA (well under the 25 MB cap) in a few seconds.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add scripts/prefill-permits-smoke.mts package.json package-lock.json
+git commit -m "chore(prefill): live EDMS permit-search smoke script (+ tsx dev dependency)"
+```
+
+---
+
+### Task 13: Type gate, full test run, PR
+
+**Files:** none new.
+
+- [ ] **Step 1: Production build (the real type gate)**
+
+Run (placeholders are fine for the build):
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-https://placeholder.supabase.co} \
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-placeholder} \
+NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000} \
+npm run build
+```
+
+Expected: `✓ Compiled successfully`, the route list includes `ƒ /api/inspections/[id]/records/[recordId]` and `ƒ /api/inspections/[id]/prefill/[runId]/select`. Fix any type error in files this plan touched (never with `// @ts-ignore`); ignore `npx tsc --noEmit` noise from pre-existing files.
+
+- [ ] **Step 2: Full Vitest run against the acceptance bar**
+
+Run: `npx vitest run 2>&1 | tail -40`
+Expected: every new test file passes —
+
+```
+src/lib/prefill/__tests__/apn.test.ts
+src/lib/prefill/permits/__tests__/edms-client.test.ts
+src/lib/prefill/permits/__tests__/normalize.test.ts
+src/lib/prefill/permits/__tests__/doc-types.test.ts
+src/lib/prefill/permits/__tests__/candidates.test.ts
+src/lib/prefill/permits/__tests__/search.test.ts
+src/lib/storage/__tests__/record-storage.test.ts
+src/lib/prefill/permits/__tests__/fetch-document.test.ts
+src/lib/prefill/permits/__tests__/index.test.ts
+src/app/api/inspections/[id]/records/[recordId]/__tests__/route.test.ts
+src/lib/prefill/__tests__/run-prefill.permits.test.ts
+src/app/api/inspections/[id]/prefill/[runId]/select/__tests__/route.test.ts
+src/components/prefill/__tests__/permit-records-list.test.tsx
+src/components/prefill/__tests__/prefill-sources-tile.permits.test.tsx
+```
+
+— and the only failing files are the ~15 pre-existing ones (`nav`/`roles`/`rbac`, `review-actions`, `reopen`/`download` routes, `validators/inspection.test` STEP_FIELDS + tank schema). Any failure in a file touched by phases 1–2 is a regression: fix it before moving on.
+
+- [ ] **Step 3: Security pass (spec §11) — confirm by reading, then tick**
+
+- Outbound hosts: only `edms.maricopa.gov` appears in `src/lib/prefill/permits/edms-client.ts`; no other module builds an EDMS URL.
+- `encodeURIComponent` is the only way a document ID reaches a URL (`documentUrl`); `grep -rn "documentId" src/lib/prefill/permits/fetch-document.ts` shows it is never placed in the row.
+- APN goes through `formatApn` and street parts through `normalizeStreetName` / the house-number regex / `isSafeKeywordValue` before any keyword value.
+- `records/[recordId]` re-checks `checkInspectionAccess` and scopes the record to the inspection; `select` re-checks owner-of-draft / privileged.
+- Nothing from EDMS is rendered as HTML (`decodeHtmlEntities` produces plain text rendered through React).
+
+- [ ] **Step 4: Open the PR (do not merge, do not push `main`)**
+
+```bash
+git push -u origin feature/property-records-prefill
+gh pr create --base main --head feature/property-records-prefill \
+  --title "Prefill phase 2: Maricopa EDMS permit search & storage" \
+  --body "$(cat <<'EOF'
+## Summary
+- OnBase EDMS JSON client for both Maricopa archives (recorded fixtures, 15 s timeout, single retry)
+- APN search on both archives → dedupe → scored street fallback → auto-select / candidate picker / not found
+- Permit PDFs downloaded (≤ 25 MB) to private storage `records/{inspectionId}/{recordId}.pdf` + `inspection_records` rows (`extraction_status = pending`, no AI yet)
+- `/select` continues a run by candidate key; `GET …/records/[recordId]` 302s to a 600 s signed URL
+- Tile: per-record rows with plain new-tab links, candidate picker, copy-APN, abandonment banner, not-found copy
+
+## Test plan
+- [ ] `npm run build` green
+- [ ] `npx vitest run` — no new failures vs. the ~15 pre-existing
+- [ ] `npm run smoke:permits` (+ `--fallback`, `219-12-165`, `--download`) output matches Task 12
+- [ ] Manual: wizard → Find records on an inspection with APN 200-08-079 → two rows appear, Open PDF opens the signed URL in a new tab, Copy APN toasts
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
+```
+
+Production deploy (`main`) only after Daniel's explicit approval.
+
+---
+
+## Self-review
+
+**1. Spec coverage (phase 2 scope: §13 item 2, §5.2, §2.6–2.9, §8 select/records routes, §10–11 permit rows, §12 unit/EDMS/route/component tests, §14 Fluid Compute note):**
+
+| Requirement | Task |
+|---|---|
+| §5.2 endpoints, keyword IDs, `QueryLimit`, parse by heading, `*` wildcard | 2 |
+| §5.2 document GET/POST size check, `encodeURIComponent`, IDs never persisted | 2, 7 |
+| §5.2 dashed APN (`21911121` → 0 hits) | 1, 5 |
+| §5.2 step 1: APN on both archives in parallel, dedupe by normalised permit # (extended with doc type + date — see Task 5 notes) | 5 |
+| §5.2 step 2: street fallback, suffix list, scoring table, `≥ 5` / gap `≥ 3`, ≤ 8 candidates, `not_found` with searched terms | 3, 5, 8 |
+| §5.2 step 3: ranking, max 3 extracted, rest `skipped` | 3, 8 |
+| §5.2 step 4: 25 MB cap, storage path, `page_count` via pdf-lib after upload | 6, 7 |
+| §2.6 links: stored copy via signed URL, Open on Maricopa EDMS, copy-APN | 8 (links), 9 (route), 11 (UI) |
+| §2.7 ambiguity: "N possible permits — pick the right one" with permit #, type, date, address, subdivision/lot | 8, 11 |
+| §2.8 not found copy + `recordsAvailable = No` suggestion chip | 8 (summary + 0.6-confidence proposal), 11 (row) |
+| §2.9 abandonment banner | 8 (summary), 10 (`isAbandonment` DTO), 11 (banner) |
+| §8 `/select` (`{ candidateKeys }`, 409, `after()`), `records/[recordId]` 302 600 s, `maxDuration = 300` | 9, 10 |
+| §8 plain `<a target="_blank" rel="noopener">`, never `next/link` | 9 (comment), 11 |
+| §10 EDMS unreachable → stage error "Maricopa EDMS unavailable — try Find records later"; download fails → `failed` row with retry note; 15 s / 60 s timeouts; one retry on network errors; 240 s budget via `ctx.signal` | 2, 5, 7, 8, 10 |
+| §11 fixed hosts, ID encoding, input validation, private bucket + auth-gated route, RBAC 401/403 tests | 2, 5, 9, 10, 13 |
+| §12 unit (scoring auto-select/ambiguous/not-found/APN mismatch; street normaliser), EDMS fixtures (219-11-121 → 1, 200-08-079 → 2, street 8911 → 8), routes (auth matrix, 409, 302), components (rows, picker, not-found, banner), smoke script | 2–5, 9–12 |
+| §14 `maxDuration = 300` needs Fluid Compute | 10 (route) — **confirm Fluid Compute is on in the Vercel project settings before the phase-2 deploy** |
+| Spec §4 `selected = false` for unchosen candidates | Not implemented: unchosen candidates are never downloaded, so no row exists for them (all inserted rows are `selected = true`). Noted as an intentional simplification. |
+
+**2. Placeholder scan:** no "TBD/TODO/implement later", no "add error handling"; every code step is complete. The only deliberately adaptive steps are the phase-1 touch points (Task 10 step 3, Task 11 step 7 and the tile test props) because phase 1 was being planned concurrently — each shows the complete resulting code and names the exact edits, and their tests assert persisted/rendered behaviour rather than helper names.
+
+**3. Type consistency (checked):** `SearchHit { candidate, documentId }` (Task 4) is what `search.ts` returns, `storeDocument` consumes and `index.ts` ranks; `runPermitsSelection(input, ctx, candidateKeys)` is the order used in Task 8's tests and Task 10's `continuePrefillAfterSelection`; `recordToDTO(inspectionId, row)` sets `downloadUrl: ""` for `storagePath === ""`, which Task 9 turns into a 404 and Task 11 hides; `EDMS_LINKS` labels in Task 8 are what Task 11's tile test looks for; `notFoundSummary` text is identical in Tasks 8 and 11; `MAX_DOCUMENTS_PER_RUN` / `MAX_DOCUMENT_BYTES` come from `types.ts` everywhere; `PermitCandidate.key` is built only by `candidateKey()` (Task 3) and matched verbatim in Task 8/10.

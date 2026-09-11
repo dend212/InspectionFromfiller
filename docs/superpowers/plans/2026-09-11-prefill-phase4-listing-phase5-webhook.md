@@ -4,7 +4,7 @@
 
 **Goal:** Add the Zillow (Apify) listing stage to the prefill pipeline — water source, bedrooms, and a "listing says sewer" warning — and make the Workiz webhook start a background prefill run for every draft it creates, with the wizard applying that run's proposals on mount.
 
-**Architecture:** Phase 4 adds `src/lib/prefill/listing/` (a `ListingProvider` interface, an Apify REST client with a defensive raw-item normaliser, and `runListingStage`) plus `mapListingFacts`, then swaps the phase-1 listing stub in `run-prefill.ts` for the real stage so it runs in parallel with assessor and permits. Phase 5 adds `src/lib/prefill/webhook-input.ts` (turns the Workiz payload into a `PrefillInput`), makes `POST /api/webhooks/workiz` insert an `inspection_prefill_runs` row with `trigger: "webhook"` and schedule `runPrefill` via `after()`, and adds the apply-on-mount effect to `usePrefill` so webhook-created runs reach the form without a user action.
+**Architecture:** Phase 4 adds `src/lib/prefill/listing/` (a `ListingProvider` interface, an Apify REST client with a defensive raw-item normaliser, and `runListingStage`) plus `mapListingFacts`, replacing the phase-1 stub in `listing/index.ts` so the orchestrator's existing call runs the real stage in parallel with assessor and permits. Phase 5 adds `src/lib/prefill/webhook-input.ts` (turns the Workiz payload into a `PrefillInput`), makes `POST /api/webhooks/workiz` insert an `inspection_prefill_runs` row with `trigger: "webhook"` and schedule `runPrefill` via `after()`, and pins with tests that phase 1's `usePrefill` apply-on-mount path delivers such a run to the form without a user action.
 
 **Tech Stack:** Next.js 16.1 App Router (`after` from `next/server`), TypeScript, Drizzle ORM over `postgres`, Vitest 4 + jsdom + `@testing-library/react`, native `fetch` + `AbortSignal`, Apify REST API (`run-sync-get-dataset-items`), `tsx` via `npx` for `.mts` scripts (repo convention, same as the phase 2/3 smoke scripts).
 
@@ -35,13 +35,14 @@ Verify each of these exists on the branch before starting Task 1 (`ls`/`grep` �
 | Artefact | From | Used by |
 |---|---|---|
 | `src/lib/prefill/types.ts` — `PrefillInput`, `PrefillAddress`, `PrefillStage`, `PrefillStages`, `ProposedField`, `PrefillRunDTO`, `emptyStages()`, `PREFILL_FILL_THRESHOLD` | Phase 1 | every task |
-| `StageContext`, `StageResult` interfaces — exported from `src/lib/prefill/run-prefill.ts` (the phase 2 and phase 3 plans both import them from there; if phase 1 put them in `src/lib/prefill/types.ts` instead, change only the `import type` line in Task 4) | Phase 1 | Tasks 4, 5 |
-| `src/lib/prefill/run-prefill.ts` — `runPrefill(runId)`, `continuePrefillAfterSelection(runId, keys)`; listing stage is a stub returning `{ status: "skipped", summary: "Not available yet" }` | Phase 1 (+2, 3) | Task 5 |
+| `src/lib/prefill/stage.ts` — `StageContext`, `StageResult` (confirmed with the phase 1 planner) | Phase 1 | Task 4 |
+| `src/lib/prefill/run-prefill.ts` — `runPrefill(runId)`, `continuePrefillAfterSelection(runId, keys)`; already imports `runListingStage` from `./listing` and calls it with the other two stages | Phase 1 (+2, 3) | Task 5 |
+| `src/lib/prefill/listing/index.ts` — phase-1 **stub** `runListingStage(input, ctx)` returning `{ status: "skipped", summary: "Not available yet", links: [] }` | Phase 1 | Task 4 replaces it |
 | `src/lib/prefill/map-facts-to-fields.ts` — `mapPermitFacts`, `dedupeProposals` | Phase 3 | Task 3 |
 | `src/lib/prefill/merge.ts` — `mergeProposals`, `getPath`, `isEmptyValue` | Phase 1 | Task 10 |
 | `src/lib/db/schema.ts` — `inspectionPrefillRuns` table | Phase 1 | Task 9 |
-| `src/components/prefill/prefill-sources-tile.tsx` — `PrefillSourcesTile` with one row per stage rendering `stage.summary` and `stage.links` | Phase 1 (+2) | Task 6 |
-| `src/components/prefill/use-prefill.ts` — `usePrefill` (start / poll / select) and `provenance-context.tsx` — `useProvenance()` with `setMany` | Phase 1 | Task 10 |
+| `src/components/prefill/prefill-sources-tile.tsx` — `PrefillSourcesTile`; rows are generic (`STAGE_ROWS` → `<li data-stage=… data-status=…>`, exported `stageSummary(stage)`, `stage.links` as `<a target="_blank" rel="noopener noreferrer">`) | Phase 1 (+2) | Task 6 |
+| `src/components/prefill/use-prefill.ts` — `usePrefill({ inspectionId, form, enabled, initialRun })` (start / poll / select; internal `applyRun`; mount effect adopts `initialRun` or fetches `/prefill/latest` and applies an unapplied `done` run) and `provenance-context.tsx` — `useProvenance()` with `setMany` | Phase 1 | Task 10 |
 | `GET /api/inspections/[id]/prefill/latest` → `PrefillRunDTO \| null`; `POST /api/inspections/[id]/prefill/[runId]/applied` → `{ ok: true }` | Phase 1/2 | Task 10 |
 
 ## File structure
@@ -52,10 +53,10 @@ Verify each of these exists on the branch before starting Task 1 (`ls`/`grep` �
 |---|---|
 | Create `src/lib/prefill/listing/provider.ts` | `ListingProvider` / `ListingFacts` contract (verbatim from contracts doc) |
 | Create `src/lib/prefill/listing/zillow-apify.ts` | Apify REST client (`zillowApifyProvider`), deep key search (`findFact`), water/sewer normalisers, `normaliseListingItem(raw)`, `fullAddress(address)` |
-| Create `src/lib/prefill/listing/index.ts` | `runListingStage(input, ctx, provider?)` — skip / not_found / done / error → `StageResult` |
+| Modify `src/lib/prefill/listing/index.ts` (phase-1 stub) | `runListingStage(input, ctx, provider?)` — skip / not_found / done / error → `StageResult` |
 | Modify `src/lib/prefill/map-facts-to-fields.ts` | add `mapListingFacts(facts)` |
-| Modify `src/lib/prefill/run-prefill.ts` | replace listing stub with `runListingStage`, run in parallel with permits; keep listing proposals across `/select` |
-| Modify `src/components/prefill/prefill-sources-tile.tsx` | Listing row shows the Zillow link (verify generic link rendering; add if missing) |
+| Test `src/lib/prefill/__tests__/run-prefill.listing.test.ts` (modify `run-prefill.ts` only on failure) | listing runs in parallel with permits; listing proposals persisted and kept across `/select` |
+| Test `src/components/prefill/__tests__/prefill-sources-tile.listing.test.tsx` | Listing row shows the Zillow link through phase 1's generic row |
 | Modify `.env.example` | `APIFY_TOKEN` with comment |
 | Create `scripts/listing-shape-check.mts` | one real lookup, prints raw keys + normalised facts |
 
@@ -66,7 +67,7 @@ Verify each of these exists on the branch before starting Task 1 (`ls`/`grep` �
 | Create `src/lib/prefill/webhook-input.ts` | `buildWebhookPrefillInput(src)` → `PrefillInput \| null`; `parseStreetLine` |
 | Modify `src/app/api/webhooks/workiz/route.ts` | insert `webhook` run + `after(() => runPrefill(runId))`; `maxDuration = 300` |
 | Modify `src/app/api/webhooks/workiz/__tests__/route.test.ts`, `src/__tests__/security/webhook-security.test.ts` | mocks for schema/`after`/`runPrefill`; new trigger tests |
-| Modify `src/components/prefill/use-prefill.ts` | apply-on-mount effect (fetch `/prefill/latest`, apply unapplied `done` run) |
+| Test `src/components/prefill/__tests__/use-prefill.webhook.test.tsx` (modify `use-prefill.ts` only on failure) | a `trigger: "webhook"` run is applied on mount via `initialRun` and via `/prefill/latest` |
 
 ---
 
@@ -996,11 +997,11 @@ git commit -m "feat(prefill): map listing facts to water-source/bedroom proposal
 ### Task 4: `runListingStage` — skip / not_found / done / error
 
 **Files:**
-- Create: `src/lib/prefill/listing/index.ts`
+- Modify: `src/lib/prefill/listing/index.ts` (phase 1 created it as the stub `runListingStage` returning `{ status: "skipped", summary: "Not available yet" }` — replace the whole file body)
 - Test: `src/lib/prefill/listing/__tests__/index.test.ts`
 
 **Interfaces:**
-- Consumes: `StageContext`, `StageResult` (phase 1 — `src/lib/prefill/run-prefill.ts`; if phase 1 exported them from `src/lib/prefill/types.ts`, change only the import line), `PrefillInput`, `PrefillStage`, `StageLink` (`src/lib/prefill/types.ts`), `ListingProvider`, `zillowApifyProvider`, `fullAddress`, `mapListingFacts`, `WATER_SOURCES`.
+- Consumes: `StageContext`, `StageResult` (phase 1 — `src/lib/prefill/stage.ts`), `PrefillInput`, `PrefillStage`, `StageLink` (`src/lib/prefill/types.ts`), `ListingProvider`, `zillowApifyProvider`, `fullAddress`, `mapListingFacts`, `WATER_SOURCES`.
 - Produces: `runListingStage(input: PrefillInput, ctx: StageContext, provider: ListingProvider = zillowApifyProvider): Promise<StageResult>`, `summariseListing(facts: ListingFacts): string`, `safeErrorMessage(err: unknown): string`. Task 5 calls `runListingStage(input, ctx)`.
 
 Behaviour table (spec §5.3, §10):
@@ -1176,11 +1177,11 @@ describe("safeErrorMessage", () => {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run src/lib/prefill/listing/__tests__/index.test.ts`
-Expected: FAIL — `Failed to resolve import "../index"`.
+Expected: FAIL — the phase-1 stub returns `status: "skipped"` / `"Not available yet"` for every input, and `summariseListing` / `safeErrorMessage` are not exported.
 
-- [ ] **Step 3: Write `listing/index.ts`**
+- [ ] **Step 3: Replace the stub in `listing/index.ts`**
 
-Create `src/lib/prefill/listing/index.ts`:
+Replace the full contents of `src/lib/prefill/listing/index.ts` with:
 
 ```ts
 import { WATER_SOURCES } from "@/lib/constants/inspection";
@@ -1282,24 +1283,24 @@ Expected: PASS — `index.test.ts`, `zillow-apify.test.ts`, `normalise.test.ts` 
 
 ```bash
 git add src/lib/prefill/listing/index.ts src/lib/prefill/listing/__tests__/index.test.ts
-git commit -m "feat(prefill): runListingStage — skipped/not_found/done/error with Zillow link"
+git commit -m "feat(prefill): real runListingStage — skipped/not_found/done/error with Zillow link"
 ```
 
 ---
 
-### Task 5: Wire the listing stage into `run-prefill.ts` (parallel with permits)
+### Task 5: Prove the orchestrator runs the listing stage in parallel and keeps its proposals across `/select`
 
 **Files:**
-- Modify: `src/lib/prefill/run-prefill.ts` (phase 1 file, already modified by phases 2–3)
 - Test: `src/lib/prefill/__tests__/run-prefill.listing.test.ts`
+- Modify (only if a test fails): `src/lib/prefill/run-prefill.ts`
 
 **Interfaces:**
-- Consumes: `runListingStage` (Task 4), `runAssessorStage` (phase 1, `src/lib/prefill/assessor.ts`), `runPermitsStage` + `runPermitsSelection` (phase 2, `src/lib/prefill/permits/index.ts`), `dedupeProposals` (phase 3), `inspectionPrefillRuns` (schema), `emptyStages`, `PrefillInput`, `PrefillStages`, `ProposedField`.
-- Produces: unchanged public contract — `runPrefill(runId)`, `continuePrefillAfterSelection(runId, candidateKeys)`, `StageContext`, `StageResult`. After this task `stages.listing` is real and listing proposals survive the `/select` round-trip.
+- Consumes: `runPrefill`, `continuePrefillAfterSelection` (phase 1/2, `src/lib/prefill/run-prefill.ts`), `runListingStage` (Task 4 — phase 1 already imports it from `./listing` and calls it in `runPrefill`), `runAssessorStage` (`src/lib/prefill/assessor.ts`), `runPermitsStage` + `runPermitsSelection` (`src/lib/prefill/permits/index.ts`), `dedupeProposals` (phase 3).
+- Produces: no new exports. After this task it is proven that `stages.listing` is persisted with its link, listing proposals reach `run.proposals` (permit beats listing per field), a listing error never fails the run, and listing proposals survive `continuePrefillAfterSelection`.
 
-The phase-1 file contains a stub for the listing stage (a local function or inline object returning `{ status: "skipped", summary: "Not available yet", links: [] }` with no proposals). This task deletes the stub and calls the real stage inside the same `Promise.all` as assessor and permits. The tests below mock the DB with a chain-agnostic proxy so they hold regardless of how phases 1–3 shaped the queries.
+Phase 1 wired all three stage calls into `runPrefill` (the listing one against the stub file Task 4 just replaced), so this task is primarily a contract test. The DB is mocked with a chain-agnostic proxy so the test does not depend on how phases 1–3 shaped their queries.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the tests**
 
 Create `src/lib/prefill/__tests__/run-prefill.listing.test.ts`:
 
@@ -1540,58 +1541,16 @@ describe("continuePrefillAfterSelection — keeps listing proposals", () => {
 
 > If `run-prefill.ts` imports server modules beyond those mocked above (check its import block), add a `vi.mock("<module>", () => ({ ... }))` line per module next to the others so the file loads without a DB/API key. Do not weaken the assertions.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [ ] **Step 2: Run the tests**
 
 Run: `npx vitest run src/lib/prefill/__tests__/run-prefill.listing.test.ts`
-Expected: FAIL — `mockRunListingStage` is never called (`expected "spy" to be called 1 times, but got 0 times`) because the stub is still in place; the `continuePrefillAfterSelection` test fails on the missing listing proposal.
+Expected: PASS for the six `runPrefill` tests (phase 1 already calls `runListingStage` inside the same `Promise.all` as the other stages). If the "parallel" test fails, or the `continuePrefillAfterSelection` test fails, apply Step 3 for exactly the failing case.
 
-- [ ] **Step 3: Replace the listing stub in `runPrefill`**
+- [ ] **Step 3: Fix the orchestrator (only for a failing case)**
 
-In `src/lib/prefill/run-prefill.ts`:
-
-1. Add the import (alphabetical with the other stage imports):
+*Parallel / persistence failures* — in `runPrefill` the three stages must be awaited together and their proposals combined through `dedupeProposals`:
 
 ```ts
-import { runListingStage } from "./listing";
-```
-
-2. Delete the phase-1 stub (the local `listingStub`/inline `{ status: "skipped", summary: "Not available yet", links: [] }` result and the `proposals: []` that went with it).
-
-3. Make the three stages run in one `Promise.all`. The complete `runPrefill` after the change reads as follows — if phases 1–3 named the local helpers differently (`persistStages`, `ctxFor`, …) keep their names and apply only the two listing-related edits (`runListingStage(input, ctxFor("listing"))` inside the same `Promise.all` as permits, and `listing.proposals` included in the `dedupeProposals` call):
-
-```ts
-export async function runPrefill(runId: string): Promise<void> {
-  const [run] = await db
-    .select()
-    .from(inspectionPrefillRuns)
-    .where(eq(inspectionPrefillRuns.id, runId))
-    .limit(1);
-  if (!run || run.status !== "queued") return;
-
-  const input = (run.input ?? {}) as PrefillInput;
-  const stages: PrefillStages = { ...emptyStages(), ...(run.stages as Partial<PrefillStages>) };
-  const controller = new AbortController();
-  const budget = setTimeout(() => controller.abort(), TOTAL_BUDGET_MS);
-
-  const persistStages = () =>
-    db.update(inspectionPrefillRuns).set({ stages }).where(eq(inspectionPrefillRuns.id, runId));
-
-  const ctxFor = (name: keyof PrefillStages): StageContext => ({
-    inspectionId: run.inspectionId,
-    runId,
-    signal: controller.signal,
-    progress: async (partial) => {
-      stages[name] = { ...stages[name], ...partial };
-      await persistStages();
-    },
-  });
-
-  try {
-    await db
-      .update(inspectionPrefillRuns)
-      .set({ status: "running", stages })
-      .where(eq(inspectionPrefillRuns.id, runId));
-
     // All three stages are independent (spec §3) — run them concurrently.
     // Each stage never throws; it returns its own status/summary/error.
     const [assessor, listing, permits] = await Promise.all([
@@ -1621,31 +1580,20 @@ export async function runPrefill(runId: string): Promise<void> {
         finishedAt: awaiting ? null : new Date(),
       })
       .where(eq(inspectionPrefillRuns.id, runId));
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Prefill failed";
-    await db
-      .update(inspectionPrefillRuns)
-      .set({ status: "failed", error: message, stages, finishedAt: new Date() })
-      .where(eq(inspectionPrefillRuns.id, runId))
-      .catch(() => undefined);
-  } finally {
-    clearTimeout(budget);
-  }
-}
 ```
 
-(`TOTAL_BUDGET_MS = 240_000`, `StageContext`, `dedupeProposals`, `runAssessorStage`, `runPermitsStage`, `emptyStages`, `PrefillInput`, `PrefillStages` already exist in this file from phases 1–3.)
+(`ctxFor(name)` is phase 1's per-stage `StageContext` factory — `{ inspectionId, runId, signal, progress }` where `progress` merges the partial into `stages[name]` and persists `stages`; keep phase 1's name for it.)
 
-4. In `continuePrefillAfterSelection` (phase 2/3), find where the run's `proposals` are written after the selected candidates are stored/extracted. It must **merge** with the proposals already on the run rather than overwrite them, so the assessor and listing proposals persisted before `awaiting_selection` survive. The write becomes:
+*`continuePrefillAfterSelection` failure* — where the run's `proposals` are written after the selected candidates are stored/extracted, merge with the proposals already on the run instead of overwriting, so assessor and listing proposals persisted before `awaiting_selection` survive:
 
 ```ts
     const existing = (run.proposals as ProposedField[]).filter((p) => p.provenance.source !== "permit");
     const proposals = dedupeProposals([...existing, ...selection.proposals]);
 ```
 
-where `selection` is the `StageResult` returned by `runPermitsSelection(...)` (phase 2's name) and `run` is the row loaded at the top of the function. If the function already merges this way, leave it.
+where `selection` is the `StageResult` returned by `runPermitsSelection(...)` and `run` is the row loaded at the top of the function.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 4: Run the prefill test folder**
 
 Run: `npx vitest run src/lib/prefill/__tests__/`
 Expected: PASS — `run-prefill.listing.test.ts` green; phase 1–3 tests in the same folder unchanged.
@@ -1653,123 +1601,28 @@ Expected: PASS — `run-prefill.listing.test.ts` green; phase 1–3 tests in the
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/prefill/run-prefill.ts src/lib/prefill/__tests__/run-prefill.listing.test.ts
-git commit -m "feat(prefill): run the Zillow listing stage in parallel with assessor and permits"
+git add src/lib/prefill/__tests__/run-prefill.listing.test.ts src/lib/prefill/run-prefill.ts
+git commit -m "test(prefill): listing stage runs in parallel and its proposals survive candidate selection"
 ```
 
 ---
 
-### Task 6: Listing row in the Prefill sources tile — Zillow link
+### Task 6: Listing row in the Prefill sources tile — Zillow link (test only)
 
 **Files:**
-- Create: `src/components/prefill/stage-links.tsx`
-- Modify: `src/components/prefill/prefill-sources-tile.tsx` (phase 1/2 file — Listing row only)
-- Test: `src/components/prefill/__tests__/stage-links.test.tsx`, `src/components/prefill/__tests__/prefill-sources-tile.listing.test.tsx`
+- Test: `src/components/prefill/__tests__/prefill-sources-tile.listing.test.tsx`
+- Modify (only if the test fails): `src/components/prefill/prefill-sources-tile.tsx`
 
 **Interfaces:**
-- Consumes: `StageLink`, `PrefillRunDTO`, `PrefillStage` (`src/lib/prefill/types.ts`); `PrefillSourcesTile` (phase 1 — props `run: PrefillRunDTO | null`, `isRunning: boolean`, `onFindRecords: () => void`, `onSelectCandidates: (keys: string[]) => void`; if phase 1's prop names differ, change only the JSX in the tile test — the assertions stay).
-- Produces: `StageLinks({ links, className? })` — renders each link as `<a href target="_blank" rel="noopener noreferrer">`, nothing when empty.
+- Consumes: `PrefillSourcesTile` (phase 1 — rows are generic: `STAGE_ROWS` mapped to `<li data-stage="listing" data-status={stage.status}>`, summary via the exported `stageSummary(stage)`, and `stage.links.map(link => <a key={link.url} href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a>)`); `PrefillRunDTO`, `PrefillStage` (`src/lib/prefill/types.ts`).
+- Produces: nothing new — a Zillow `StageLink` from Task 4 renders through phase 1's generic row. This test pins that behaviour so a later tile refactor cannot silently drop the link.
 
-- [ ] **Step 1: Write the failing `StageLinks` test**
-
-Create `src/components/prefill/__tests__/stage-links.test.tsx`:
-
-```tsx
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { StageLinks } from "../stage-links";
-
-describe("StageLinks", () => {
-  it("renders each link as a new-tab anchor with rel=noopener", () => {
-    render(
-      <StageLinks
-        links={[
-          { label: "Open on Zillow", url: "https://www.zillow.com/homedetails/1_zpid/" },
-          { label: "Assessor parcel", url: "https://mcassessor.maricopa.gov/mcs/?q=219-11-121" },
-        ]}
-      />,
-    );
-    const zillow = screen.getByRole("link", { name: "Open on Zillow" });
-    expect(zillow).toHaveAttribute("href", "https://www.zillow.com/homedetails/1_zpid/");
-    expect(zillow).toHaveAttribute("target", "_blank");
-    expect(zillow.getAttribute("rel")).toContain("noopener");
-    expect(screen.getByRole("link", { name: "Assessor parcel" })).toBeInTheDocument();
-  });
-
-  it("renders nothing for an empty list", () => {
-    const { container } = render(<StageLinks links={[]} />);
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it("refuses non-http(s) URLs (defence against javascript: links from a bad source payload)", () => {
-    render(<StageLinks links={[{ label: "Bad", url: "javascript:alert(1)" }]} />);
-    expect(screen.queryByRole("link", { name: "Bad" })).not.toBeInTheDocument();
-  });
-});
-```
-
-- [ ] **Step 2: Run it to verify it fails**
-
-Run: `npx vitest run src/components/prefill/__tests__/stage-links.test.tsx`
-Expected: FAIL — `Failed to resolve import "../stage-links"`.
-
-- [ ] **Step 3: Write `stage-links.tsx`**
-
-Create `src/components/prefill/stage-links.tsx`:
-
-```tsx
-"use client";
-
-import { ExternalLink } from "lucide-react";
-import type { StageLink } from "@/lib/prefill/types";
-import { cn } from "@/lib/utils";
-
-const SAFE_URL = /^https?:\/\//i;
-
-interface StageLinksProps {
-  links: StageLink[];
-  className?: string;
-}
-
-/**
- * Source links for one prefill stage. Plain anchors on purpose — `next/link`
- * prefetch would fire the auth-gated record download route (spec §8).
- */
-export function StageLinks({ links, className }: StageLinksProps) {
-  const safe = links.filter((l) => SAFE_URL.test(l.url));
-  if (safe.length === 0) return null;
-  return (
-    <span className={cn("flex flex-wrap gap-x-3 gap-y-1", className)}>
-      {safe.map((link) => (
-        <a
-          key={`${link.label}:${link.url}`}
-          href={link.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-blue-700 underline-offset-2 hover:underline"
-        >
-          {link.label}
-          <ExternalLink className="h-3 w-3" aria-hidden="true" />
-        </a>
-      ))}
-    </span>
-  );
-}
-```
-
-(`cn` is the existing helper in `src/lib/utils.ts`.)
-
-- [ ] **Step 4: Run it to verify it passes**
-
-Run: `npx vitest run src/components/prefill/__tests__/stage-links.test.tsx`
-Expected: PASS (3 tests).
-
-- [ ] **Step 5: Write the failing tile test**
+- [ ] **Step 1: Write the test**
 
 Create `src/components/prefill/__tests__/prefill-sources-tile.listing.test.tsx`:
 
 ```tsx
-import { render, screen } from "@testing-library/react";
+import { render, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { PrefillRunDTO, PrefillStage } from "@/lib/prefill/types";
 import { PrefillSourcesTile } from "../prefill-sources-tile";
@@ -1784,7 +1637,7 @@ function makeRun(listing: PrefillStage): PrefillRunDTO {
   return {
     id: "run-1",
     inspectionId: "insp-1",
-    trigger: "manual",
+    trigger: "webhook",
     status: "done",
     input: { apn: "219-11-121" },
     stages: {
@@ -1802,15 +1655,19 @@ function makeRun(listing: PrefillStage): PrefillRunDTO {
   };
 }
 
-function renderTile(run: PrefillRunDTO) {
-  return render(
+/** The Listing row (`<li data-stage="listing">`) — phase 1's generic row markup. */
+function renderListingRow(run: PrefillRunDTO) {
+  const { container } = render(
     <PrefillSourcesTile run={run} isRunning={false} onFindRecords={vi.fn()} onSelectCandidates={vi.fn()} />,
   );
+  const row = container.querySelector('li[data-stage="listing"]');
+  if (!(row instanceof HTMLElement)) throw new Error("Listing row not rendered");
+  return within(row);
 }
 
 describe("PrefillSourcesTile — Listing row", () => {
   it("shows the listing summary and an Open on Zillow link that opens in a new tab", () => {
-    renderTile(
+    const row = renderListingRow(
       makeRun(
         stage({
           summary: "Water: Private Well · 3 bed · Sewer: septic",
@@ -1818,75 +1675,65 @@ describe("PrefillSourcesTile — Listing row", () => {
         }),
       ),
     );
-    expect(screen.getByText("Water: Private Well · 3 bed · Sewer: septic")).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: /open on zillow/i });
+    expect(row.getByText(/Water: Private Well · 3 bed · Sewer: septic/)).toBeInTheDocument();
+    const link = row.getByRole("link", { name: /open on zillow/i });
     expect(link).toHaveAttribute("href", ZILLOW_URL);
     expect(link).toHaveAttribute("target", "_blank");
     expect(link.getAttribute("rel")).toContain("noopener");
   });
 
   it("shows the not-found copy with the searched address and no link", () => {
-    renderTile(
+    const row = renderListingRow(
       makeRun(stage({ status: "not_found", summary: "No Zillow listing found for 8911 E Cave Creek Rd, Carefree, AZ 85377" })),
     );
-    expect(screen.getByText("No Zillow listing found for 8911 E Cave Creek Rd, Carefree, AZ 85377")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /zillow/i })).not.toBeInTheDocument();
+    expect(row.getByText(/No Zillow listing found for 8911 E Cave Creek Rd, Carefree, AZ 85377/)).toBeInTheDocument();
+    expect(row.queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it("shows the error message when the lookup failed", () => {
-    renderTile(makeRun(stage({ status: "error", summary: "Zillow lookup failed", error: "Apify responded 402" })));
-    expect(screen.getByText("Zillow lookup failed")).toBeInTheDocument();
-    expect(screen.getByText(/Apify responded 402/)).toBeInTheDocument();
+  it("marks the row with the stage status and shows the error text when the lookup failed", () => {
+    const { container } = render(
+      <PrefillSourcesTile
+        run={makeRun(stage({ status: "error", summary: "Zillow lookup failed", error: "Apify responded 402" }))}
+        isRunning={false}
+        onFindRecords={vi.fn()}
+        onSelectCandidates={vi.fn()}
+      />,
+    );
+    const row = container.querySelector('li[data-stage="listing"]');
+    expect(row).toHaveAttribute("data-status", "error");
+    expect(row?.textContent).toMatch(/Zillow lookup failed|Apify responded 402/);
   });
 });
 ```
 
-- [ ] **Step 6: Run it**
+If phase 1's `PrefillSourcesTile` prop names differ from `run` / `isRunning` / `onFindRecords` / `onSelectCandidates`, change only the JSX props in this file (read the component's props interface); the assertions stay.
+
+- [ ] **Step 2: Run the test**
 
 Run: `npx vitest run src/components/prefill/__tests__/prefill-sources-tile.listing.test.tsx`
-Expected: either PASS (phase 1's tile already renders `stage.summary`, `stage.error` and `stage.links` generically for every row — then skip Step 7) or FAIL on the missing link / error text.
-
-- [ ] **Step 7: Render the Listing row's links and error through `StageLinks` (only if Step 6 failed)**
-
-In `src/components/prefill/prefill-sources-tile.tsx`, import `StageLinks`:
+Expected: PASS (3 tests) — the generic row already renders summary, links and `data-status`. If the link assertion fails, the generic row's link markup must be exactly:
 
 ```tsx
-import { StageLinks } from "@/components/prefill/stage-links";
+{stage.links.map((link) => (
+  <a
+    key={link.url}
+    href={link.url}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="text-xs text-blue-700 underline-offset-2 hover:underline"
+  >
+    {link.label}
+  </a>
+))}
 ```
 
-and in the Listing row (the JSX that renders `run.stages.listing`), render summary, error and links like this — the same three elements phase 1 renders for the Assessor row, so keep the row's existing status icon and layout and add what is missing:
+(plain `<a>`, never `next/link` — its prefetch would fire the auth-gated record download route). Fix that in `prefill-sources-tile.tsx` and re-run.
 
-```tsx
-{/* Listing (Zillow) */}
-<div className="flex items-start gap-2 py-1.5" data-stage="listing">
-  <StageStatusIcon status={run.stages.listing.status} />
-  <div className="min-w-0 flex-1">
-    <div className="flex flex-wrap items-baseline gap-x-2">
-      <span className="text-sm font-medium">Listing</span>
-      {run.stages.listing.summary && (
-        <span className="text-sm text-muted-foreground">{run.stages.listing.summary}</span>
-      )}
-    </div>
-    {run.stages.listing.error && (
-      <p className="text-xs text-red-700">{run.stages.listing.error}</p>
-    )}
-    <StageLinks links={run.stages.listing.links} className="mt-0.5" />
-  </div>
-</div>
-```
-
-(`StageStatusIcon` is phase 1's per-status icon in the same file; if phase 1 named it differently, use that name.) If the Assessor and Permits rows still render their links with hand-written anchors, switch them to `<StageLinks links={…} />` too so all three rows share one implementation.
-
-- [ ] **Step 8: Run the tile tests to verify they pass**
-
-Run: `npx vitest run src/components/prefill/`
-Expected: PASS — the new listing test plus every phase 1/2 tile/badge/chip test unchanged.
-
-- [ ] **Step 9: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/components/prefill/stage-links.tsx src/components/prefill/prefill-sources-tile.tsx src/components/prefill/__tests__/stage-links.test.tsx src/components/prefill/__tests__/prefill-sources-tile.listing.test.tsx
-git commit -m "feat(prefill): Listing row shows the Zillow link via shared StageLinks"
+git add src/components/prefill/__tests__/prefill-sources-tile.listing.test.tsx src/components/prefill/prefill-sources-tile.tsx
+git commit -m "test(prefill): Listing row renders the Zillow link in a new tab"
 ```
 
 ---
@@ -2850,21 +2697,21 @@ git commit -m "feat(webhook): Workiz drafts queue a background property-records 
 
 ---
 
-### Task 10: `usePrefill` apply-on-mount (webhook runs reach the form)
+### Task 10: Apply-on-mount for webhook runs (acceptance test on `usePrefill`)
 
 **Files:**
-- Modify: `src/components/prefill/use-prefill.ts` (phase 1 file)
-- Test: `src/components/prefill/__tests__/use-prefill.mount.test.tsx`
+- Test: `src/components/prefill/__tests__/use-prefill.webhook.test.tsx`
+- Modify (only if a test fails): `src/components/prefill/use-prefill.ts`
 
 **Interfaces:**
-- Consumes: `usePrefill({ inspectionId, form, enabled })` (phase 1 contract), `useProvenance()` → `{ provenance, setMany }` (phase 1), `mergeProposals` (phase 1 `src/lib/prefill/merge.ts`), `PrefillRunDTO`, `GET /api/inspections/[id]/prefill/latest`, `POST /api/inspections/[id]/prefill/[runId]/applied`.
-- Produces: on mount (when `enabled`), the hook fetches the latest run, exposes it as `run`, and — if it is `done` with `appliedAt === null` — merges its proposals into the live form (`form.setValue` for fills, `setMany` for provenance) and POSTs `/applied`. Spec §8 last paragraph; §13 item 5.
+- Consumes (phase 1, `src/components/prefill/use-prefill.ts`): `usePrefill({ inspectionId, form, enabled, initialRun })` — `initialRun?: PrefillRunDTO | null` is the run the edit page loads server-side (`prefillRun: await loadLatestRunDTO(inspection.id)`); on mount the hook adopts `initialRun` (no fetch) or, when `initialRun === undefined`, fetches `GET /api/inspections/[id]/prefill/latest`; either way it calls its internal `applyRun(candidate)` which, for a `done` run with `appliedAt === null` not yet applied by this instance, runs `mergeProposals(form.getValues(), provenance, candidate.proposals, { runId })`, calls `form.setValue(fieldPath, value, { shouldDirty: true, shouldValidate: true })` per fill, `setMany(next)`, then `POST /api/inspections/[id]/prefill/[runId]/applied` and sets `run.appliedAt`. `useProvenance()` from `./provenance-context` supplies `provenance` + `setMany`. `mergeProposals` from `src/lib/prefill/merge.ts`.
+- Produces: no new exports. Proves spec §8 ("On wizard mount it fetches the latest run and applies it if unapplied — this is how webhook-triggered runs reach the form") specifically for a `trigger: "webhook"`, `createdBy: null` run created by Task 9, through both mount paths.
 
-Phase 1's hook already applies a run that finishes while it is polling (start → poll → apply). This task adds the **mount** path, which is how webhook-created runs (no user action) reach the wizard. If phase 1 already implemented the mount fetch (search the file for `prefill/latest`), keep it and make the tests below pass against it — the tests are the contract; only add what is missing.
+Phase 1 already tests "loads the latest run on mount and applies an unapplied done run", "adopts initialRun without fetching latest" and "does not re-apply a run that was already applied" on its own fixtures. This task adds the webhook-shaped acceptance test (listing proposals from Task 3, `trigger: "webhook"`) and does not duplicate phase 1's cases.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the test**
 
-Create `src/components/prefill/__tests__/use-prefill.mount.test.tsx`:
+Create `src/components/prefill/__tests__/use-prefill.webhook.test.tsx`:
 
 ```tsx
 import { renderHook, waitFor } from "@testing-library/react";
@@ -2912,25 +2759,45 @@ function makeForm(values: InspectionFormData = getDefaultFormValues("Tech")) {
   } as unknown as UseFormReturn<InspectionFormData>;
 }
 
-function makeRun(overrides: Partial<PrefillRunDTO> = {}): PrefillRunDTO {
+/** A run exactly as Task 9's webhook trigger + Task 4's listing stage produce it. */
+function webhookRun(overrides: Partial<PrefillRunDTO> = {}): PrefillRunDTO {
   const at = "2026-09-11T18:00:00.000Z";
   return {
     id: "run-web-1",
     inspectionId: INSPECTION_ID,
     trigger: "webhook",
     status: "done",
-    input: { apn: "219-11-121" },
+    input: {
+      apn: "219-11-121",
+      address: { streetNumber: "8911", streetDir: "E", streetName: "Cave Creek Rd", city: "Carefree", zip: "85377", full: "8911 E Cave Creek Rd, Carefree, AZ 85377" },
+    },
     stages: {
-      assessor: { status: "done", links: [] },
-      listing: { status: "done", summary: "Water: Private Well", links: [] },
-      permits: { status: "not_found", links: [] },
+      assessor: { status: "done", summary: "Parcel 219-11-121", links: [] },
+      listing: {
+        status: "done",
+        summary: "Water: Private Well · 3 bed · Sewer: sewer",
+        links: [{ label: "Open on Zillow", url: "https://www.zillow.com/homedetails/7921650_zpid/" }],
+      },
+      permits: { status: "not_found", summary: "No permit records found (searched APN 219-11-121)", links: [] },
     },
     proposals: [
       {
         fieldPath: "facilityInfo.waterSource",
         value: "private_well",
         kind: "fill",
-        provenance: { source: "listing", confidence: 0.8, explanation: "Zillow listing · Water source: Private Well" },
+        provenance: { source: "listing", confidence: 0.8, explanation: "Zillow listing · Water source: Private Well", sourceUrl: "https://www.zillow.com/homedetails/7921650_zpid/" },
+      },
+      {
+        fieldPath: "designFlow.numberOfBedrooms",
+        value: "3",
+        kind: "fill",
+        provenance: { source: "listing", confidence: 0.85, explanation: "Zillow listing · 3 bedrooms" },
+      },
+      {
+        fieldPath: "facilityInfo.wastewaterSource",
+        value: "",
+        kind: "warning",
+        provenance: { source: "listing", confidence: 0.8, explanation: 'Listing says "Sewer" — confirm this property is on septic' },
       },
     ],
     candidates: [],
@@ -2945,7 +2812,7 @@ function makeRun(overrides: Partial<PrefillRunDTO> = {}): PrefillRunDTO {
 
 const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
 
-function mockFetchLatest(latest: PrefillRunDTO | null) {
+function mockFetch(latest: PrefillRunDTO | null) {
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string, init?: RequestInit) => {
@@ -2961,6 +2828,9 @@ function mockFetchLatest(latest: PrefillRunDTO | null) {
   );
 }
 
+const appliedCalls = () => fetchCalls.filter((c) => c.url.endsWith("/applied") && c.init?.method === "POST");
+const latestCalls = () => fetchCalls.filter((c) => c.url.endsWith("/prefill/latest"));
+
 beforeEach(() => {
   vi.clearAllMocks();
   fetchCalls.length = 0;
@@ -2975,220 +2845,101 @@ afterEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("usePrefill — apply on mount", () => {
-  it("fetches the latest run on mount and applies an unapplied done run to the form", async () => {
-    mockFetchLatest(makeRun());
+describe("usePrefill — webhook-created run reaches the form on mount", () => {
+  it("applies a webhook run handed in as initialRun (server-loaded) without fetching /latest", async () => {
+    mockFetch(null);
     const form = makeForm();
 
-    const { result } = renderHook(() => usePrefill({ inspectionId: INSPECTION_ID, form, enabled: true }));
+    const { result } = renderHook(() =>
+      usePrefill({ inspectionId: INSPECTION_ID, form, enabled: true, initialRun: webhookRun() }),
+    );
 
-    await waitFor(() => expect(form.setValue).toHaveBeenCalled());
-    expect(fetchCalls[0].url).toBe(`/api/inspections/${INSPECTION_ID}/prefill/latest`);
-    expect(form.setValue).toHaveBeenCalledWith("facilityInfo.waterSource", "private_well", expect.anything());
+    await waitFor(() => expect(appliedCalls()).toHaveLength(1));
+    expect(latestCalls()).toHaveLength(0);
+    expect(appliedCalls()[0].url).toBe(`/api/inspections/${INSPECTION_ID}/prefill/run-web-1/applied`);
+
+    // Fills above the 0.75 gate are written; the warning never writes a value.
+    expect(form.setValue).toHaveBeenCalledWith("facilityInfo.waterSource", "private_well", expect.objectContaining({ shouldDirty: true }));
+    expect(form.setValue).toHaveBeenCalledWith("designFlow.numberOfBedrooms", "3", expect.objectContaining({ shouldDirty: true }));
+    expect(form.setValue).toHaveBeenCalledTimes(2);
 
     expect(mockSetMany).toHaveBeenCalledTimes(1);
     const entries = mockSetMany.mock.calls[0][0] as FieldProvenance;
-    expect(entries["facilityInfo.waterSource"]).toMatchObject({
-      source: "listing",
-      state: "prefilled",
-      value: "private_well",
-      confidence: 0.8,
-      runId: "run-web-1",
-    });
+    expect(entries["facilityInfo.waterSource"]).toMatchObject({ source: "listing", state: "prefilled", value: "private_well", runId: "run-web-1" });
+    expect(entries["designFlow.numberOfBedrooms"]).toMatchObject({ source: "listing", state: "prefilled", value: "3" });
+    expect(entries["facilityInfo.wastewaterSource"]).toMatchObject({ source: "listing", state: "suggested", kind: "warning" });
 
-    await waitFor(() =>
-      expect(fetchCalls.some((c) => c.url === `/api/inspections/${INSPECTION_ID}/prefill/run-web-1/applied` && c.init?.method === "POST")).toBe(true),
-    );
-    expect(result.current.run?.id).toBe("run-web-1");
+    expect(result.current.run?.trigger).toBe("webhook");
+    await waitFor(() => expect(result.current.run?.appliedAt).not.toBeNull());
   });
 
-  it("turns a low-confidence proposal into a suggestion without writing the field", async () => {
-    mockFetchLatest(
-      makeRun({
-        proposals: [
-          {
-            fieldPath: "designFlow.numberOfBedrooms",
-            value: "3",
-            kind: "fill",
-            provenance: { source: "listing", confidence: 0.5, explanation: "Zillow listing · 3 bedrooms" },
-          },
-        ],
+  it("fetches /latest when no initialRun is provided and applies the webhook run once", async () => {
+    mockFetch(webhookRun());
+    const form = makeForm();
+
+    const { result, rerender } = renderHook(() =>
+      usePrefill({ inspectionId: INSPECTION_ID, form, enabled: true, initialRun: undefined }),
+    );
+
+    await waitFor(() => expect(appliedCalls()).toHaveLength(1));
+    expect(latestCalls()).toHaveLength(1);
+    expect(latestCalls()[0].url).toBe(`/api/inspections/${INSPECTION_ID}/prefill/latest`);
+    expect(form.setValue).toHaveBeenCalledTimes(2);
+    expect(result.current.run?.id).toBe("run-web-1");
+
+    rerender();
+    rerender();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(form.setValue).toHaveBeenCalledTimes(2);
+    expect(appliedCalls()).toHaveLength(1);
+  });
+
+  it("does not touch the form for a webhook run that was already applied on another device", async () => {
+    mockFetch(null);
+    const form = makeForm();
+
+    const { result } = renderHook(() =>
+      usePrefill({
+        inspectionId: INSPECTION_ID,
+        form,
+        enabled: true,
+        initialRun: webhookRun({ appliedAt: "2026-09-11T18:05:00.000Z" }),
       }),
     );
-    const form = makeForm();
-
-    renderHook(() => usePrefill({ inspectionId: INSPECTION_ID, form, enabled: true }));
-
-    await waitFor(() => expect(mockSetMany).toHaveBeenCalled());
-    expect(form.setValue).not.toHaveBeenCalled();
-    const entries = mockSetMany.mock.calls[0][0] as FieldProvenance;
-    expect(entries["designFlow.numberOfBedrooms"].state).toBe("suggested");
-  });
-
-  it("does not re-apply a run that was already applied", async () => {
-    mockFetchLatest(makeRun({ appliedAt: "2026-09-11T18:01:00.000Z" }));
-    const form = makeForm();
-
-    const { result } = renderHook(() => usePrefill({ inspectionId: INSPECTION_ID, form, enabled: true }));
 
     await waitFor(() => expect(result.current.run?.id).toBe("run-web-1"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(form.setValue).not.toHaveBeenCalled();
     expect(mockSetMany).not.toHaveBeenCalled();
-    expect(fetchCalls.filter((c) => c.url.endsWith("/applied"))).toHaveLength(0);
+    expect(appliedCalls()).toHaveLength(0);
   });
 
-  it("does not apply a run that is still running (the poller handles it)", async () => {
-    mockFetchLatest(makeRun({ status: "running", finishedAt: null }));
-    const form = makeForm();
-
-    const { result } = renderHook(() => usePrefill({ inspectionId: INSPECTION_ID, form, enabled: true }));
-
-    await waitFor(() => expect(result.current.run?.id).toBe("run-web-1"));
-    expect(form.setValue).not.toHaveBeenCalled();
-    expect(result.current.isRunning).toBe(true);
-  });
-
-  it("does nothing when there is no run yet", async () => {
-    mockFetchLatest(null);
-    const form = makeForm();
-
-    const { result } = renderHook(() => usePrefill({ inspectionId: INSPECTION_ID, form, enabled: true }));
-
-    await waitFor(() => expect(fetchCalls).toHaveLength(1));
-    expect(result.current.run).toBeNull();
-    expect(form.setValue).not.toHaveBeenCalled();
-  });
-
-  it("does not fetch when disabled (read-only review page)", async () => {
-    mockFetchLatest(makeRun());
-    const form = makeForm();
-
-    renderHook(() => usePrefill({ inspectionId: INSPECTION_ID, form, enabled: false }));
-
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(fetchCalls).toHaveLength(0);
-  });
-
-  it("does not clobber a field the user already filled (merge no-clobber rule)", async () => {
-    mockFetchLatest(makeRun());
+  it("does not clobber a field the inspector already filled — the listing value becomes a suggestion", async () => {
+    mockFetch(null);
     const values = getDefaultFormValues("Tech");
     values.facilityInfo.waterSource = "municipal";
     const form = makeForm(values);
 
-    renderHook(() => usePrefill({ inspectionId: INSPECTION_ID, form, enabled: true }));
+    renderHook(() => usePrefill({ inspectionId: INSPECTION_ID, form, enabled: true, initialRun: webhookRun() }));
 
     await waitFor(() => expect(mockSetMany).toHaveBeenCalled());
-    expect(form.setValue).not.toHaveBeenCalled();
+    expect(form.setValue).not.toHaveBeenCalledWith("facilityInfo.waterSource", expect.anything(), expect.anything());
     const entries = mockSetMany.mock.calls[0][0] as FieldProvenance;
     expect(entries["facilityInfo.waterSource"].state).toBe("suggested");
-  });
-
-  it("applies each run only once even if the hook re-renders", async () => {
-    mockFetchLatest(makeRun());
-    const form = makeForm();
-
-    const { rerender } = renderHook(() => usePrefill({ inspectionId: INSPECTION_ID, form, enabled: true }));
-    await waitFor(() => expect(form.setValue).toHaveBeenCalledTimes(1));
-    rerender();
-    rerender();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
-    expect(form.setValue).toHaveBeenCalledTimes(1);
-    expect(fetchCalls.filter((c) => c.url.endsWith("/applied"))).toHaveLength(1);
   });
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [ ] **Step 2: Run the test**
 
-Run: `npx vitest run src/components/prefill/__tests__/use-prefill.mount.test.tsx`
-Expected: FAIL — no `/prefill/latest` request on mount (`fetchCalls[0]` undefined / `setValue` never called). If phase 1 already implemented the mount path, these PASS — then skip to Step 5.
+Run: `npx vitest run src/components/prefill/__tests__/use-prefill.webhook.test.tsx`
+Expected: PASS (4 tests) against phase 1's hook. If any fails, the gap is in `applyRun` or the mount effect — the required behaviour is exactly the contract in **Interfaces** above; fix `use-prefill.ts` there (do not special-case `trigger: "webhook"` — a webhook run is an ordinary run) and re-run `npx vitest run src/components/prefill/` so phase 1's hook tests stay green too.
 
-- [ ] **Step 3: Add the mount effect to `use-prefill.ts`**
-
-Inside `usePrefill` in `src/components/prefill/use-prefill.ts`, keep phase 1's state (`run`, `setRun`, `error`, polling, `start`, `selectCandidates`) and add the following. Imports needed at the top of the file (add any that are missing):
-
-```ts
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { FieldPath, UseFormReturn } from "react-hook-form";
-import { mergeProposals } from "@/lib/prefill/merge";
-import type { PrefillAddress, PrefillRunDTO } from "@/lib/prefill/types";
-import type { InspectionFormData } from "@/types/inspection";
-import { useProvenance } from "./provenance-context";
-```
-
-Body additions (place after the `useState` declarations; if phase 1 already has an "apply this run to the form" function used by the poller, reuse it instead of adding `applyRun` — the mount effect must call the same function so a run is applied exactly once):
-
-```ts
-  const { provenance, setMany } = useProvenance();
-  // Latest provenance without re-creating callbacks on every change.
-  const provenanceRef = useRef(provenance);
-  provenanceRef.current = provenance;
-  // Runs applied by this hook instance — guards against double-apply on re-render.
-  const appliedRunIds = useRef<Set<string>>(new Set());
-
-  const applyRun = useCallback(
-    async (candidate: PrefillRunDTO) => {
-      if (candidate.status !== "done" || candidate.appliedAt || appliedRunIds.current.has(candidate.id)) return;
-      appliedRunIds.current.add(candidate.id);
-
-      const { fills, provenance: next } = mergeProposals(
-        form.getValues(),
-        provenanceRef.current,
-        candidate.proposals,
-        { runId: candidate.id },
-      );
-      for (const fill of fills) {
-        form.setValue(fill.fieldPath as FieldPath<InspectionFormData>, fill.value as never, {
-          shouldDirty: true,
-        });
-      }
-      setMany(next);
-
-      try {
-        await fetch(`/api/inspections/${inspectionId}/prefill/${candidate.id}/applied`, { method: "POST" });
-      } catch {
-        // Non-fatal: the next mount re-applies; mergeProposals is idempotent for identical values.
-      }
-    },
-    [form, inspectionId, setMany],
-  );
-
-  // MOUNT: pick up a run created without this client (webhook trigger, another
-  // device) and apply it once. queued/running runs are handed to the poller via setRun.
-  useEffect(() => {
-    if (!enabled) return;
-    const controller = new AbortController();
-    (async () => {
-      try {
-        const res = await fetch(`/api/inspections/${inspectionId}/prefill/latest`, {
-          signal: controller.signal,
-        });
-        if (!res.ok) return;
-        const latest = (await res.json()) as PrefillRunDTO | null;
-        if (!latest || controller.signal.aborted) return;
-        setRun(latest);
-        if (latest.status === "done" && !latest.appliedAt) await applyRun(latest);
-      } catch {
-        // Offline or unmounted — the tile just shows no run.
-      }
-    })();
-    return () => controller.abort();
-  }, [enabled, inspectionId, applyRun]);
-```
-
-`isRunning` must derive from the exposed run (`run?.status === "queued" || run?.status === "running"`) so a running webhook run picked up on mount shows as running and the phase-1 poller (keyed on that state) resumes polling it.
-
-- [ ] **Step 4: Run the tests to verify they pass**
-
-Run: `npx vitest run src/components/prefill/`
-Expected: PASS — the 8 mount tests plus every phase 1/2 test for the tile, badge, chip, context and hook.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/components/prefill/use-prefill.ts src/components/prefill/__tests__/use-prefill.mount.test.tsx
-git commit -m "feat(prefill): apply the latest unapplied run on wizard mount (webhook runs reach the form)"
+git add src/components/prefill/__tests__/use-prefill.webhook.test.tsx src/components/prefill/use-prefill.ts
+git commit -m "test(prefill): webhook-created run is applied on wizard mount via initialRun and /latest"
 ```
 
 ---
@@ -3322,20 +3073,20 @@ If Steps 1–4 required changes, they are already committed with their tests. Th
 | §5.3 water-source regex normalisation | 1 |
 | §5.3 confidence 0.8 water / 0.85 bedrooms; sewer → warning on `facilityInfo.wastewaterSource` with the exact message | 3 |
 | §7 rows "bedrooms (permit or listing)", "waterSource (listing or permit)", "listing sewer → warning" incl. permit-beats-listing | 3 (+ phase 3 `dedupeProposals`), 5 |
-| §3 stages independent, run in parallel, a stage failure never fails the run | 4, 5 |
+| §3 stages independent, run in parallel, a stage failure never fails the run | 4, 5 (test-pinned) |
 | §10 Apify error/timeout/not-found → stage `error` / `"No Zillow listing found for <address>"` | 4 |
-| §2.6 / §9 tile links to the Zillow property URL, plain `<a target=_blank rel=noopener>` | 6 |
+| §2.6 / §9 tile links to the Zillow property URL, plain `<a target=_blank rel=noopener>` | 4 (link on the stage) + 6 (test-pinned) |
 | §11 / §14 `APIFY_TOKEN` server-only, in `.env.example`, never logged | 2, 4, 7 |
 | §5.3 "output field names confirmed with one real run" | 7, 11 |
 | §8 webhook row: after creating the draft, if an APN is present insert a `webhook` run and `after(() => runPrefill(runId))` | 9 |
 | §4 `created_by` null for webhook runs; §8 `maxDuration = 300`; never a floating promise | 9 |
-| §8 "On wizard mount it fetches the latest run and applies it if unapplied" | 10 |
+| §8 "On wizard mount it fetches the latest run and applies it if unapplied" | 10 (phase 1 implements; test-pinned for webhook runs) |
 | §11 APN regex / address length ≤ 200 / printable ASCII on webhook input | 8 |
 | §12 unit tests for water-source normalisation, mapping rows, route lifecycle; suites stay green | 1, 3, 9, 11 |
 | §13 phases 4 and 5 as separate PR-able units | Tasks 1–7 / 8–11 |
 
 Gaps, stated deliberately: `ListingFacts.raw` is "kept on the run for debugging" in the spec, but the contracts' `PrefillStage`/run row have no field for it, so it is not persisted (the shape-check script and the `evidence` strings cover debugging). The assessor `legalDescription` is not parsed into `subdivision`/`lot` for webhook runs (the permits stage falls back to the street search; the manual `Find records` path can pass them).
 
-**2. Placeholder scan** — no "TBD/TODO/implement later"; every code step has full code; the only conditional steps are reconciliations with phase 1's not-yet-written hook/tile internals (Tasks 5, 6, 10), each with the exact code to add and a test that decides whether it is needed.
+**2. Placeholder scan** — no "TBD/TODO/implement later"; every code step has full code. Tasks 5, 6 and 10 are test-first pins on phase-1 behaviour confirmed with the phase-1 planner (`stage.ts`, generic tile rows, `applyRun` + `initialRun` mount path); each carries the exact code to apply if its test fails.
 
-**3. Type/name consistency** — `normaliseListingItem`, `findFact`, `flattenText`, `WATER_KEYS`, `SEWER_KEYS`, `fullAddress`, `buildApifyUrl`, `zillowApifyProvider`, `ListingLookupError` (Tasks 1–2) are imported with those exact names in Tasks 3, 4, 7. `runListingStage(input, ctx, provider?)` (Task 4) is what Task 5 calls and mocks. `mapListingFacts`, `LISTING_WATER_CONFIDENCE`, `LISTING_BEDROOMS_CONFIDENCE`, `LISTING_SEWER_WARNING` (Task 3) are used in Task 4's summary expectations and Task 10's fixtures (0.8). `StageLinks` (Task 6) is used only in Task 6. `buildWebhookPrefillInput` / `WebhookPrefillSource` (Task 8) match the route's call in Task 9 (`{ apn, street, city, zip, addressVerified }`). `PrefillRunDTO` fields used in Tasks 6 and 10 fixtures match the contracts doc verbatim (`records`, `appliedAt`, `candidates`, `error`).
+**3. Type/name consistency** — `normaliseListingItem`, `findFact`, `flattenText`, `WATER_KEYS`, `SEWER_KEYS`, `fullAddress`, `buildApifyUrl`, `zillowApifyProvider`, `ListingLookupError` (Tasks 1–2) are imported with those exact names in Tasks 3, 4, 7. `runListingStage(input, ctx, provider?)` (Task 4) keeps the `(input, ctx)` signature phase 1's orchestrator already calls; Task 5 mocks it at `@/lib/prefill/listing`. `mapListingFacts`, `LISTING_WATER_CONFIDENCE`, `LISTING_BEDROOMS_CONFIDENCE`, `LISTING_SEWER_WARNING` (Task 3) are used in Task 4's summary expectations and Task 10's fixtures (0.8 / 0.85 / warning). `usePrefill`'s `initialRun` prop (Task 10) is phase 1's, confirmed with its planner. Task 6 relies on phase 1's `li[data-stage="listing"]` / `data-status` markup. `buildWebhookPrefillInput` / `WebhookPrefillSource` (Task 8) match the route's call in Task 9 (`{ apn, street, city, zip, addressVerified }`). `PrefillRunDTO` fields used in Tasks 6 and 10 fixtures match the contracts doc verbatim (`records`, `appliedAt`, `candidates`, `error`).
