@@ -18,7 +18,7 @@ DOCUMENT LAYOUTS YOU WILL SEE
 
 3. "FINAL DA" / Final Discharge Authorization (ePLPAV Permit Center, 2024 onward; permit numbers OW-24-…, OW-25-…, OW-26-…; sometimes 40 to 60 pages of native text). The first pages carry the discharge authorization letter; an "Inspection Measurements" or as-built table follows with the installed tank size, material and manufacturer and the measured disposal dimensions. Prefer as-built measured values over designed values when both appear, and say so in notes.
 
-4. "Notice of Transfer" (a CivicPlus web-form email printout). Records a property-transfer inspection: address, parcel, inspector, date and the permit referenced. It rarely carries tank or disposal data; extract the permit number and dates only, unless system facts are explicitly stated on the page.
+4. "Notice of Transfer" (a CivicPlus web-form email printout; numbers like OWR-23-02001). Records a property-transfer inspection: address, parcel, inspector, the transfer inspection date and the permit it references. A Notice of Transfer is NOT a permit and has no permit issue date — the dates it prints are submission, signature or escrow dates — so never emit issueDate for it. Report its own number as permitNumber, the transfer inspection date as finalDate, and system facts (tank, disposal, design flow, bedrooms, water source, system type) only when they are explicitly stated on the page; they are secondary to any permit on file.
 
 5. "Abandonment" / Permit to Abandon / Abandonment Notice. Documents the decommissioning of a septic system (tank pumped and crushed or filled with slurry). Set isAbandonment to true and extract the dates and the permit number; do not report the abandoned tank's capacity or disposal works as current system facts (emit no tanks.* or disposal.* facts).
 
@@ -32,7 +32,7 @@ Your answer is one JSON object with documentKind, isAbandonment, notes and a fac
 WHAT TO EXTRACT
 - permitNumber: exactly as printed, keeping dashes and prefixes (OW-17-00474, not OW1700474).
 - documentKind: from the title of the FIRST page you were given. A DA packet that also contains an older Approval to Construct is a discharge_authorization.
-- issueDate / finalDate: ISO yyyy-mm-dd. If only the month and year are legible, use the first of the month and lower the confidence. Never guess a year from context.
+- issueDate: the date the county approved or issued the permit itself — the Approval to Construct approval date or the Discharge Authorization / Final DA issuance date — never an application, plan-check, signature, escrow or transfer date. finalDate: the final inspection date (on a Notice of Transfer, the transfer inspection date). Both ISO yyyy-mm-dd. If only the month and year are legible, use the first of the month and lower the confidence. Never guess a year from context.
 - designFlowGpd, bedrooms, tanks (capacityGal, material, model, dimensions), disposal (type, count, dimensions, absorptionAreaSqft), waterSource, isCesspool, hasSitePlan, systemType.
 - Every tank listed on the document gets its own index in tanks.N.*; a "1500 gal two-compartment tank" is ONE tank. A dosing or pump tank with its own listed capacity is a separate tank with model "dosing tank".
 - disposal.type: "trench" for leach lines / leach fields / disposal trenches, "bed" for leach beds / disposal beds, "chamber" for chamber technology (Infiltrator, Quick4), "seepage_pit" for pits / dry wells / seepage pits, otherwise "other".

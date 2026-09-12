@@ -26,6 +26,8 @@ describe("PERMIT_EXTRACTION_SYSTEM_PROMPT", () => {
     expect(p).toContain("Inspection Measurements");
     expect(p).toContain("Notice of Transfer");
     expect(p).toContain("CivicPlus");
+    expect(p).toContain("never emit issueDate");
+    expect(p).toContain("never an application, plan-check, signature, escrow or transfer date");
     expect(p).toMatch(/0\.95.*typed/i);
     expect(p).toMatch(/0\.70.*0\.84/);
     expect(p).toContain("0.50 to 0.69");
