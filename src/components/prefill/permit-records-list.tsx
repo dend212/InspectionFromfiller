@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { rankForExtraction } from "@/lib/prefill/permits/doc-types";
 import { groupByProperty } from "@/lib/prefill/permits/search";
-import type { InspectionRecordDTO, PermitCandidate, PrefillRunDTO } from "@/lib/prefill/types";
+import type { PermitCandidate, PrefillRunDTO } from "@/lib/prefill/types";
+import { RecordExtractionBadge, isRecordBeingRead } from "./record-extraction-badge";
 
 export interface PermitRecordsListProps {
   run: PrefillRunDTO;
@@ -88,19 +89,6 @@ export function groupCandidates(candidates: PermitCandidate[]): CandidateGroup[]
   });
 }
 
-function statusLabel(r: InspectionRecordDTO): string {
-  switch (r.extractionStatus) {
-    case "pending":
-      return "Queued for extraction";
-    case "done":
-      return "Extracted";
-    case "failed":
-      return `${r.extractionError ?? "Failed"} — re-run Find records`;
-    default:
-      return r.extractionError ?? "Not extracted";
-  }
-}
-
 export function PermitRecordsList({ run, onSelectCandidates, disabled }: PermitRecordsListProps) {
   const [chosenGroup, setChosenGroup] = useState<string | null>(null);
   const groups = useMemo(() => groupCandidates(run.candidates), [run.candidates]);
@@ -153,7 +141,18 @@ export function PermitRecordsList({ run, onSelectCandidates, disabled }: PermitR
               {r.sizeBytes !== null && (
                 <span className="text-muted-foreground">{formatBytes(r.sizeBytes)}</span>
               )}
-              <span className="text-xs text-muted-foreground">{statusLabel(r)}</span>
+              <RecordExtractionBadge
+                record={r}
+                reading={isRecordBeingRead(r, run.stages.permits.summary)}
+              />
+              {r.extractionStatus === "failed" && (
+                <span className="text-xs text-muted-foreground">
+                  {r.extractionError ?? "Failed"} — re-run Find records
+                </span>
+              )}
+              {r.extractionStatus === "skipped" && r.extractionError && (
+                <span className="text-xs text-muted-foreground">{r.extractionError}</span>
+              )}
               {r.downloadUrl && (
                 // Plain anchor on purpose: next/link would prefetch the GET and burn a signed URL.
                 <a

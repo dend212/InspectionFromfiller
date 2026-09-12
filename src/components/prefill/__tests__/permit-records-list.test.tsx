@@ -114,7 +114,7 @@ describe("PermitRecordsList — records", () => {
     expect(rows[0]).toHaveTextContent("2/8/2018");
     expect(rows[0]).toHaveTextContent("21 pages");
     expect(rows[0]).toHaveTextContent("1.9 MB");
-    expect(rows[0]).toHaveTextContent("Queued for extraction");
+    expect(rows[0]).toHaveTextContent("Queued");
 
     const link = within(rows[0]).getByRole("link", { name: /open pdf/i });
     expect(link).toHaveAttribute("href", "/api/inspections/insp-1/records/rec-1");
@@ -180,6 +180,40 @@ describe("PermitRecordsList — records", () => {
     render(<PermitRecordsList run={run()} onSelectCandidates={vi.fn()} />);
     expect(screen.queryByRole("list", { name: /permit documents/i })).toBeNull();
     expect(screen.queryByRole("radiogroup")).toBeNull();
+  });
+
+  it("shows each record's extraction status and the failure reason", () => {
+    render(
+      <PermitRecordsList
+        run={run({
+          records: [
+            record({ id: "r1", permitNumber: "OW-17-00474", extractionStatus: "done", extractionError: null }),
+            record({ id: "r2", permitNumber: "000972", extractionStatus: "failed", extractionError: "Claude API error: 500 boom" }),
+            record({ id: "r3", permitNumber: "OW-24-00001", extractionStatus: "skipped", extractionError: "Only the first 3 documents are read per run" }),
+          ],
+        })}
+        onSelectCandidates={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Read")).toBeInTheDocument();
+    expect(screen.getByText("Read failed")).toBeInTheDocument();
+    expect(screen.getByText("Claude API error: 500 boom — re-run Find records")).toBeInTheDocument();
+    expect(screen.getByText("Not read")).toBeInTheDocument();
+    expect(screen.getByText("Only the first 3 documents are read per run")).toBeInTheDocument();
+  });
+
+  it("marks the record named in a running 'Reading …' summary", () => {
+    render(
+      <PermitRecordsList
+        run={run({
+          status: "running",
+          stages: { ...emptyStages(), permits: { status: "running", links: [], summary: "Reading OW-17-00474…" } },
+          records: [record({ id: "r1", permitNumber: "OW-17-00474", extractionStatus: "pending", extractionError: null })],
+        })}
+        onSelectCandidates={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Reading…")).toBeInTheDocument();
   });
 });
 
