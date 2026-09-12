@@ -186,6 +186,51 @@ describe("ProvenanceProvider", () => {
     expect(result.current.provenance).toEqual({});
   });
 
+  it("dismissSuggestion restores the remembered edited entry instead of clearing it", () => {
+    const formRef: FormRef = { current: null };
+    const edited = entry({ state: "edited", value: "JOHN DOE", at: "2026-09-10T00:00:00.000Z" });
+    const { result } = renderHook(() => useProvenance("facilityInfo.facilityName"), {
+      wrapper: makeWrapper({
+        formRef,
+        facility: { facilityName: "JANE DOE" },
+        initial: {
+          "facilityInfo.facilityName": {
+            ...entry({ state: "suggested", value: "J SMITH", source: "permit", runId: "run-2" }),
+            prior: edited,
+          },
+        },
+      }),
+    });
+    act(() => result.current.dismissSuggestion("facilityInfo.facilityName"));
+    expect(result.current.entry).toEqual(edited);
+    expect(formRef.current?.getValues("facilityInfo.facilityName")).toBe("JANE DOE");
+
+    act(() => {
+      vi.advanceTimersByTime(PROVENANCE_SAVE_DEBOUNCE_MS);
+    });
+    expect(lastPatchBody().fieldProvenance["facilityInfo.facilityName"]).toEqual(edited);
+  });
+
+  it("acceptSuggestion drops the remembered prior entry along with the chip", () => {
+    const formRef: FormRef = { current: null };
+    const { result } = renderHook(() => useProvenance("facilityInfo.facilityName"), {
+      wrapper: makeWrapper({
+        formRef,
+        facility: { facilityName: "JANE DOE" },
+        initial: {
+          "facilityInfo.facilityName": {
+            ...entry({ state: "suggested", value: "J SMITH", source: "permit" }),
+            prior: entry({ state: "edited" }),
+          },
+        },
+      }),
+    });
+    act(() => result.current.acceptSuggestion("facilityInfo.facilityName"));
+    expect(formRef.current?.getValues("facilityInfo.facilityName")).toBe("J SMITH");
+    expect(result.current.entry).toMatchObject({ state: "prefilled", value: "J SMITH" });
+    expect(result.current.entry).not.toHaveProperty("prior");
+  });
+
   it("acceptSuggestion writes the value into the form and marks the entry prefilled", () => {
     const formRef: FormRef = { current: null };
     const { result } = renderHook(() => useProvenance("designFlow.numberOfBedrooms"), {

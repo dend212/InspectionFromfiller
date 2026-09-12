@@ -21,7 +21,7 @@ export const provenanceValueSchema = z.union([
   z.array(z.string().max(500)).max(100),
 ]);
 
-export const provenanceEntrySchema = z.object({
+const provenanceEntryBaseSchema = z.object({
   source: z.enum(["assessor", "permit", "listing", "scan"]),
   state: z.enum(["prefilled", "suggested", "edited", "verified"]),
   kind: z.enum(["fill", "warning"]),
@@ -34,6 +34,11 @@ export const provenanceEntrySchema = z.object({
   page: z.number().int().positive().optional(),
   runId: z.string().max(64).optional(),
   at: z.string().max(40),
+});
+
+/** `prior` is the entry an edited field had before a later run re-suggested it (one level only) */
+export const provenanceEntrySchema = provenanceEntryBaseSchema.extend({
+  prior: provenanceEntryBaseSchema.optional(),
 });
 
 /** Keys are react-hook-form dotted paths: "facilityInfo.waterSource", "septicTank.tanks.0.tankCapacity" */
