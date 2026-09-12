@@ -63,4 +63,16 @@ describe("toInspectionRecordDTO (phase 2)", () => {
     expect(isAbandonmentDocType("abandonment")).toBe(true);
     expect(isAbandonmentDocType("NOTICE OF TRANSFER")).toBe(false);
   });
+
+  it("flags abandonment from the extracted facts even when the EDMS type is PERMIT", async () => {
+    const { emptyPermitFacts } = await import("@/lib/ai/permit-extraction-schema");
+    const dto = toInspectionRecordDTO({
+      ...ROW,
+      docType: "PERMIT",
+      extractionStatus: "done",
+      extracted: { ...emptyPermitFacts(), isAbandonment: true },
+    });
+    expect(dto.isAbandonment).toBe(true);
+    expect(toInspectionRecordDTO({ ...ROW, docType: "PERMIT" }).isAbandonment).toBe(false);
+  });
 });

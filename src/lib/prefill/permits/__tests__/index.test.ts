@@ -11,9 +11,14 @@ import {
   runPermitsSelection,
   runPermitsStage,
 } from "../index";
+import { withExtraction } from "../with-extraction";
 
 // index.ts → fetch-document.ts → run-store.ts → Drizzle; keep the DB out of the test process
 vi.mock("@/lib/prefill/run-store", () => ({ createRecordRow: vi.fn() }));
+// phase 3's hook reloads the run's rows through run-store (mocked above) — pass the stored result through
+vi.mock("../with-extraction", () => ({
+  withExtraction: vi.fn(async (_ctx: unknown, result: unknown) => result),
+}));
 
 function hit(over: Partial<PermitCandidate> & { permitNumber: string; docType: string }): SearchHit {
   const candidate: PermitCandidate = {
@@ -377,6 +382,29 @@ describe("runPermitsStage", () => {
     expect(deps.storeDocument).toHaveBeenCalledTimes(1);
     expect(result.stage.status).toBe("done");
     expect(result.stage.summary).toContain("1 not downloaded (out of time)");
+  });
+
+  it("hands the stored result to phase 3's withExtraction on the initial run and on selection", async () => {
+    vi.mocked(withExtraction).mockClear();
+    const deps = makeDeps({
+      searchPermits: vi.fn().mockResolvedValue({
+        kind: "found",
+        via: "apn",
+        hits: [PERMIT],
+        searched: ["APN 200-08-079"],
+        failedArchives: [],
+      }),
+    });
+    const result = await runPermitsStage(input, ctx, deps);
+    expect(result.stage.status).toBe("done");
+    expect(withExtraction).toHaveBeenCalledTimes(1);
+    expect(withExtraction).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({ stage: expect.objectContaining({ status: "done" }) }),
+    );
+
+    await runPermitsSelection(input, ctx, [PERMIT.candidate.key], deps);
+    expect(withExtraction).toHaveBeenCalledTimes(2);
   });
 
   describe("failed archives (A8)", () => {

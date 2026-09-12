@@ -3,9 +3,9 @@
  * Permits prefill stage (spec §5.2): search both EDMS archives, rank the
  * documents, download them into storage, and summarise for the tile.
  *
- * Never throws — every failure becomes a stage status. Phase 3 adds the
- * extraction step after `storeHits`; in this phase every stored document is
- * left at `extraction_status = "pending"` (or "skipped" / "failed").
+ * Never throws — every failure becomes a stage status. Every stored document
+ * is written at `extraction_status = "pending"` (or "skipped" / "failed");
+ * phase 3's `withExtraction` then reads the pending ones at the end of `storeHits`.
  */
 
 import type { StageContext, StageResult } from "@/lib/prefill/stage";
@@ -24,6 +24,7 @@ import { isAbandonmentDocType, isExtractableDocType, rankForExtraction } from ".
 import { EDMS_ARCHIVES } from "./edms-client";
 import { type StoreDocumentInput, type StoreDocumentResult, storeDocument } from "./fetch-document";
 import { type PermitSearchOutcome, searchPermits } from "./search";
+import { withExtraction } from "./with-extraction";
 
 export const EDMS_LINKS: StageLink[] = [
   { label: "Open on Maricopa EDMS", url: EDMS_ARCHIVES.env.searchPageUrl },
@@ -227,10 +228,11 @@ async function storeHits(
     ),
   ];
 
-  return {
+  // phase 3: read the pending documents and fold their proposals into the result
+  return withExtraction(ctx, {
     stage: finishStage(clock, { status: "done", summary: parts.join(SUMMARY_SEPARATOR) }),
     proposals,
-  };
+  });
 }
 
 export async function runPermitsStage(

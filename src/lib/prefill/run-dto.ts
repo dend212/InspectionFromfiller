@@ -1,3 +1,4 @@
+import type { PermitFacts } from "@/lib/ai/permit-extraction-schema";
 import { isAbandonmentDocType } from "./permits/doc-types";
 import type { InspectionRecordRow, PrefillRunRow } from "./run-store";
 import { listRecordRows, loadLatestRunRow, loadRunRow } from "./run-store";
@@ -32,7 +33,9 @@ export function toInspectionRecordDTO(row: InspectionRecordRow): InspectionRecor
     selected: row.selected,
     extractionStatus: row.extractionStatus as ExtractionStatus,
     extractionError: row.extractionError,
-    isAbandonment: isAbandonmentDocType(row.docType),
+    // the EDMS type, or (phase 3) what the model read in a document filed under another type
+    isAbandonment:
+      isAbandonmentDocType(row.docType) || (row.extracted as PermitFacts | null)?.isAbandonment === true,
     // "" = never stored (over 25 MB / download failed) — the tile hides the link, the route 404s
     downloadUrl: row.storagePath ? `/api/inspections/${row.inspectionId}/records/${row.id}` : "",
   };
