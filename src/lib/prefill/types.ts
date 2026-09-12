@@ -28,6 +28,12 @@ export interface ProvenanceEntry {
   runId?: string;
   /** ISO timestamp of when the entry was written/updated */
   at: string;
+  /**
+   * Only on a "suggested" entry that replaced an "edited" one: the user's entry as it was
+   * before a later run proposed a different value. Dismissing the chip restores it
+   * verbatim; accepting drops it. Never nested.
+   */
+  prior?: Omit<ProvenanceEntry, "prior">;
 }
 
 /** Keyed by dotted form field path, e.g. "septicTank.tankCapacity" */

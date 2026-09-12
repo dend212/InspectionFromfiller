@@ -33,6 +33,19 @@ export function isEmptyValue(v: unknown): boolean {
   return false;
 }
 
+type UserEntry = Omit<ProvenanceEntry, "prior">;
+
+/**
+ * The entry the user is standing on: a "suggested" entry that parked an edited one
+ * (see ProvenanceEntry.prior) stands for that edited entry until the chip is resolved.
+ */
+function userEntryOf(existing: ProvenanceEntry | undefined): UserEntry | undefined {
+  if (!existing) return undefined;
+  if (existing.state === "suggested" && existing.prior) return existing.prior;
+  const { prior: _nested, ...rest } = existing;
+  return rest;
+}
+
 /** Loose equality for form values: trimmed strings, element-wise arrays, strict otherwise */
 export function valuesEqual(a: unknown, b: unknown): boolean {
   if (typeof a === "string" && typeof b === "string") return a.trim() === b.trim();
@@ -44,12 +57,16 @@ export function valuesEqual(a: unknown, b: unknown): boolean {
 
 /**
  * Pure. Applies the spec §7 merge rules:
+ *  - existing "verified" entry → the proposal (fill or warning) is dropped; the user confirmed the value
+ *  - existing "edited" entry → left untouched when the field already holds the proposed value;
+ *    otherwise the proposal becomes "suggested" with the edited entry kept in `prior` so
+ *    dismissing the chip restores it. A later run replaces such a suggestion but carries
+ *    the same `prior` forward (never nested) and treats it as the edited entry it stands for.
  *  - kind "warning" → provenance entry state "suggested", no fill
  *  - confidence ≥ PREFILL_FILL_THRESHOLD and current value empty/default → fill + "prefilled"
  *  - otherwise → "suggested"
- *  - existing "verified"/"edited" entry → new proposal becomes "suggested", unless the field
- *    already holds the proposed value (then the user's entry is left untouched, no suggestion)
- *  - existing "prefilled" entry is replaced only if the current value still equals its proposed value and the new confidence is higher
+ *  - existing "prefilled" entry is replaced only if the current value still equals its proposed
+ *    value and the new confidence is higher; the same value with no better confidence is a no-op
  *  - a field that already holds the proposed value gets a "prefilled" entry without a fill (nothing is overwritten)
  */
 export function mergeProposals(
@@ -82,12 +99,22 @@ export function mergeProposals(
       }
     };
 
-    if (proposal.kind === "warning") {
-      next[fieldPath] = { ...base, state: "suggested", value: "" };
+    const userEntry = userEntryOf(existing);
+    if (userEntry?.state === "verified") {
       continue;
     }
-    if (existing?.state === "verified" || existing?.state === "edited") {
-      if (!valuesEqual(current, proposal.value)) suggest();
+    if (userEntry?.state === "edited") {
+      if (proposal.kind !== "warning" && valuesEqual(current, proposal.value)) continue;
+      next[fieldPath] = {
+        ...base,
+        state: "suggested",
+        value: proposal.kind === "warning" ? "" : proposal.value,
+        prior: userEntry,
+      };
+      continue;
+    }
+    if (proposal.kind === "warning") {
+      next[fieldPath] = { ...base, state: "suggested", value: "" };
       continue;
     }
     if (proposal.provenance.confidence < PREFILL_FILL_THRESHOLD) {

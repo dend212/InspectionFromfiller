@@ -16,6 +16,7 @@ export interface ProvenanceContextValue {
   clear(fieldPath: string): void;
   /** Writes the suggested value into the form and marks the entry prefilled (warnings are just removed) */
   acceptSuggestion(fieldPath: string): void;
+  /** Removes the chip; a suggestion that replaced an edited entry restores that entry instead */
   dismissSuggestion(fieldPath: string): void;
   /** Merge entries in — used by the prefill hook, the APN lookup and the scan flow */
   setMany(entries: FieldProvenance): void;
@@ -153,7 +154,8 @@ export function ProvenanceProvider({
       update((prev) => {
         const current = prev[key];
         if (!current) return prev;
-        return { ...prev, [key]: { ...current, state: "verified", at: new Date().toISOString() } };
+        const { prior: _prior, ...rest } = current;
+        return { ...prev, [key]: { ...rest, state: "verified", at: new Date().toISOString() } };
       });
     },
     [update],
@@ -189,10 +191,28 @@ export function ProvenanceProvider({
       update((prev) => {
         const latest = prev[key];
         if (!latest) return prev;
-        return { ...prev, [key]: { ...latest, state: "prefilled", at: new Date().toISOString() } };
+        const { prior: _prior, ...rest } = latest;
+        return { ...prev, [key]: { ...rest, state: "prefilled", at: new Date().toISOString() } };
       });
     },
     [form, update, clear],
+  );
+
+  const dismissSuggestion = React.useCallback(
+    (fieldPath: string) => {
+      const key = normalizeFieldPath(fieldPath);
+      update((prev) => {
+        const current = prev[key];
+        if (!current) return prev;
+        // The user's edited entry was only parked behind the chip — bring it back as it was
+        if (current.state === "suggested" && current.prior) {
+          return { ...prev, [key]: current.prior };
+        }
+        const { [key]: _removed, ...rest } = prev;
+        return rest;
+      });
+    },
+    [update],
   );
 
   const setMany = React.useCallback(
@@ -241,10 +261,10 @@ export function ProvenanceProvider({
       verify,
       clear,
       acceptSuggestion,
-      dismissSuggestion: clear,
+      dismissSuggestion,
       setMany,
     }),
-    [provenance, readOnly, get, verify, clear, acceptSuggestion, setMany],
+    [provenance, readOnly, get, verify, clear, acceptSuggestion, dismissSuggestion, setMany],
   );
 
   return <ProvenanceContext.Provider value={value}>{children}</ProvenanceContext.Provider>;

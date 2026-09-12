@@ -41,6 +41,18 @@ describe("provenanceEntrySchema", () => {
     expect(provenanceEntrySchema.safeParse(minimal).success).toBe(true);
   });
 
+  it("accepts a remembered prior entry (an edited field re-suggested by a later run)", () => {
+    const prior = { ...VALID, state: "edited", source: "scan", confidence: 0.8 };
+    const parsed = provenanceEntrySchema.safeParse({ ...VALID, state: "suggested", prior });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.prior).toEqual(prior);
+  });
+
+  it("rejects a prior entry that is itself invalid", () => {
+    const bad = { ...VALID, state: "suggested", prior: { ...VALID, state: "maybe" } };
+    expect(provenanceEntrySchema.safeParse(bad).success).toBe(false);
+  });
+
   it("rejects unknown sources, states and kinds", () => {
     expect(provenanceEntrySchema.safeParse({ ...VALID, source: "zillow" }).success).toBe(false);
     expect(provenanceEntrySchema.safeParse({ ...VALID, state: "maybe" }).success).toBe(false);
