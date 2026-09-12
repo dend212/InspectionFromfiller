@@ -184,6 +184,10 @@ describe("PermitRecordsList — records", () => {
 });
 
 describe("PermitRecordsList — candidate picker", () => {
+  // Same property (8911 E PRINCESS): blank-compatible city/zip/apn/direction
+  // must merge into ONE group per Amendment A9 — a legacy row with no
+  // city/ZIP/APN and an eplpav row with no street direction still belong to
+  // the same house, so they must not become separate picker options.
   const candidates = [
     candidate({
       permitNumber: "OWR-22-01478",
@@ -203,12 +207,45 @@ describe("PermitRecordsList — candidate picker", () => {
     }),
   ];
 
-  it("groups candidates by property and lists their documents", () => {
+  // Three genuinely distinct properties (different house number + street) —
+  // for exercising the multi-radio picker itself.
+  const distinctCandidates = [
+    candidate({
+      permitNumber: "OWR-22-01478",
+      docType: "NOTICE OF TRANSFER",
+      docDate: "2022-03-28",
+      apn: "218-06-099A",
+    }),
+    candidate({
+      permitNumber: "OWR-20-04198",
+      docType: "NOTICE OF TRANSFER",
+      docDate: "2020-10-27",
+      streetAddress: "1500 W CACTUS RD",
+      city: "PHOENIX",
+      zip: "85021",
+      apn: "160-14-002",
+    }),
+    candidate({
+      permitNumber: "743691",
+      docType: "PERMIT",
+      docDate: "2015-09-11",
+      streetAddress: "302 N MAIN ST",
+      city: "MESA",
+      zip: "85201",
+      apn: "138-05-041",
+    }),
+  ];
+
+  it("groups candidates by property and lists their documents (A9: blank-compatible attrs merge)", () => {
     const groups = groupCandidates(candidates);
-    expect(groups).toHaveLength(3);
+    expect(groups).toHaveLength(1);
     expect(groups[0].label).toBe("8911 E PRINCESS DR, MESA 85207");
     expect(groups[0].detail).toContain("APN 218-06-099A");
-    expect(groups[0].candidates.map((c) => c.permitNumber)).toEqual(["OWR-22-01478"]);
+    expect(groups[0].candidates.map((c) => c.permitNumber)).toEqual([
+      "OWR-22-01478",
+      "OWR-20-04198",
+      "743691",
+    ]);
   });
 
   it("renders a radio per property group and sends the chosen group's keys", async () => {
@@ -218,7 +255,7 @@ describe("PermitRecordsList — candidate picker", () => {
       <PermitRecordsList
         run={run({
           status: "awaiting_selection",
-          candidates,
+          candidates: distinctCandidates,
           stages: {
             ...emptyStages(),
             permits: { status: "pending", links: [], summary: "3 possible permits — pick the right one" },
@@ -237,7 +274,7 @@ describe("PermitRecordsList — candidate picker", () => {
     await user.click(radios[1]);
     expect(useSelected).toBeEnabled();
     await user.click(useSelected);
-    expect(onSelect).toHaveBeenCalledWith([candidates[1].key]);
+    expect(onSelect).toHaveBeenCalledWith([distinctCandidates[1].key]);
   });
 
   it("caps a large group at MAX_DOCUMENTS_PER_RUN keys in extraction rank order", async () => {

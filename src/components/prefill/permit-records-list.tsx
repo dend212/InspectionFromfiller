@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { rankForExtraction } from "@/lib/prefill/permits/doc-types";
+import { groupByProperty } from "@/lib/prefill/permits/search";
 import {
   type InspectionRecordDTO,
   MAX_DOCUMENTS_PER_RUN,
@@ -43,41 +44,53 @@ export function formatBytes(n?: number | null): string {
   return `${Math.round(n / 1024)} KB`;
 }
 
-/**
- * Identity for the picker's property groups. NOTE: this is deliberately an
- * exact match on the raw candidate fields (not `groupByProperty` from
- * ./permits/search, which fuzzy-merges rows sharing a house number + street
- * even when city/ZIP/APN are only blank-compatible — right for the search
- * fallback's auto-select heuristic, wrong here: two rows with the same
- * street address but a different confirmed APN must stay distinct options in
- * the picker rather than silently collapse into one).
- */
-function candidateIdentity(c: PermitCandidate): string {
-  return [c.streetAddress ?? "", c.city ?? "", c.zip ?? "", c.apn ?? ""].join("|");
+/** First non-empty value for `pick` across the group's members, in member order. */
+function firstPopulated<T>(
+  members: PermitCandidate[],
+  pick: (c: PermitCandidate) => T | null | undefined,
+): T | undefined {
+  for (const member of members) {
+    const value = pick(member);
+    if (value !== null && value !== undefined && value !== "") return value;
+  }
+  return undefined;
 }
 
+/**
+ * Groups candidates into properties via `groupByProperty` (./permits/search) —
+ * the same house-number+street identity the search fallback's auto-select
+ * uses, per Amendment A9: a row joins a group unless a populated attribute
+ * (direction, city, ZIP5, formatted APN) contradicts one already in the
+ * group; blank is compatible. Using a stricter exact-field match here would
+ * split a single property across legacy rows with blank city/ZIP/APN and
+ * eplpav rows (no street direction) into separate picker options, silently
+ * dropping whichever ones the user didn't click.
+ */
 export function groupCandidates(candidates: PermitCandidate[]): CandidateGroup[] {
-  const groups = new Map<string, CandidateGroup>();
-  for (const c of candidates) {
-    const key = candidateIdentity(c);
-    let group = groups.get(key);
-    if (!group) {
-      const place = [c.streetAddress, [c.city, c.zip].filter(Boolean).join(" ")]
-        .filter(Boolean)
-        .join(", ");
-      const detail = [
-        c.subdivision ? `Subdivision ${c.subdivision}` : "",
-        c.lot ? `Lot ${c.lot}` : "",
-        c.apn ? `APN ${c.apn}` : "No APN on record",
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      group = { key, label: place || "Address not recorded", detail, candidates: [] };
-      groups.set(key, group);
-    }
-    group.candidates.push(c);
-  }
-  return [...groups.values()];
+  return groupByProperty(candidates).map((members) => {
+    const streetAddress = firstPopulated(members, (c) => c.streetAddress);
+    const city = firstPopulated(members, (c) => c.city);
+    const zip = firstPopulated(members, (c) => c.zip);
+    const subdivision = firstPopulated(members, (c) => c.subdivision);
+    const lot = firstPopulated(members, (c) => c.lot);
+    const apn = firstPopulated(members, (c) => c.apn);
+    const place = [streetAddress, [city, zip].filter(Boolean).join(" ")]
+      .filter(Boolean)
+      .join(", ");
+    const detail = [
+      subdivision ? `Subdivision ${subdivision}` : "",
+      lot ? `Lot ${lot}` : "",
+      apn ? `APN ${apn}` : "No APN on record",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return {
+      key: members[0].key,
+      label: place || "Address not recorded",
+      detail,
+      candidates: members,
+    };
+  });
 }
 
 function statusLabel(r: InspectionRecordDTO): string {
