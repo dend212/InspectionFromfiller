@@ -64,14 +64,17 @@ describe("buildApifyUrl", () => {
     expect(url.searchParams.get("token")).toBe("tok");
     expect(url.searchParams.get("timeout")).toBe("60");
     expect(url.searchParams.get("memory")).toBe("1024");
-    expect(APIFY_ACTOR_ID).toBe("sian.agency~zillow-property-detail-scraper");
+    expect(APIFY_ACTOR_ID).toBe("api-ninja~zillow-property-details-scraper");
+    expect(url.searchParams.has("maxTotalChargeUsd")).toBe(false);
   });
 });
 
 describe("zillowApifyProvider.lookup", () => {
-  it("POSTs { addresses: [full] } and returns the first item normalised", async () => {
+  it("POSTs { property: [full] } and returns the first item normalised", async () => {
     mockFetch.mockResolvedValue(
-      jsonResponse([{ hdpUrl: "https://www.zillow.com/homedetails/1_zpid/", waterSource: ["Public"], bedrooms: 3 }]),
+      jsonResponse([
+        { zpid: 1, hdpUrl: "/homedetails/1_zpid/", bedrooms: 3, resoFacts: { waterSource: ["City Water"], sewer: ["Septic Tank"] } },
+      ]),
     );
 
     const facts = await zillowApifyProvider.lookup(ADDRESS, new AbortController().signal);
@@ -81,9 +84,14 @@ describe("zillowApifyProvider.lookup", () => {
     expect(url).toBe(buildApifyUrl("apify_test_token_123"));
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
-    expect(JSON.parse(init.body as string)).toEqual({ addresses: [FULL] });
+    expect(JSON.parse(init.body as string)).toEqual({ property: [FULL] });
     expect(init.signal).toBeInstanceOf(AbortSignal);
-    expect(facts).toMatchObject({ url: "https://www.zillow.com/homedetails/1_zpid/", waterSource: "municipal", bedrooms: 3 });
+    expect(facts).toMatchObject({
+      url: "https://www.zillow.com/homedetails/1_zpid/",
+      waterSource: "municipal",
+      sewer: "septic",
+      bedrooms: 3,
+    });
   });
 
   it("returns null for an empty dataset (not found — Apify does not charge)", async () => {

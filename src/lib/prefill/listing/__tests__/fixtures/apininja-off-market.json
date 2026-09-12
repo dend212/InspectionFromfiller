@@ -1,0 +1,39 @@
+{
+  "zpid": 12345678,
+  "hdpUrl": "/homedetails/1234-E-Example-Ln-Cave-Creek-AZ-85331/12345678_zpid/",
+  "homeStatus": "OTHER",
+  "keystoneHomeStatus": "OffMarket",
+  "homeType": "SINGLE_FAMILY",
+  "streetAddress": "1234 E Example Ln",
+  "city": "Cave Creek",
+  "state": "AZ",
+  "zipcode": "85331",
+  "county": "Maricopa County",
+  "bedrooms": 3,
+  "bathrooms": 2.5,
+  "yearBuilt": 1998,
+  "lotSize": null,
+  "lotAreaValue": 0.92,
+  "lotAreaUnits": "Acres",
+  "livingArea": 2105,
+  "price": null,
+  "daysOnZillow": -1,
+  "listingDataSource": "Legacy",
+  "resoFacts": {
+    "waterSource": null,
+    "sewer": null,
+    "bedrooms": 3,
+    "bathrooms": 2.5,
+    "yearBuilt": 1998,
+    "lotSize": "0.92 Acres",
+    "homeType": "SingleFamily",
+    "heating": null,
+    "cooling": null,
+    "parcelNumber": "21112345",
+    "atAGlanceFacts": [
+      { "factLabel": "Type", "factValue": "Single Family Residence" },
+      { "factLabel": "Year Built", "factValue": "1998" },
+      { "factLabel": "Lot", "factValue": "0.92 Acres" }
+    ]
+  }
+}
