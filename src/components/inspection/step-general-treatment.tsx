@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
 import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
 import { PhotoCapture } from "@/components/inspection/photo-capture";
+import { ProvenanceBadge } from "@/components/prefill/provenance-badge";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -208,7 +209,12 @@ export function StepGeneralTreatment({ inspectionId, readOnly = false }: StepGen
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
-            <h3 className="text-lg font-medium">Alternative Treatment System</h3>
+            {/* The Switch has no FormLabel, so the provenance badge sits beside the heading
+                (the FormFieldGroup pattern); the chip is still rendered by the FormItem. */}
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-medium">Alternative Treatment System</h3>
+              <ProvenanceBadge fieldPath="generalTreatment.alternativeSystem" />
+            </div>
             <p className="text-sm text-muted-foreground">
               Show fields for non-standard system types
             </p>
