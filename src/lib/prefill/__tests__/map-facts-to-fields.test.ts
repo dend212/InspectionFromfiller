@@ -295,6 +295,40 @@ describe("mapPermitFacts — document authority (Dove Valley)", () => {
     for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(2);
   });
 
+  it("captions a NOT's tank count, disposal type and site-plan notes as a transfer record, never as a permit", () => {
+    const notWithSystem: PermitFacts = {
+      ...notFacts,
+      tanks: [
+        {
+          capacityGal: { value: 1250, confidence: 0.9, page: 3, evidence: "1250 gal tank", handwritten: false },
+          material: null,
+          model: null,
+          dimensions: null,
+        },
+      ],
+      disposal: {
+        type: { value: "seepage_pit", confidence: 0.88, page: 3, evidence: "Seepage pit", handwritten: false },
+        count: { value: 2, confidence: 0.88, page: 3, evidence: "Qty 2", handwritten: false },
+        dimensions: null,
+        absorptionAreaSqft: null,
+      },
+      notes: "Site plan attached to the transfer packet",
+    };
+    const all = mapPermitFacts(notWithSystem, NOT_REC, { now: NOW });
+    const props = byPath(all);
+    for (const p of all) expect(p.provenance.explanation, p.fieldPath).not.toMatch(/^Permit /);
+    expect(props["facilityInfo.hasSitePlan"].provenance.explanation).toBe(
+      "Notice of Transfer OWR-23-02001 · notes mention a site plan (transfer record — secondary source)",
+    );
+    expect(props["septicTank.numberOfTanks"].provenance.explanation).toBe(
+      "Notice of Transfer OWR-23-02001 · lists 1 tank (p.3) (transfer record — secondary source)",
+    );
+    expect(props["disposalWorks.disposalType"].provenance.explanation).toBe(
+      "Notice of Transfer OWR-23-02001 · p.3 · × 2 (transfer record — secondary source)",
+    );
+    for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(2);
+  });
+
   it("derives the age from a PERMIT-class record the model classed `other` and ranks it 0", () => {
     const all = mapPermitFacts(permitFacts, PERMIT_REC, { now: NOW });
     const props = byPath(all);

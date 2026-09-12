@@ -82,6 +82,9 @@ export function mapPermitFacts(
   // A transfer record's facts are secondary: a permit-class record beats them in dedupeProposals
   const transfer = isTransferRecord(facts.documentKind, record.docType);
   const authority: ProposalAuthority = { docRank: permitDocRank(facts.documentKind, record.docType) };
+  // Caption prefix/suffix shared by prov() and the explanation overrides below — a NOT is never "Permit N"
+  const docLabel = transfer ? `Notice of Transfer ${record.permitNumber}` : `Permit ${permitNo}`;
+  const secondary = transfer ? " (transfer record — secondary source)" : "";
 
   const prov = (fact: Fact<unknown>, extra: Partial<Provenance> = {}): Provenance => ({
     source: "permit",
@@ -134,7 +137,7 @@ export function mapPermitFacts(
     fill("facilityInfo.hasSitePlan", true, {
       source: "permit",
       confidence: 0.6,
-      explanation: `Permit ${permitNo} · notes mention a site plan`,
+      explanation: `${docLabel} · notes mention a site plan${secondary}`,
       evidence: facts.notes.slice(0, 300),
       sourceUrl: url(1),
       recordId: record.id,
@@ -182,7 +185,7 @@ export function mapPermitFacts(
         "septicTank.numberOfTanks",
         String(n),
         prov(best, {
-          explanation: `Permit ${permitNo} · ${label} lists ${n} tank${n === 1 ? "" : "s"} (p.${best.page})`,
+          explanation: `${docLabel} · ${transfer ? "" : `${label} `}lists ${n} tank${n === 1 ? "" : "s"} (p.${best.page})${secondary}`,
         }),
       );
     }
@@ -194,7 +197,7 @@ export function mapPermitFacts(
       facts.disposal.count ? `× ${facts.disposal.count.value}` : "",
       facts.disposal.dimensions ? facts.disposal.dimensions.value : "",
     ].filter(Boolean);
-    const explanation = `Permit ${permitNo} · ${label} p.${facts.disposal.type.page}${detail.length ? ` · ${detail.join(" · ")}` : ""}`;
+    const explanation = `${docLabel} · ${transfer ? "" : `${label} `}p.${facts.disposal.type.page}${detail.length ? ` · ${detail.join(" · ")}` : ""}${secondary}`;
     fill("disposalWorks.disposalType", facts.disposal.type.value, prov(facts.disposal.type, { explanation }));
   }
 
