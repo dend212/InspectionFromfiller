@@ -163,6 +163,52 @@ describe("ProvenanceBadge", () => {
     });
   });
 
+  it("a hover peek that closes on its timer leaves focus in the field the user is typing in", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness initial={{ [FIELD]: ENTRY }}>
+        <input aria-label="Tank capacity" />
+        <ProvenanceBadge fieldPath={FIELD} />
+      </Harness>,
+    );
+    const input = screen.getByRole("textbox", { name: "Tank capacity" });
+    const badge = screen.getByRole("button", { name: /prefilled from permit records/i });
+    await user.click(input);
+    expect(input).toHaveFocus();
+    await user.hover(badge);
+    expect(await screen.findByText("Permit records")).toBeInTheDocument();
+    expect(input).toHaveFocus();
+    await user.unhover(badge);
+    await waitFor(() => expect(screen.queryByText("Permit records")).toBeNull(), {
+      timeout: BADGE_HOVER_CLOSE_DELAY_MS * 5,
+    });
+    // Radix returns focus to the trigger on close unless told not to: the user never left the
+    // input, so the badge must not grab focus out from under them
+    await new Promise((r) => setTimeout(r, 20));
+    expect(input).toHaveFocus();
+    expect(badge).not.toHaveFocus();
+  });
+
+  it("Escape while peeked closes the popover and leaves focus in the field", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness initial={{ [FIELD]: ENTRY }}>
+        <input aria-label="Tank capacity" />
+        <ProvenanceBadge fieldPath={FIELD} />
+      </Harness>,
+    );
+    const input = screen.getByRole("textbox", { name: "Tank capacity" });
+    const badge = screen.getByRole("button", { name: /prefilled from permit records/i });
+    await user.click(input);
+    await user.hover(badge);
+    expect(await screen.findByText("Permit records")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByText("Permit records")).toBeNull());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(input).toHaveFocus();
+    expect(badge).not.toHaveFocus();
+  });
+
   it("stays open while the pointer is inside the popover so Verify / Clear can be reached from a hover", async () => {
     const user = userEvent.setup();
     renderBadge(ENTRY);

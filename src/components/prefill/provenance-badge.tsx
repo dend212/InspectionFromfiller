@@ -58,6 +58,12 @@ export function ProvenanceBadge({ fieldPath }: ProvenanceBadgeProps) {
   const pinnedRef = React.useRef(false);
   /** Set while Radix hands focus back to the badge on close — that focus must not re-open it */
   const returningFocusRef = React.useRef(false);
+  /**
+   * Whether the card held focus at the moment it closed. Captured in close(), because by the
+   * time Radix asks about close auto-focus the card is already out of the DOM (its ref is null
+   * and document.activeElement has fallen back to body).
+   */
+  const focusWasInCardRef = React.useRef(false);
   const contentRef = React.useRef<HTMLDivElement>(null);
   const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -70,6 +76,7 @@ export function ProvenanceBadge({ fieldPath }: ProvenanceBadgeProps) {
   const close = React.useCallback(() => {
     cancelClose();
     pinnedRef.current = false;
+    focusWasInCardRef.current = contentRef.current?.contains(document.activeElement) ?? false;
     setOpen(false);
   }, [cancelClose]);
   /** Close after the grace period unless pinned (or the pointer/focus came back) */
@@ -78,9 +85,9 @@ export function ProvenanceBadge({ fieldPath }: ProvenanceBadgeProps) {
     cancelClose();
     closeTimer.current = setTimeout(() => {
       closeTimer.current = null;
-      if (!pinnedRef.current) setOpen(false);
+      if (!pinnedRef.current) close();
     }, BADGE_HOVER_CLOSE_DELAY_MS);
-  }, [cancelClose]);
+  }, [cancelClose, close]);
   const peek = React.useCallback(() => {
     cancelClose();
     setOpen(true);
@@ -167,10 +174,18 @@ export function ProvenanceBadge({ fieldPath }: ProvenanceBadgeProps) {
           // A peek must not steal focus from the field the user is on
           if (!pinnedRef.current) event.preventDefault();
         }}
-        onCloseAutoFocus={() => {
-          // Focus is about to return to the badge (Escape, Verify, Clear): swallow that one
-          // focus event so the popover does not peek straight back open. Cleared on the next
-          // tick in case focus goes elsewhere (it was never on the badge to begin with).
+        onCloseAutoFocus={(event) => {
+          // Non-modal Radix content focuses the trigger on close unless something interacted
+          // outside. A peek that closes on its timer, or Escape while peeked, is neither: the
+          // user is still in the field they were typing in, so leave focus there.
+          if (!focusWasInCardRef.current) {
+            event.preventDefault();
+            return;
+          }
+          focusWasInCardRef.current = false;
+          // Focus was inside the card (keyboard pin + Escape, Verify, Clear) and is about to
+          // return to the badge: swallow that one focus event so the popover does not peek
+          // straight back open. Cleared on the next tick in case focus goes elsewhere.
           returningFocusRef.current = true;
           setTimeout(() => {
             returningFocusRef.current = false;
