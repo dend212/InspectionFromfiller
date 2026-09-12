@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  date,
   integer,
   jsonb,
   pgEnum,
@@ -75,6 +76,9 @@ export const inspections = pgTable("inspections", {
   completedAt: timestamp("completed_at"),
   // Review workflow columns
   reviewNotes: text("review_notes"),
+  // Per-field prefill provenance sidecar (see src/lib/prefill/types.ts FieldProvenance).
+  // Written only through PATCH /api/inspections/[id]/provenance.
+  fieldProvenance: jsonb("field_provenance").notNull().default({}),
   finalizedPdfPath: text("finalized_pdf_path"),
   reviewedBy: uuid("reviewed_by").references(() => profiles.id),
   // External integration (Workiz via n8n)
@@ -121,6 +125,48 @@ export const inspectionSummaries = pgTable("inspection_summaries", {
   expiresAt: timestamp("expires_at").notNull(),
 });
 
+// Property-records prefill runs — one row per POST /api/inspections/[id]/prefill
+export const inspectionPrefillRuns = pgTable("inspection_prefill_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  inspectionId: uuid("inspection_id")
+    .references(() => inspections.id, { onDelete: "cascade" })
+    .notNull(),
+  trigger: text("trigger").notNull(), // apn_lookup | manual | webhook
+  status: text("status").notNull().default("queued"),
+  input: jsonb("input").notNull().default({}),
+  stages: jsonb("stages").notNull().default({}),
+  proposals: jsonb("proposals").notNull().default([]),
+  candidates: jsonb("candidates").notNull().default([]),
+  error: text("error"),
+  appliedAt: timestamp("applied_at"),
+  createdBy: uuid("created_by").references(() => profiles.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  finishedAt: timestamp("finished_at"),
+});
+
+// Permit documents downloaded for an inspection (kept out of inspection_media so
+// they can never appear in the report's photo pages)
+export const inspectionRecords = pgTable("inspection_records", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  inspectionId: uuid("inspection_id")
+    .references(() => inspections.id, { onDelete: "cascade" })
+    .notNull(),
+  runId: uuid("run_id").references(() => inspectionPrefillRuns.id, { onDelete: "set null" }),
+  source: text("source").notNull(), // edms_env | edms_eplpav
+  permitNumber: text("permit_number").notNull(),
+  docType: text("doc_type").notNull(),
+  docDate: date("doc_date"),
+  description: text("description"),
+  pageCount: integer("page_count"),
+  sizeBytes: integer("size_bytes"),
+  storagePath: text("storage_path").notNull(),
+  selected: boolean("selected").notNull().default(true),
+  extractionStatus: text("extraction_status").notNull().default("pending"),
+  extractionError: text("extraction_error"),
+  extracted: jsonb("extracted"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Relations
 export const profilesRelations = relations(profiles, ({ many }) => ({
   inspections: many(inspections),
@@ -143,6 +189,8 @@ export const inspectionsRelations = relations(inspections, ({ one, many }) => ({
   media: many(inspectionMedia),
   emails: many(inspectionEmails),
   summaries: many(inspectionSummaries),
+  prefillRuns: many(inspectionPrefillRuns),
+  records: many(inspectionRecords),
 }));
 
 export const inspectionMediaRelations = relations(inspectionMedia, ({ one }) => ({
@@ -171,6 +219,29 @@ export const inspectionSummariesRelations = relations(inspectionSummaries, ({ on
   creator: one(profiles, {
     fields: [inspectionSummaries.createdBy],
     references: [profiles.id],
+  }),
+}));
+
+export const inspectionPrefillRunsRelations = relations(inspectionPrefillRuns, ({ one, many }) => ({
+  inspection: one(inspections, {
+    fields: [inspectionPrefillRuns.inspectionId],
+    references: [inspections.id],
+  }),
+  creator: one(profiles, {
+    fields: [inspectionPrefillRuns.createdBy],
+    references: [profiles.id],
+  }),
+  records: many(inspectionRecords),
+}));
+
+export const inspectionRecordsRelations = relations(inspectionRecords, ({ one }) => ({
+  inspection: one(inspections, {
+    fields: [inspectionRecords.inspectionId],
+    references: [inspections.id],
+  }),
+  run: one(inspectionPrefillRuns, {
+    fields: [inspectionRecords.runId],
+    references: [inspectionPrefillRuns.id],
   }),
 }));
 

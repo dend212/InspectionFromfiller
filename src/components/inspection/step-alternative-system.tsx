@@ -4,9 +4,11 @@ import { useFormContext, useWatch } from "react-hook-form";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  FormCheckboxRow,
   FormControl,
   FormDescription,
   FormField,
+  FormFieldGroup,
   FormItem,
   FormLabel,
   FormMessage,
@@ -307,56 +309,72 @@ export function StepAlternativeSystem({ inspectionId: _inspectionId }: StepAlter
 
       {/* Disposal Works Type */}
       <section className="space-y-3">
-        <h4 className="text-base font-medium">Disposal Works Type</h4>
-        <FormDescription>Select all that apply.</FormDescription>
-        <div className="space-y-2">
-          {ALT_DISPOSAL_TYPES.map((opt) => (
-            <label
-              key={opt.value}
-              className="flex min-h-[56px] cursor-pointer items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent/50"
-            >
-              <span className="text-base font-medium">{opt.label}</span>
-              <Checkbox
-                checked={(altDisposalTypes ?? []).includes(opt.value)}
-                onCheckedChange={(checked) => {
-                  const current = form.getValues("alternativeSystem.altDisposalTypes") ?? [];
-                  form.setValue(
-                    "alternativeSystem.altDisposalTypes",
-                    checked ? [...current, opt.value] : current.filter((v) => v !== opt.value),
-                    { shouldDirty: true },
-                  );
-                }}
-              />
-            </label>
-          ))}
-        </div>
+        {/* One field path, many checkboxes: the group owns the badge + suggestion chip */}
+        <FormFieldGroup
+          name="alternativeSystem.altDisposalTypes"
+          label="Disposal Works Type"
+          labelAs="h4"
+          labelClassName="text-base font-medium"
+          description={<FormDescription>Select all that apply.</FormDescription>}
+          className="space-y-3"
+        >
+          <div className="space-y-2">
+            {ALT_DISPOSAL_TYPES.map((opt) => (
+              <label
+                key={opt.value}
+                className="flex min-h-[56px] cursor-pointer items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent/50"
+              >
+                <span className="text-base font-medium">{opt.label}</span>
+                <Checkbox
+                  checked={(altDisposalTypes ?? []).includes(opt.value)}
+                  onCheckedChange={(checked) => {
+                    const current = form.getValues("alternativeSystem.altDisposalTypes") ?? [];
+                    form.setValue(
+                      "alternativeSystem.altDisposalTypes",
+                      checked ? [...current, opt.value] : current.filter((v) => v !== opt.value),
+                      { shouldDirty: true },
+                    );
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+        </FormFieldGroup>
       </section>
 
       {/* Distribution Method */}
       <section className="space-y-3">
-        <h4 className="text-base font-medium">Method of Distribution</h4>
-        <FormDescription>Select all that apply.</FormDescription>
-        <div className="space-y-2">
-          {ALT_DISTRIBUTION_METHODS.map((opt) => (
-            <label
-              key={opt.value}
-              className="flex min-h-[56px] cursor-pointer items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent/50"
-            >
-              <span className="text-base font-medium">{opt.label}</span>
-              <Checkbox
-                checked={(altDistMethods ?? []).includes(opt.value)}
-                onCheckedChange={(checked) => {
-                  const current = form.getValues("alternativeSystem.altDistributionMethods") ?? [];
-                  form.setValue(
-                    "alternativeSystem.altDistributionMethods",
-                    checked ? [...current, opt.value] : current.filter((v) => v !== opt.value),
-                    { shouldDirty: true },
-                  );
-                }}
-              />
-            </label>
-          ))}
-        </div>
+        {/* One field path, many checkboxes: the group owns the badge + suggestion chip */}
+        <FormFieldGroup
+          name="alternativeSystem.altDistributionMethods"
+          label="Method of Distribution"
+          labelAs="h4"
+          labelClassName="text-base font-medium"
+          description={<FormDescription>Select all that apply.</FormDescription>}
+          className="space-y-3"
+        >
+          <div className="space-y-2">
+            {ALT_DISTRIBUTION_METHODS.map((opt) => (
+              <label
+                key={opt.value}
+                className="flex min-h-[56px] cursor-pointer items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent/50"
+              >
+                <span className="text-base font-medium">{opt.label}</span>
+                <Checkbox
+                  checked={(altDistMethods ?? []).includes(opt.value)}
+                  onCheckedChange={(checked) => {
+                    const current = form.getValues("alternativeSystem.altDistributionMethods") ?? [];
+                    form.setValue(
+                      "alternativeSystem.altDistributionMethods",
+                      checked ? [...current, opt.value] : current.filter((v) => v !== opt.value),
+                      { shouldDirty: true },
+                    );
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+        </FormFieldGroup>
       </section>
 
       {/* Distribution Component Inspection */}
@@ -451,29 +469,37 @@ export function StepAlternativeSystem({ inspectionId: _inspectionId }: StepAlter
 
       {/* Supply Line Material */}
       <section className="space-y-3">
-        <h4 className="text-base font-medium">Supply Line Material</h4>
-        <FormDescription>Select all that apply.</FormDescription>
-        <div className="space-y-2">
-          {ALT_SUPPLY_LINE_MATERIALS.map((opt) => (
-            <label
-              key={opt.value}
-              className="flex min-h-[56px] cursor-pointer items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent/50"
-            >
-              <span className="text-base font-medium">{opt.label}</span>
-              <Checkbox
-                checked={(altSupplyMaterials ?? []).includes(opt.value)}
-                onCheckedChange={(checked) => {
-                  const current = form.getValues("alternativeSystem.altSupplyLineMaterials") ?? [];
-                  form.setValue(
-                    "alternativeSystem.altSupplyLineMaterials",
-                    checked ? [...current, opt.value] : current.filter((v) => v !== opt.value),
-                    { shouldDirty: true },
-                  );
-                }}
-              />
-            </label>
-          ))}
-        </div>
+        {/* One field path, many checkboxes: the group owns the badge + suggestion chip */}
+        <FormFieldGroup
+          name="alternativeSystem.altSupplyLineMaterials"
+          label="Supply Line Material"
+          labelAs="h4"
+          labelClassName="text-base font-medium"
+          description={<FormDescription>Select all that apply.</FormDescription>}
+          className="space-y-3"
+        >
+          <div className="space-y-2">
+            {ALT_SUPPLY_LINE_MATERIALS.map((opt) => (
+              <label
+                key={opt.value}
+                className="flex min-h-[56px] cursor-pointer items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent/50"
+              >
+                <span className="text-base font-medium">{opt.label}</span>
+                <Checkbox
+                  checked={(altSupplyMaterials ?? []).includes(opt.value)}
+                  onCheckedChange={(checked) => {
+                    const current = form.getValues("alternativeSystem.altSupplyLineMaterials") ?? [];
+                    form.setValue(
+                      "alternativeSystem.altSupplyLineMaterials",
+                      checked ? [...current, opt.value] : current.filter((v) => v !== opt.value),
+                      { shouldDirty: true },
+                    );
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+        </FormFieldGroup>
 
         {(altSupplyMaterials ?? []).includes("other") && (
           <FormField
@@ -641,12 +667,16 @@ export function StepAlternativeSystem({ inspectionId: _inspectionId }: StepAlter
                   name={`alternativeSystem.${item.field}`}
                   render={({ field }) => (
                     <FormItem>
-                      <label className="flex min-h-[56px] cursor-pointer items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent/50">
-                        <span className="text-base font-medium">{item.label}</span>
-                        <FormControl>
+                      <FormCheckboxRow
+                        className="min-h-[56px] px-4 transition-colors hover:bg-accent/50"
+                        labelClassName="font-medium"
+                        controlPosition="end"
+                        control={
                           <Checkbox checked={field.value as boolean} onCheckedChange={field.onChange} />
-                        </FormControl>
-                      </label>
+                        }
+                      >
+                        {item.label}
+                      </FormCheckboxRow>
                     </FormItem>
                   )}
                 />

@@ -2,6 +2,7 @@
 
 import { AlertCircle, CheckCircle2, Loader2, ScanLine } from "lucide-react";
 import type { UseFormReturn } from "react-hook-form";
+import { useProvenance } from "@/components/prefill/provenance-context";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -173,6 +174,8 @@ export function ScanReviewModal({
     reset,
   } = scan;
 
+  const { setMany } = useProvenance();
+
   const handleClose = () => {
     if (state === "scanning") return; // Don't close while scanning
     onOpenChange(false);
@@ -181,7 +184,7 @@ export function ScanReviewModal({
   };
 
   const handleApply = () => {
-    applyFields(form);
+    applyFields(form, setMany);
     onOpenChange(false);
     setTimeout(reset, 300);
   };

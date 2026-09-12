@@ -1,0 +1,77 @@
+{
+  "zpid": 8078782,
+  "hdpUrl": "/homedetails/8956-E-Venus-Dr-Carefree-AZ-85377/8078782_zpid/",
+  "homeStatus": "FOR_SALE",
+  "keystoneHomeStatus": "ForSale",
+  "homeType": "SINGLE_FAMILY",
+  "streetAddress": "8956 E VENUS Drive",
+  "city": "Carefree",
+  "state": "AZ",
+  "zipcode": "85377",
+  "county": "Maricopa County",
+  "countyFIPS": "04013",
+  "parcelId": "21911034",
+  "latitude": 33.8158,
+  "longitude": -111.886055,
+  "bedrooms": 4,
+  "bathrooms": 2,
+  "yearBuilt": 1980,
+  "lotSize": 47023,
+  "lotAreaValue": 1.0795,
+  "lotAreaUnits": "Acres",
+  "livingArea": 2814,
+  "livingAreaUnits": "Square Feet",
+  "price": 1374000,
+  "currency": "USD",
+  "daysOnZillow": 2,
+  "datePostedString": "2026-09-09",
+  "timeZone": "America/Phoenix",
+  "listingDataSource": "Phoenix",
+  "mlsid": "7077250",
+  "desktopWebHdpImageLink": "https://photos.zillowstatic.com/fp/e77896adfc2e44be8fd1afdf243017f2-p_h.jpg",
+  "address": {
+    "streetAddress": "8956 E VENUS Drive",
+    "city": "Carefree",
+    "state": "AZ",
+    "zipcode": "85377"
+  },
+  "attributionInfo": {
+    "mlsName": "ARMLS",
+    "lastChecked": "2026-09-11 16:50:14",
+    "lastUpdated": "2026-09-10 14:51:34"
+  },
+  "resoFacts": {
+    "waterSource": ["City Water"],
+    "sewer": ["Septic Tank"],
+    "bedrooms": 4,
+    "bathrooms": 2,
+    "bathroomsFull": 2,
+    "yearBuilt": 1980,
+    "lotSize": "1.08 Acres",
+    "homeType": "SingleFamily",
+    "propertySubType": ["Single Family Residence"],
+    "heating": ["Electric"],
+    "cooling": ["Central Air", "Ceiling Fan(s)", "Programmable Thmstat"],
+    "hasPrivatePool": true,
+    "stories": 1,
+    "parcelNumber": "21911034",
+    "subdivisionName": "VELVET SHADOWS",
+    "taxAssessedValue": 856600,
+    "taxAnnualAmount": 1711,
+    "ownership": "Fee Simple",
+    "atAGlanceFacts": [
+      {
+        "factLabel": "Type",
+        "factValue": "Single Family Residence"
+      },
+      {
+        "factLabel": "Year Built",
+        "factValue": "1980"
+      },
+      {
+        "factLabel": "Lot",
+        "factValue": "1.08 Acres"
+      }
+    ]
+  }
+}

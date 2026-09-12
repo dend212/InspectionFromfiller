@@ -12,9 +12,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
+  FormCheckboxRow,
   FormControl,
   FormDescription,
   FormField,
+  FormFieldGroup,
   FormItem,
   FormLabel,
   FormMessage,
@@ -544,8 +546,13 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
       <section className="space-y-4">
         <h3 className="text-lg font-medium">Summary of Inspection</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2 space-y-3">
-            <FormLabel className="text-base">System Type</FormLabel>
+          {/* One field path, three checkboxes: the group owns the badge + suggestion chip */}
+          <FormFieldGroup
+            name="facilityInfo.facilitySystemTypes"
+            label="System Type"
+            labelClassName="text-base"
+            className="sm:col-span-2 space-y-3"
+          >
             {FACILITY_SYSTEM_TYPES.map((type) => (
               <FormField
                 key={type.value}
@@ -553,8 +560,8 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
                 name="facilityInfo.facilitySystemTypes"
                 render={({ field }) => (
                   <FormItem>
-                    <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border p-3">
-                      <FormControl>
+                    <FormCheckboxRow
+                      control={
                         <Checkbox
                           checked={field.value?.includes(type.value)}
                           onCheckedChange={(checked) => {
@@ -566,14 +573,15 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
                             );
                           }}
                         />
-                      </FormControl>
-                      <span className="text-base">{type.label}</span>
-                    </label>
+                      }
+                    >
+                      {type.label}
+                    </FormCheckboxRow>
                   </FormItem>
                 )}
               />
             ))}
-          </div>
+          </FormFieldGroup>
 
           <FormField
             control={form.control}
@@ -843,12 +851,13 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             name="facilityInfo.hasAdeqCourse"
             render={({ field }) => (
               <FormItem>
-                <label className="flex min-h-[56px] cursor-pointer items-center justify-between gap-3 rounded-lg border p-4">
-                  <span className="text-base">Completed ADEQ-Approved Course</span>
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </label>
+                <FormCheckboxRow
+                  className="min-h-[56px] px-4"
+                  controlPosition="end"
+                  control={<Checkbox checked={field.value} onCheckedChange={field.onChange} />}
+                >
+                  Completed ADEQ-Approved Course
+                </FormCheckboxRow>
               </FormItem>
             )}
           />
@@ -890,12 +899,13 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             name="facilityInfo.isProfessionalEngineer"
             render={({ field }) => (
               <FormItem>
-                <label className="flex min-h-[56px] cursor-pointer items-center justify-between gap-3 rounded-lg border p-4">
-                  <span className="text-base">Professional Engineer</span>
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </label>
+                <FormCheckboxRow
+                  className="min-h-[56px] px-4"
+                  controlPosition="end"
+                  control={<Checkbox checked={field.value} onCheckedChange={field.onChange} />}
+                >
+                  Professional Engineer
+                </FormCheckboxRow>
               </FormItem>
             )}
           />
@@ -924,12 +934,13 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             name="facilityInfo.isRegisteredSanitarian"
             render={({ field }) => (
               <FormItem>
-                <label className="flex min-h-[56px] cursor-pointer items-center justify-between gap-3 rounded-lg border p-4">
-                  <span className="text-base">Registered Sanitarian</span>
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </label>
+                <FormCheckboxRow
+                  className="min-h-[56px] px-4"
+                  controlPosition="end"
+                  control={<Checkbox checked={field.value} onCheckedChange={field.onChange} />}
+                >
+                  Registered Sanitarian
+                </FormCheckboxRow>
               </FormItem>
             )}
           />
@@ -958,12 +969,13 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             name="facilityInfo.isWastewaterOperator"
             render={({ field }) => (
               <FormItem>
-                <label className="flex min-h-[56px] cursor-pointer items-center justify-between gap-3 rounded-lg border p-4">
-                  <span className="text-base">Wastewater Treatment Plant Operator</span>
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </label>
+                <FormCheckboxRow
+                  className="min-h-[56px] px-4"
+                  controlPosition="end"
+                  control={<Checkbox checked={field.value} onCheckedChange={field.onChange} />}
+                >
+                  Wastewater Treatment Plant Operator
+                </FormCheckboxRow>
               </FormItem>
             )}
           />
@@ -992,12 +1004,13 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             name="facilityInfo.isLicensedContractor"
             render={({ field }) => (
               <FormItem>
-                <label className="flex min-h-[56px] cursor-pointer items-center justify-between gap-3 rounded-lg border p-4">
-                  <span className="text-base">Licensed Contractor (A, B, K-37, CR-37)</span>
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </label>
+                <FormCheckboxRow
+                  className="min-h-[56px] px-4"
+                  controlPosition="end"
+                  control={<Checkbox checked={field.value} onCheckedChange={field.onChange} />}
+                >
+                  Licensed Contractor (A, B, K-37, CR-37)
+                </FormCheckboxRow>
               </FormItem>
             )}
           />
@@ -1026,12 +1039,13 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             name="facilityInfo.hasPumperTruck"
             render={({ field }) => (
               <FormItem>
-                <label className="flex min-h-[56px] cursor-pointer items-center justify-between gap-3 rounded-lg border p-4">
-                  <span className="text-base">Pumper Truck</span>
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </label>
+                <FormCheckboxRow
+                  className="min-h-[56px] px-4"
+                  controlPosition="end"
+                  control={<Checkbox checked={field.value} onCheckedChange={field.onChange} />}
+                >
+                  Pumper Truck
+                </FormCheckboxRow>
               </FormItem>
             )}
           />
@@ -1092,12 +1106,11 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             name="facilityInfo.hasDischargeAuth"
             render={({ field }) => (
               <FormItem>
-                <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border p-3">
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                  <span className="text-base">Authorization to Discharge / Permit No.</span>
-                </label>
+                <FormCheckboxRow
+                  control={<Checkbox checked={field.value} onCheckedChange={field.onChange} />}
+                >
+                  Authorization to Discharge / Permit No.
+                </FormCheckboxRow>
               </FormItem>
             )}
           />
@@ -1125,12 +1138,11 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             name="facilityInfo.hasApprovalOfConstruction"
             render={({ field }) => (
               <FormItem>
-                <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border p-3">
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                  <span className="text-base">Approval of Construction</span>
-                </label>
+                <FormCheckboxRow
+                  control={<Checkbox checked={field.value} onCheckedChange={field.onChange} />}
+                >
+                  Approval of Construction
+                </FormCheckboxRow>
               </FormItem>
             )}
           />
@@ -1158,12 +1170,11 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             name="facilityInfo.hasSitePlan"
             render={({ field }) => (
               <FormItem>
-                <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border p-3">
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                  <span className="text-base">Site Plan / As-Built Drawings</span>
-                </label>
+                <FormCheckboxRow
+                  control={<Checkbox checked={field.value} onCheckedChange={field.onChange} />}
+                >
+                  Site Plan / As-Built Drawings
+                </FormCheckboxRow>
               </FormItem>
             )}
           />
@@ -1173,12 +1184,11 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             name="facilityInfo.hasOperationDocs"
             render={({ field }) => (
               <FormItem>
-                <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border p-3">
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                  <span className="text-base">Operation & Maintenance Documentation</span>
-                </label>
+                <FormCheckboxRow
+                  control={<Checkbox checked={field.value} onCheckedChange={field.onChange} />}
+                >
+                  Operation & Maintenance Documentation
+                </FormCheckboxRow>
               </FormItem>
             )}
           />
@@ -1188,12 +1198,11 @@ export function StepFacilityInfo({ inspectionId }: StepFacilityInfoProps) {
             name="facilityInfo.hasOtherRecords"
             render={({ field }) => (
               <FormItem>
-                <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border p-3">
-                  <FormControl>
-                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                  <span className="text-base">Other Records</span>
-                </label>
+                <FormCheckboxRow
+                  control={<Checkbox checked={field.value} onCheckedChange={field.onChange} />}
+                >
+                  Other Records
+                </FormCheckboxRow>
               </FormItem>
             )}
           />

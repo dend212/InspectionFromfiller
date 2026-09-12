@@ -5,9 +5,51 @@ import type { UseFormReturn } from "react-hook-form";
 import { toast } from "sonner";
 import type { ScanResult } from "@/lib/ai/scan-types";
 import { AUTO_SELECT_CONFIDENCE } from "@/lib/ai/scan-types";
+import type { ExtractedField } from "@/lib/ai/scan-types";
+import { normalizeFieldPath } from "@/lib/prefill/merge";
+import { fieldProvenanceSchema } from "@/lib/prefill/provenance-schema";
+import { ensureTankArrayCapacity } from "@/lib/prefill/tank-capacity";
+import type { FieldProvenance, ProvenanceEntry, ProvenanceValue } from "@/lib/prefill/types";
 import type { InspectionFormData } from "@/types/inspection";
 
 export type ScanState = "idle" | "uploading" | "scanning" | "reviewing" | "done";
+
+/** Scan values are blind-cast from the model; coerce to what provenanceValueSchema accepts */
+function toProvenanceValue(value: unknown): ProvenanceValue {
+  if (typeof value === "string") return value.slice(0, 5000);
+  if (typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.slice(0, 100).map((v) => String(v ?? "").slice(0, 500));
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") return JSON.stringify(value).slice(0, 5000);
+  return String(value);
+}
+
+/**
+ * Builds the source=scan provenance entry for an applied field, or null when it can't be
+ * made valid. The provenance PATCH is a whole-map replace, so one non-conforming entry
+ * (confidence 1.4, a numeric value, an unbounded explanation, an odd key) would reject
+ * every other entry — everything is clamped here and the result is checked against the
+ * same schema the route uses.
+ */
+function toScanProvenanceEntry(
+  field: ExtractedField,
+  at: string,
+): { key: string; entry: ProvenanceEntry } | null {
+  const key = normalizeFieldPath(field.fieldPath);
+  const confidence = Number.isFinite(field.confidence)
+    ? Math.min(1, Math.max(0, field.confidence))
+    : 0;
+  const entry: ProvenanceEntry = {
+    source: "scan",
+    state: "prefilled",
+    kind: "fill",
+    value: toProvenanceValue(field.value),
+    confidence,
+    explanation: `Scanned form · ${String(field.source ?? "")}`.slice(0, 500),
+    at,
+  };
+  return fieldProvenanceSchema.safeParse({ [key]: entry }).success ? { key, entry } : null;
+}
 
 interface UploadedImage {
   storagePath: string;
@@ -28,7 +70,10 @@ export interface UseFormScanReturn {
   toggleField: (fieldPath: string) => void;
   selectAllHighConfidence: () => void;
   clearAllSelections: () => void;
-  applyFields: (form: UseFormReturn<InspectionFormData>) => void;
+  applyFields: (
+    form: UseFormReturn<InspectionFormData>,
+    onProvenance?: (entries: FieldProvenance) => void,
+  ) => void;
   reset: () => void;
 }
 
@@ -120,10 +165,12 @@ export function useFormScan(): UseFormScanReturn {
   }, []);
 
   const applyFields = useCallback(
-    (form: UseFormReturn<InspectionFormData>) => {
+    (form: UseFormReturn<InspectionFormData>, onProvenance?: (entries: FieldProvenance) => void) => {
       if (!scanResult) return;
 
       let appliedCount = 0;
+      const entries: FieldProvenance = {};
+      const at = new Date().toISOString();
 
       for (const field of scanResult.fields) {
         if (!selectedFields.has(field.fieldPath)) continue;
@@ -133,32 +180,32 @@ export function useFormScan(): UseFormScanReturn {
         if (tankMatch) {
           const tankIndex = Number.parseInt(tankMatch[1], 10);
           const tankField = tankMatch[2];
-          const currentTanks = form.getValues("septicTank.tanks") ?? [];
 
-          // Ensure the tanks array is long enough
-          while (currentTanks.length <= tankIndex) {
-            currentTanks.push({} as (typeof currentTanks)[0]);
-          }
+          // Grow the array (and numberOfTanks) the same way prefill and acceptSuggestion do
+          ensureTankArrayCapacity(form, [field.fieldPath]);
 
-          // Set the field value on the tank object
-          // biome-ignore lint/suspicious/noExplicitAny: Dynamic form path
-          (currentTanks[tankIndex] as any)[tankField] = field.value;
+          // Replace the whole array so the provenance watcher sees one nested change
+          const currentTanks = [...(form.getValues("septicTank.tanks") ?? [])];
+          currentTanks[tankIndex] = { ...currentTanks[tankIndex], [tankField]: field.value };
           form.setValue("septicTank.tanks", currentTanks, {
             shouldDirty: true,
           });
-          appliedCount++;
-          continue;
+        } else {
+          // Standard dotted path (e.g., "facilityInfo.facilityName")
+          // biome-ignore lint/suspicious/noExplicitAny: Dynamic form path
+          form.setValue(field.fieldPath as any, field.value as any, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
         }
 
-        // Standard dotted path (e.g., "facilityInfo.facilityName")
-        // biome-ignore lint/suspicious/noExplicitAny: Dynamic form path
-        form.setValue(field.fieldPath as any, field.value as any, {
-          shouldDirty: true,
-          shouldValidate: true,
-        });
         appliedCount++;
+        // Scanned values join the provenance system as source "scan" (green badge)
+        const scanEntry = toScanProvenanceEntry(field, at);
+        if (scanEntry) entries[scanEntry.key] = scanEntry.entry;
       }
 
+      onProvenance?.(entries);
       toast.success(`${appliedCount} field${appliedCount === 1 ? "" : "s"} applied from scan`);
       setState("done");
     },

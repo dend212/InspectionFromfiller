@@ -1,0 +1,71 @@
+{
+  "zpid": 12345678,
+  "hdpUrl": "/homedetails/1234-E-Example-Ln-Cave-Creek-AZ-85331/12345678_zpid/",
+  "homeStatus": "OTHER",
+  "keystoneHomeStatus": "OffMarket",
+  "homeType": "SINGLE_FAMILY",
+  "streetAddress": "1234 E Example Ln",
+  "city": "Cave Creek",
+  "state": "AZ",
+  "zipcode": "85331",
+  "county": "Maricopa County",
+  "bedrooms": null,
+  "bathrooms": null,
+  "yearBuilt": 1998,
+  "lotSize": null,
+  "lotAreaValue": null,
+  "lotAreaUnits": null,
+  "livingArea": 2105,
+  "price": null,
+  "daysOnZillow": -1,
+  "listingDataSource": "Legacy",
+  "resoFacts": {
+    "waterSource": null,
+    "sewer": null,
+    "bedrooms": null,
+    "bathrooms": null,
+    "yearBuilt": 1998,
+    "lotSize": null,
+    "homeType": "SingleFamily",
+    "heating": null,
+    "cooling": null,
+    "parcelNumber": "21112345",
+    "atAGlanceFacts": [
+      { "factLabel": "Type", "factValue": "Single Family Residence" },
+      { "factLabel": "Year Built", "factValue": "1998" }
+    ]
+  },
+  "nearbyHomes": [
+    {
+      "zpid": 1,
+      "hdpUrl": "/homedetails/1-Neighbour-Ln-Cave-Creek-AZ-85331/1_zpid/",
+      "homeStatus": "FOR_SALE",
+      "bedrooms": 5,
+      "bathrooms": 3,
+      "lotSize": 87120,
+      "lotAreaValue": 2,
+      "lotAreaUnits": "Acres",
+      "address": { "streetAddress": "1 Neighbour Ln", "city": "Cave Creek", "state": "AZ", "zipcode": "85331" }
+    }
+  ],
+  "collections": {
+    "modules": [
+      {
+        "name": "Similar homes",
+        "placement": "NEIGHBORHOOD",
+        "propertyDetails": [
+          {
+            "zpid": 2,
+            "hdpUrl": "/homedetails/2-Similar-Dr-Scottsdale-AZ-85255/2_zpid/",
+            "homeStatus": "FOR_SALE",
+            "bedrooms": 6,
+            "bathrooms": 4,
+            "lotSize": 130680,
+            "lotAreaValue": 3,
+            "lotAreaUnits": "Acres"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -9,6 +9,7 @@ import { MediaGallery, type MediaRecord } from "@/components/inspection/media-ga
 import { PhotoCapture } from "@/components/inspection/photo-capture";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  FormCheckboxRow,
   FormControl,
   FormDescription,
   FormField,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/constants/inspection";
 import { AiCommentButton, CharacterCount } from "@/components/inspection/ai-comment-button";
 import type { SepticTankContext } from "@/lib/ai/rewrite-comments";
+import { createEmptyTank } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 
 /** Deficiency labels matching the schema boolean fields */
@@ -174,46 +176,10 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
     const currentTanks = form.getValues("septicTank.tanks") ?? [];
     if (currentTanks.length === numberOfTanks) return;
 
-    const emptyTank = {
-      liquidLevel: "",
-      primaryScumThickness: "",
-      primarySludgeThickness: "",
-      secondaryScumThickness: "",
-      secondarySludgeThickness: "",
-      liquidLevelNotDetermined: false,
-      tankDimensions: "",
-      tankCapacity: "",
-      capacityBasis: "",
-      capacityNotDeterminedReason: "",
-      tankMaterial: "",
-      tankMaterialOther: "",
-      accessOpenings: "",
-      accessOpeningsOther: "",
-      lidsRisersPresent: "" as "" | "present" | "not_present",
-      lidsSecurelyFastened: "" as "" | "yes" | "no",
-      numberOfCompartments: "",
-      compartmentsOther: "",
-      compromisedTank: "" as "" | "yes" | "no",
-      deficiencyRootInvasion: false,
-      deficiencyExposedRebar: false,
-      deficiencyCracks: false,
-      deficiencyDamagedInlet: false,
-      deficiencyDamagedOutlet: false,
-      deficiencyDamagedLids: false,
-      deficiencyDeterioratingConcrete: false,
-      deficiencyOther: false,
-      baffleMaterial: [] as string[],
-      inletBaffleCondition: [] as string[],
-      outletBaffleCondition: [] as string[],
-      interiorBaffleCondition: [] as string[],
-      effluentFilterPresent: "" as "" | "present" | "not_present",
-      effluentFilterServiced: "" as "" | "serviced" | "not_serviced",
-    };
-
     if (currentTanks.length < numberOfTanks) {
       const newTanks = [...currentTanks];
       for (let i = currentTanks.length; i < numberOfTanks; i++) {
-        newTanks.push({ ...emptyTank });
+        newTanks.push(createEmptyTank());
       }
       form.setValue("septicTank.tanks", newTanks);
     } else {
@@ -467,12 +433,11 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
               name={`septicTank.tanks.${tankIndex}.liquidLevelNotDetermined`}
               render={({ field }) => (
                 <FormItem>
-                  <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border p-3">
-                    <FormControl>
-                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                    <span className="text-base">Liquid level could not be determined</span>
-                  </label>
+                  <FormCheckboxRow
+                    control={<Checkbox checked={field.value} onCheckedChange={field.onChange} />}
+                  >
+                    Liquid level could not be determined
+                  </FormCheckboxRow>
                 </FormItem>
               )}
             />
@@ -813,15 +778,19 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                   name={`septicTank.tanks.${tankIndex}.${item.field}`}
                   render={({ field }) => (
                     <FormItem>
-                      <label className="flex min-h-[56px] cursor-pointer items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent/50">
-                        <span className="text-base font-medium">{item.label}</span>
-                        <FormControl>
+                      <FormCheckboxRow
+                        className="min-h-[56px] px-4 transition-colors hover:bg-accent/50"
+                        labelClassName="font-medium"
+                        controlPosition="end"
+                        control={
                           <Checkbox
                             checked={field.value as boolean}
                             onCheckedChange={field.onChange}
                           />
-                        </FormControl>
-                      </label>
+                        }
+                      >
+                        {item.label}
+                      </FormCheckboxRow>
                     </FormItem>
                   )}
                 />

@@ -195,6 +195,12 @@ const tankInspectionSchema = z.object({
   effluentFilterServiced: z.enum(["serviced", "not_serviced", ""]).optional().default(""),
 });
 
+/** A blank tank matching tankInspectionSchema's defaults — the one source of truth for
+ * both the tanks-sync effect in step-septic-tank.tsx and the prefill tank-array grower. */
+export function createEmptyTank(): z.infer<typeof tankInspectionSchema> {
+  return tankInspectionSchema.parse({});
+}
+
 export const septicTankSchema = z.object({
   // 4A: Number of tanks
   numberOfTanks: z.string().optional().default(""),

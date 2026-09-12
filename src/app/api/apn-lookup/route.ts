@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  AssessorUnavailableError,
+  mapParcelToAssessor,
+  queryParcelByApn,
+} from "@/lib/prefill/assessor";
+import { isValidApn } from "@/lib/prefill/input";
 import { createClient } from "@/lib/supabase/server";
 
 /** In-memory rate limiter: userId → timestamps of recent lookups */
@@ -16,27 +22,11 @@ function checkRateLimit(userId: string): boolean {
   return true;
 }
 
-const ARCGIS_URL =
-  "https://gis.mcassessor.maricopa.gov/arcgis/rest/services/Parcels/MapServer/0/query";
-
-const OUT_FIELDS = [
-  "OWNER_NAME",
-  "PHYSICAL_ADDRESS",
-  "PHYSICAL_CITY",
-  "PHYSICAL_ZIP",
-  "JURISDICTION",
-  "APN_DASH",
-  "LAND_SIZE",
-  "CONST_YEAR",
-  "SUBNAME",
-  "LOT_NUM",
-  "BLOCK",
-  "STR",
-].join(",");
-
 /**
  * GET /api/apn-lookup?apn=123-45-678
  * Looks up property data from Maricopa County Assessor by APN.
+ * The ArcGIS query itself lives in src/lib/prefill/assessor.ts so the
+ * prefill assessor stage shares it.
  */
 export async function GET(request: Request) {
   // Auth check
@@ -60,32 +50,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "APN parameter is required" }, { status: 400 });
   }
 
-  // Validate APN format — digits, letters, dashes, spaces; must contain a digit; max 20 chars
-  if (apn.length > 20 || !/^[\dA-Za-z -]+$/.test(apn) || !/\d/.test(apn)) {
+  if (!isValidApn(apn)) {
     return NextResponse.json({ error: "Invalid APN format" }, { status: 400 });
   }
 
   try {
-    const params = new URLSearchParams({
-      where: `APN_DASH='${apn}'`,
-      outFields: OUT_FIELDS,
-      f: "json",
-      returnGeometry: "false",
-    });
-
-    const response = await fetch(`${ARCGIS_URL}?${params}`, {
-      signal: AbortSignal.timeout(10000),
-    });
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: "Assessor service unavailable" },
-        { status: 502 },
-      );
-    }
-
-    const data = await response.json();
-    const feature = data.features?.[0]?.attributes;
+    const feature = await queryParcelByApn(apn);
 
     if (!feature) {
       return NextResponse.json(
@@ -94,32 +64,14 @@ export async function GET(request: Request) {
       );
     }
 
-    const legalParts = [
-      feature.SUBNAME || "",
-      feature.LOT_NUM ? `Lot ${feature.LOT_NUM}` : "",
-      feature.BLOCK ? `Block ${feature.BLOCK}` : "",
-      feature.STR ? `STR ${feature.STR}` : "",
-    ].filter(Boolean);
-
-    return NextResponse.json({
-      assessor: {
-        ownerName: feature.OWNER_NAME || "",
-        physicalAddress: feature.PHYSICAL_ADDRESS || "",
-        city: feature.PHYSICAL_CITY || "",
-        zip: feature.PHYSICAL_ZIP || "",
-        // The Maricopa County Assessor API only serves parcels in Maricopa
-        // County, so the county is always "Maricopa". The JURISDICTION field on
-        // the source record is the *city* (Phoenix, Tempe, etc.), not the
-        // county — using it here previously left the County dropdown empty
-        // because no value matched AZ_COUNTIES.
-        county: "Maricopa",
-        apnFormatted: feature.APN_DASH || "",
-        legalDescription: legalParts.join(", "),
-        lotSize: String(feature.LAND_SIZE || ""),
-        yearBuilt: feature.CONST_YEAR || "",
-      },
-    });
+    return NextResponse.json({ assessor: mapParcelToAssessor(feature) });
   } catch (err) {
+    if (err instanceof AssessorUnavailableError) {
+      return NextResponse.json(
+        { error: "Assessor service unavailable" },
+        { status: 502 },
+      );
+    }
     console.error("APN lookup failed:", err);
     return NextResponse.json(
       { error: "APN lookup failed" },
