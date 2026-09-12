@@ -1,9 +1,12 @@
 import {
+  CAPACITY_BASIS_OPTIONS,
+  DESIGN_FLOW_BASIS,
   DISPOSAL_TYPES,
   FACILITY_SYSTEM_TYPES,
   FACILITY_TYPES,
   GP402_SYSTEM_TYPES,
   OCCUPANCY_TYPES,
+  TANK_MATERIALS,
   WASTEWATER_SOURCES,
   WATER_SOURCES,
 } from "@/lib/constants/inspection";
@@ -25,8 +28,9 @@ interface LabelOption {
 }
 
 /**
- * Enum/checkbox-array prefill fields, keyed by the exact react-hook-form dotted path, mapped
- * to the option list (from src/lib/constants/inspection.ts) that supplies their human labels.
+ * Enum/checkbox-array prefill fields, keyed by the exact react-hook-form dotted path (numeric
+ * array-index segments normalised to `*` — see `normaliseFieldPath`), mapped to the option list
+ * (from src/lib/constants/inspection.ts) that supplies their human labels.
  */
 const FIELD_VALUE_LABELS: Record<string, readonly LabelOption[]> = {
   "facilityInfo.wastewaterSource": WASTEWATER_SOURCES,
@@ -36,7 +40,15 @@ const FIELD_VALUE_LABELS: Record<string, readonly LabelOption[]> = {
   "facilityInfo.facilitySystemTypes": FACILITY_SYSTEM_TYPES,
   "generalTreatment.systemTypes": GP402_SYSTEM_TYPES,
   "disposalWorks.disposalType": DISPOSAL_TYPES,
+  "designFlow.designFlowBasis": DESIGN_FLOW_BASIS,
+  "septicTank.tanks.*.tankMaterial": TANK_MATERIALS,
+  "septicTank.tanks.*.capacityBasis": CAPACITY_BASIS_OPTIONS,
 };
+
+/** Replaces every numeric array-index segment (e.g. the `<i>` in `septicTank.tanks.<i>.*`) with `*`. */
+function normaliseFieldPath(fieldPath: string): string {
+  return fieldPath.replace(/\.\d+(?=\.|$)/g, ".*");
+}
 
 function labelFor(options: readonly LabelOption[], token: string): string {
   return options.find((option) => option.value === token)?.label ?? token;
@@ -49,7 +61,7 @@ function labelFor(options: readonly LabelOption[], token: string): string {
  * (e.g. a boolean), falls back to `formatProvenanceValue`.
  */
 export function formatFieldValue(fieldPath: string, value: ProvenanceValue): string {
-  const options = FIELD_VALUE_LABELS[fieldPath];
+  const options = FIELD_VALUE_LABELS[normaliseFieldPath(fieldPath)];
   if (!options) return formatProvenanceValue(value);
   if (Array.isArray(value)) return value.map((token) => labelFor(options, token)).join(", ");
   if (typeof value === "string") return labelFor(options, value);

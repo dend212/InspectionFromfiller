@@ -32,6 +32,22 @@ describe("formatFieldValue", () => {
     expect(formatFieldValue("facilityInfo.occupancyType", "full_time")).toBe("Full Time");
   });
 
+  it("labels a designFlowBasis enum", () => {
+    expect(formatFieldValue("designFlow.designFlowBasis", "permit_documents")).toBe(
+      "Designated in permitting documents",
+    );
+  });
+
+  it("labels an indexed tank's tankMaterial enum, normalising the numeric segment", () => {
+    expect(formatFieldValue("septicTank.tanks.0.tankMaterial", "precast_concrete")).toBe("Pre-cast Concrete");
+    expect(formatFieldValue("septicTank.tanks.3.tankMaterial", "precast_concrete")).toBe("Pre-cast Concrete");
+  });
+
+  it("labels an indexed tank's capacityBasis enum, normalising the numeric segment", () => {
+    expect(formatFieldValue("septicTank.tanks.0.capacityBasis", "permit_document")).toBe("Permit Document");
+    expect(formatFieldValue("septicTank.tanks.12.capacityBasis", "permit_document")).toBe("Permit Document");
+  });
+
   it("falls back to the raw token for a value not in the field's option list", () => {
     expect(formatFieldValue("facilityInfo.wastewaterSource", "mystery")).toBe("mystery");
   });
