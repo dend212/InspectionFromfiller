@@ -76,6 +76,7 @@ describe("mapPermitFacts — spec §7 table", () => {
     ["facilityInfo.waterSource", "private_well", 0.9],
     ["facilityInfo.isCesspool", "yes", 0.7],
     ["facilityInfo.facilitySystemTypes", ["conventional"], 0.7],
+    ["generalTreatment.systemTypes", ["gp402_conventional", "gp402_septic_tank", "gp402_seepage_pit"], 0.9],
   ];
 
   it.each(rows)("%s → %j @ %d", (fieldPath, value, confidence) => {
@@ -114,6 +115,21 @@ describe("mapPermitFacts — spec §7 table", () => {
     expect(d.value).toBe("seepage_pit");
     expect(d.provenance.explanation).toContain("× 2");
     expect(d.provenance.explanation).toContain("Overall 28'0\" Effective 24'0\"");
+  });
+
+  it("checks the GP 4.02 boxes from the permit's components with the disposal fact as provenance", () => {
+    const p = props["generalTreatment.systemTypes"];
+    expect(p.value).toEqual(["gp402_conventional", "gp402_septic_tank", "gp402_seepage_pit"]);
+    // min(systemType 0.9, tank capacity 0.97, disposal 0.97) — a read fact, not capped at 0.7
+    expect(p.provenance.confidence).toBe(0.9);
+    expect(p.provenance.explanation).toBe(
+      "Permit OW-17-00474 · GP 4.02 Conventional, Septic Tank, Disposal by Seepage Pit p.1",
+    );
+    expect(p.provenance.evidence).toBe("4.02 Seepage Pit Qty 2");
+    expect(p.provenance.page).toBe(1);
+    expect(p.provenance.sourceUrl).toBe("/api/inspections/insp-1/records/rec-1#page=1");
+    expect(p.authority).toEqual({ docRank: 0 });
+    expect(props["generalTreatment.alternativeSystem"]).toBeUndefined();
   });
 
   it("caps cesspool and system type at 0.7 even when the model is sure (suggestion only)", () => {
@@ -241,6 +257,101 @@ describe("mapPermitFacts — edge cases", () => {
   });
 });
 
+describe("mapPermitFacts — GP 4.02 system-type boxes", () => {
+  const tank = (confidence = 0.9, page = 1) => ({
+    capacityGal: f(1250, confidence, page, "Septic Tank Capacity 1250"),
+    material: null,
+    model: null,
+    dimensions: null,
+  });
+  const disposal = (type: "trench" | "bed" | "chamber" | "seepage_pit" | "other", confidence = 0.9, page = 1) => ({
+    type: f(type, confidence, page, `4.02 ${type}`),
+    count: null,
+    dimensions: null,
+    absorptionAreaSqft: null,
+  });
+  const systemTypes = (facts: PermitFacts) => byPath(mapPermitFacts(facts, record))["generalTreatment.systemTypes"];
+
+  it.each([
+    ["trench", "gp402_disposal_trench"],
+    ["bed", "gp402_disposal_bed"],
+    ["chamber", "gp402_chamber"],
+    ["seepage_pit", "gp402_seepage_pit"],
+  ] as const)("maps disposal %s → %s after the tank box", (type, token) => {
+    const p = systemTypes({ ...emptyPermitFacts(), tanks: [tank()], disposal: disposal(type) });
+    expect(p.value).toEqual(["gp402_septic_tank", token]);
+  });
+
+  it("ignores disposal type other and still checks the tank (plus conventional when stated)", () => {
+    expect(systemTypes({ ...emptyPermitFacts(), tanks: [tank()], disposal: disposal("other") }).value).toEqual([
+      "gp402_septic_tank",
+    ]);
+    expect(
+      systemTypes({
+        ...emptyPermitFacts(),
+        tanks: [tank()],
+        disposal: disposal("other"),
+        systemType: f("conventional" as const, 0.8),
+      }).value,
+    ).toEqual(["gp402_conventional", "gp402_septic_tank"]);
+  });
+
+  it("proposes nothing without a tank, a disposal type or a system type", () => {
+    expect(systemTypes({ ...emptyPermitFacts(), documentKind: "discharge_authorization" })).toBeUndefined();
+    // a tank without a capacity fact is not a GP 4.02 septic-tank box
+    expect(
+      systemTypes({
+        ...emptyPermitFacts(),
+        tanks: [{ capacityGal: null, material: f("plastic" as const, 0.9), model: null, dimensions: null }],
+      }),
+    ).toBeUndefined();
+    expect(byPath(mapPermitFacts(emptyPermitFacts(), record))["generalTreatment.alternativeSystem"]).toBeUndefined();
+  });
+
+  it("names no conventional box for an alternative system but flips the alternative toggle", () => {
+    const facts: PermitFacts = {
+      ...emptyPermitFacts(),
+      documentKind: "discharge_authorization",
+      tanks: [tank(0.95)],
+      disposal: disposal("trench", 0.9),
+      systemType: f("alternative" as const, 0.85, 2, "Aerobic Treatment Unit"),
+    };
+    const props = byPath(mapPermitFacts(facts, record));
+    expect(props["generalTreatment.systemTypes"].value).toEqual(["gp402_septic_tank", "gp402_disposal_trench"]);
+    expect(props["generalTreatment.systemTypes"].provenance.confidence).toBe(0.9);
+    const alt = props["generalTreatment.alternativeSystem"];
+    expect(alt.kind).toBe("fill");
+    expect(alt.value).toBe(true);
+    expect(alt.provenance.confidence).toBe(0.85);
+    expect(alt.provenance.page).toBe(2);
+    expect(alt.provenance.evidence).toBe("Aerobic Treatment Unit");
+    expect(alt.provenance.explanation).toBe("Permit OW-17-00474 · Discharge Authorization p.2");
+    expect(alt.authority).toEqual({ docRank: 0 });
+    // the Summary "System Type" suggestion is untouched
+    expect(props["facilityInfo.facilitySystemTypes"].value).toEqual(["alternative"]);
+  });
+
+  it("takes the minimum confidence and falls back to the tank fact for provenance without a disposal", () => {
+    const facts: PermitFacts = {
+      ...emptyPermitFacts(),
+      tanks: [tank(0.6, 4), tank(0.95, 5)],
+      systemType: f("conventional" as const, 0.7, 1, "4.02 Conventional"),
+    };
+    const p = systemTypes(facts);
+    expect(p.value).toEqual(["gp402_conventional", "gp402_septic_tank"]);
+    // min(systemType 0.7, best tank capacity 0.95) — the weaker second tank is not a contributor
+    expect(p.provenance.confidence).toBe(0.7);
+    // the best tank capacity fact carries the page / evidence
+    expect(p.provenance.page).toBe(5);
+    expect(p.provenance.explanation).toBe("Permit OW-17-00474 · GP 4.02 Conventional, Septic Tank p.5");
+    // systemType alone → its own page
+    const only = systemTypes({ ...emptyPermitFacts(), systemType: f("conventional" as const, 0.8, 3) });
+    expect(only.value).toEqual(["gp402_conventional"]);
+    expect(only.provenance.page).toBe(3);
+    expect(only.provenance.confidence).toBe(0.8);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Document authority — Dove Valley (1414 E Dove Valley Rd) fixture, verbatim from the fix plan
 // ---------------------------------------------------------------------------
@@ -326,6 +437,15 @@ describe("mapPermitFacts — document authority (Dove Valley)", () => {
     expect(props["disposalWorks.disposalType"].provenance.explanation).toBe(
       "Notice of Transfer OWR-23-02001 · p.3 · × 2 (transfer record — secondary source)",
     );
+    expect(props["generalTreatment.systemTypes"].value).toEqual([
+      "gp402_conventional",
+      "gp402_septic_tank",
+      "gp402_seepage_pit",
+    ]);
+    expect(props["generalTreatment.systemTypes"].provenance.confidence).toBe(0.88);
+    expect(props["generalTreatment.systemTypes"].provenance.explanation).toBe(
+      "Notice of Transfer OWR-23-02001 · GP 4.02 Conventional, Septic Tank, Disposal by Seepage Pit p.3 (transfer record — secondary source)",
+    );
     for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(2);
   });
 
@@ -336,6 +456,10 @@ describe("mapPermitFacts — document authority (Dove Valley)", () => {
     expect(props["facilityInfo.facilityAgeEstimateExplanation"].value).toBe("Permit issued 04/2007 (permit 071533)");
     expect(props["facilityInfo.facilityAge"].provenance.explanation).toBe("Permit issued 04/2007 (permit 071533)");
     expect(props["septicTank.tanks.0.tankCapacity"].provenance.explanation).toBe("Permit 071533 · PERMIT p.4");
+    // tank only, no disposal / systemType → one box, at the tank's (sub-gate) confidence
+    expect(props["generalTreatment.systemTypes"].value).toEqual(["gp402_septic_tank"]);
+    expect(props["generalTreatment.systemTypes"].provenance.confidence).toBe(0.72);
+    expect(props["generalTreatment.systemTypes"].provenance.explanation).toBe("Permit 071533 · GP 4.02 Septic Tank p.4");
     for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(0);
   });
 
@@ -361,6 +485,11 @@ describe("mapPermitFacts — document authority (Dove Valley)", () => {
     const flow = byPath(out)["designFlow.estimatedDesignFlow"];
     expect(flow.value).toBe("450");
     expect(flow.provenance.recordId).toBe("rec-not");
+    // the permit's tank-only array beats the NOT's conventional-only array (whole value, no union)
+    const boxes = out.filter((p) => p.fieldPath === "generalTreatment.systemTypes");
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0].value).toEqual(["gp402_septic_tank"]);
+    expect(boxes[0].provenance.recordId).toBe("rec-permit");
   });
 
   it("head-to-head: a less confident permit fact beats a more confident NOT fact", () => {
@@ -375,6 +504,9 @@ describe("mapPermitFacts — document authority (Dove Valley)", () => {
     const flow = byPath(out)["designFlow.estimatedDesignFlow"];
     expect(flow.value).toBe("400");
     expect(flow.provenance.recordId).toBe("rec-permit");
+    const boxes = byPath(out)["generalTreatment.systemTypes"];
+    expect(boxes.provenance.confidence).toBe(0.72);
+    expect(boxes.provenance.recordId).toBe("rec-permit");
   });
 });
 

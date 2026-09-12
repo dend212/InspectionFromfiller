@@ -3,7 +3,7 @@
  * hook merges these into the form (merge.ts); nothing here writes anywhere.
  */
 import type { Fact, PermitDocumentKind, PermitFacts } from "@/lib/ai/permit-extraction-schema";
-import { WATER_SOURCES } from "@/lib/constants/inspection";
+import { GP402_SYSTEM_TYPES, WATER_SOURCES } from "@/lib/constants/inspection";
 import type { ListingFacts } from "./listing/provider";
 import { SEWER_KEYS, WATER_KEYS, findFact, flattenText } from "./listing/zillow-apify";
 import { DOC_CLASS_RANK, classifyDocType } from "./permits/doc-types";
@@ -34,6 +34,47 @@ const DOC_KIND_LABEL: Record<Exclude<PermitDocumentKind, "other">, string> = {
 };
 
 type Provenance = ProposedField["provenance"];
+
+type DisposalType = NonNullable<PermitFacts["disposal"]["type"]>["value"];
+
+/** Extracted disposal type → GP 4.02 checkbox; `other` has no box of its own */
+const DISPOSAL_TO_GP402: Record<Exclude<DisposalType, "other">, string> = {
+  trench: "gp402_disposal_trench",
+  bed: "gp402_disposal_bed",
+  chamber: "gp402_chamber",
+  seepage_pit: "gp402_seepage_pit",
+};
+
+/** Caption text per GP 4.02 token; the conventional option's own label repeats the "GP 4.02" prefix */
+const GP402_CAPTION: Record<string, string> = {
+  gp402_conventional: "Conventional",
+};
+
+function gp402Label(token: string): string {
+  return GP402_CAPTION[token] ?? GP402_SYSTEM_TYPES.find((t) => t.value === token)?.label ?? token;
+}
+
+/**
+ * GP 4.02 "General Treatment & Disposal Type" boxes a record's facts support, in
+ * `GP402_SYSTEM_TYPES` order with the fact behind each: conventional from the system
+ * type verdict, septic tank from any tank capacity, and the disposal box from the
+ * disposal type. An `alternative` verdict adds no box (no fact names a GP 4.03+ technology).
+ */
+function gp402Tokens(facts: PermitFacts): Array<{ token: string; fact: Fact<unknown> }> {
+  const byToken = new Map<string, Fact<unknown>>();
+  if (facts.systemType?.value === "conventional") byToken.set("gp402_conventional", facts.systemType);
+  const capacity = facts.tanks
+    .map((t) => t.capacityGal)
+    .filter((x): x is NonNullable<typeof x> => x != null)
+    .sort((a, b) => b.confidence - a.confidence)[0];
+  if (capacity) byToken.set("gp402_septic_tank", capacity);
+  const disposal = facts.disposal.type;
+  if (disposal && disposal.value !== "other") byToken.set(DISPOSAL_TO_GP402[disposal.value], disposal);
+  return GP402_SYSTEM_TYPES.flatMap(({ value }) => {
+    const fact = byToken.get(value);
+    return fact ? [{ token: value, fact }] : [];
+  });
+}
 
 const AUTHORITATIVE_KINDS: ReadonlySet<PermitDocumentKind> = new Set([
   "approval_to_construct",
@@ -237,6 +278,27 @@ export function mapPermitFacts(
         confidence: Math.min(facts.systemType.confidence, SYSTEM_TYPE_MAX_CONFIDENCE),
       }),
     );
+  }
+
+  // GP 4.02 "General Treatment & Disposal Type" boxes: the DA's "General Permits Authorized"
+  // table is a read fact, so no 0.7 cap — confidence is the least sure contributing fact.
+  // Provenance (page / evidence) comes from the disposal fact, else the best tank, else systemType —
+  // i.e. the last box, since the tokens come out in GP402_SYSTEM_TYPES order.
+  const boxes = gp402Tokens(facts);
+  if (boxes.length > 0) {
+    const primary = boxes[boxes.length - 1].fact;
+    const labels = boxes.map((b) => gp402Label(b.token)).join(", ");
+    fill(
+      "generalTreatment.systemTypes",
+      boxes.map((b) => b.token),
+      prov(primary, {
+        confidence: Math.min(...boxes.map((b) => b.fact.confidence)),
+        explanation: `${docLabel} · GP 4.02 ${labels} p.${primary.page}${secondary}`,
+      }),
+    );
+  }
+  if (facts.systemType?.value === "alternative") {
+    fill("generalTreatment.alternativeSystem", true, prov(facts.systemType));
   }
 
   // §7 row: isAbandonment → tile banner only, no proposal
