@@ -76,7 +76,9 @@ describe("StepFacilityInfo provenance rendering", () => {
     expect(within(group).getAllByRole("checkbox")).toHaveLength(3);
     expect(screen.queryByRole("button", { name: /prefilled from/i })).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "Accept suggestion from Permit records: conventional" }));
+    await user.click(
+      screen.getByRole("button", { name: "Accept suggestion from Permit records: Conventional System" }),
+    );
 
     expect(screen.getByRole("checkbox", { name: "Conventional System" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Alternative System" })).not.toBeChecked();
