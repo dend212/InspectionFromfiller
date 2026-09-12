@@ -179,7 +179,8 @@ function FormFieldGroup({
         className={cn("min-w-0", className)}
         {...props}
       >
-        <span className="inline-flex items-center gap-2">
+        {/* A div, not FormLabel's inline span: the heading tags are flow content */}
+        <div className="flex items-center gap-2">
           <LabelTag
             id={labelId}
             data-slot="form-field-group-label"
@@ -188,7 +189,7 @@ function FormFieldGroup({
             {label}
           </LabelTag>
           <ProvenanceBadge fieldPath={name} />
-        </span>
+        </div>
         {description}
         {children}
         {entry?.state === "suggested" ? <SuggestionChip fieldPath={name} /> : null}

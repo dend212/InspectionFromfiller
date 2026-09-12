@@ -227,10 +227,10 @@ describe("FormFieldGroup (checkbox group sharing one field path)", () => {
 
     const badges = screen.getAllByRole("button", { name: "Prefilled from Permit records, 70% confidence" });
     expect(badges).toHaveLength(1);
-    // Beside the group label, in the same inline-flex row
+    // Beside the group label, in the same flex row
     const label = screen.getByText("System Type");
     expect(badges[0].parentElement).toBe(label.parentElement);
-    expect(label.parentElement).toHaveClass("inline-flex");
+    expect(label.parentElement).toHaveClass("flex", "items-center");
     // The group is named by its label, not by the badge
     expect(screen.getByRole("group", { name: "System Type" })).toBeInTheDocument();
   });
