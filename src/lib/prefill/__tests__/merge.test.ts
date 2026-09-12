@@ -177,24 +177,159 @@ describe("mergeProposals", () => {
     expect(provenance["facilityInfo.facilityName"].state).toBe("prefilled");
   });
 
-  it("turns proposals for verified or edited fields into suggestions", () => {
+  it("drops a differing proposal for a verified field — the user confirmed the value", () => {
     const f = form((d) => {
       d.designFlow.numberOfBedrooms = "3";
     });
+    const before = entry({ state: "verified" });
+    const existing: FieldProvenance = { "designFlow.numberOfBedrooms": before };
+    const { fills, provenance } = mergeProposals(
+      f,
+      existing,
+      [proposal("designFlow.numberOfBedrooms", "5", 0.99)],
+      OPTS,
+    );
+    expect(fills).toEqual([]);
+    expect(provenance["designFlow.numberOfBedrooms"]).toBe(before);
+  });
+
+  it("drops a warning for a verified field too", () => {
+    const f = form((d) => {
+      d.facilityInfo.wastewaterSource = "septic";
+    });
+    const before = entry({ state: "verified", value: "septic" });
+    const existing: FieldProvenance = { "facilityInfo.wastewaterSource": before };
+    const warning = proposal("facilityInfo.wastewaterSource", "", 0.8, { kind: "warning" });
+    const { fills, provenance } = mergeProposals(f, existing, [warning], OPTS);
+    expect(fills).toEqual([]);
+    expect(provenance["facilityInfo.wastewaterSource"]).toBe(before);
+  });
+
+  it("turns a differing proposal for an edited field into a suggestion that remembers the edited entry", () => {
+    const f = form((d) => {
+      d.designFlow.numberOfBedrooms = "3";
+    });
+    const before = entry({ state: "edited", value: "2", confidence: 0.8 });
+    const existing: FieldProvenance = { "designFlow.numberOfBedrooms": before };
+    const { fills, provenance } = mergeProposals(
+      f,
+      existing,
+      [proposal("designFlow.numberOfBedrooms", "5", 0.99)],
+      OPTS,
+    );
+    expect(fills).toEqual([]);
+    expect(provenance["designFlow.numberOfBedrooms"]).toEqual({
+      source: "permit",
+      state: "suggested",
+      kind: "fill",
+      value: "5",
+      confidence: 0.99,
+      explanation: "Permit OW-17-00474 p.1",
+      runId: "run-1",
+      at: NOW,
+      prior: before,
+    });
+  });
+
+  it("a warning on an edited field is suggested but remembers the edited entry", () => {
+    const f = form((d) => {
+      d.facilityInfo.wastewaterSource = "septic";
+    });
+    const before = entry({ state: "edited", value: "sewer" });
+    const existing: FieldProvenance = { "facilityInfo.wastewaterSource": before };
+    const warning = proposal("facilityInfo.wastewaterSource", "", 0.8, { kind: "warning" });
+    const { fills, provenance } = mergeProposals(f, existing, [warning], OPTS);
+    expect(fills).toEqual([]);
+    expect(provenance["facilityInfo.wastewaterSource"]).toMatchObject({
+      state: "suggested",
+      kind: "warning",
+      value: "",
+      prior: before,
+    });
+  });
+
+  it("a further run keeps the remembered edited entry behind a fresh suggestion (never nests priors)", () => {
+    const f = form((d) => {
+      d.designFlow.numberOfBedrooms = "3";
+    });
+    const edited = entry({ state: "edited", value: "2", confidence: 0.8 });
+    const existing: FieldProvenance = {
+      "designFlow.numberOfBedrooms": {
+        ...entry({ source: "permit", state: "suggested", value: "5", confidence: 0.99, runId: "run-0" }),
+        prior: edited,
+      },
+    };
+    const { fills, provenance } = mergeProposals(
+      f,
+      existing,
+      [proposal("designFlow.numberOfBedrooms", "6", 0.9)],
+      OPTS,
+    );
+    expect(fills).toEqual([]);
+    expect(provenance["designFlow.numberOfBedrooms"]).toMatchObject({
+      state: "suggested",
+      value: "6",
+      runId: "run-1",
+      prior: edited,
+    });
+    expect(provenance["designFlow.numberOfBedrooms"].prior).not.toHaveProperty("prior");
+  });
+
+  it("a suggestion that remembers an edited entry is left alone when the proposal matches the user's value", () => {
+    const f = form((d) => {
+      d.designFlow.numberOfBedrooms = "3";
+    });
+    const before: ProvenanceEntry = {
+      ...entry({ source: "permit", state: "suggested", value: "5", runId: "run-0" }),
+      prior: entry({ state: "edited", value: "2" }),
+    };
+    const existing: FieldProvenance = { "designFlow.numberOfBedrooms": before };
+    const { fills, provenance } = mergeProposals(
+      f,
+      existing,
+      [proposal("designFlow.numberOfBedrooms", "3", 0.99)],
+      OPTS,
+    );
+    expect(fills).toEqual([]);
+    expect(provenance["designFlow.numberOfBedrooms"]).toBe(before);
+  });
+
+  it("re-running with the same proposals is a no-op for every untouched state (pinning)", () => {
+    // Mirrors the e2e re-run: identical proposals at identical confidence must not demote
+    // an untouched prefilled entry or a verified one to "suggested", and must fill nothing.
+    const f = form((d) => {
+      d.designFlow.numberOfBedrooms = "3";
+      d.facilityInfo.facilityAge = "26";
+    });
+    const existing: FieldProvenance = {
+      "designFlow.numberOfBedrooms": entry({ value: "3", confidence: 0.99, source: "permit" }),
+      "facilityInfo.facilityAge": entry({ state: "verified", value: "26", confidence: 0.99, source: "permit" }),
+    };
+    const rerun = [
+      proposal("designFlow.numberOfBedrooms", "3", 0.99),
+      proposal("facilityInfo.facilityAge", "26", 0.99),
+    ];
+    const { fills, provenance } = mergeProposals(f, existing, rerun, { runId: "run-2", now: NOW });
+    expect(fills).toEqual([]);
+    expect(provenance).toEqual(existing);
+    for (const key of Object.keys(existing)) expect(provenance[key]).toBe(existing[key]);
+  });
+
+  it("leaves a verified or edited field alone when the proposal matches what it already holds", () => {
+    const f = form((d) => {
+      d.designFlow.numberOfBedrooms = " 3 ";
+    });
     for (const state of ["verified", "edited"] as const) {
-      const existing: FieldProvenance = { "designFlow.numberOfBedrooms": entry({ state }) };
+      const before = entry({ state });
+      const existing: FieldProvenance = { "designFlow.numberOfBedrooms": before };
       const { fills, provenance } = mergeProposals(
         f,
         existing,
-        [proposal("designFlow.numberOfBedrooms", "5", 0.99)],
+        [proposal("designFlow.numberOfBedrooms", "3", 0.99)],
         OPTS,
       );
       expect(fills).toEqual([]);
-      expect(provenance["designFlow.numberOfBedrooms"]).toMatchObject({
-        state: "suggested",
-        value: "5",
-        source: "permit",
-      });
+      expect(provenance["designFlow.numberOfBedrooms"]).toBe(before);
     }
   });
 

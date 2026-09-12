@@ -7,9 +7,11 @@ import { PhotoCapture } from "@/components/inspection/photo-capture";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  FormCheckboxRow,
   FormControl,
   FormDescription,
   FormField,
+  FormFieldGroup,
   FormItem,
   FormLabel,
   FormMessage,
@@ -84,59 +86,30 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
     <div className="space-y-8">
       {/* GP 4.02+ System Type Checkboxes */}
       <section className="space-y-4">
-        <h3 className="text-lg font-medium">General Treatment & Disposal Type</h3>
-        <FormDescription>
-          Select all system types that apply to this facility (GP 4.02 - 4.23).
-        </FormDescription>
-
-        <div className="space-y-2">
-          {COMMON_SYSTEM_TYPES.map((systemType) => (
-            <FormField
-              key={systemType.value}
-              control={form.control}
-              name="generalTreatment.systemTypes"
-              render={({ field }) => (
-                <FormItem>
-                  <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border p-3">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value?.includes(systemType.value)}
-                        onCheckedChange={(checked) => {
-                          const current = field.value ?? [];
-                          field.onChange(
-                            checked
-                              ? [...current, systemType.value]
-                              : current.filter((v: string) => v !== systemType.value),
-                          );
-                        }}
-                      />
-                    </FormControl>
-                    <span className="text-base leading-snug">{systemType.label}</span>
-                  </label>
-                </FormItem>
-              )}
-            />
-          ))}
-
-          <div className="flex items-center justify-between rounded-lg border border-dashed p-3">
-            <span className="text-sm text-muted-foreground">GP 4.03 - 4.23 Alternative Types</span>
-            <Switch
-              checked={showAllTypes}
-              onCheckedChange={setShowAllTypes}
-              aria-label="Show alternative system types"
-            />
-          </div>
-
-          {showAllTypes &&
-            RARE_SYSTEM_TYPES.map((systemType) => (
+        {/* One field path, many checkboxes: the group owns the badge + suggestion chip */}
+        <FormFieldGroup
+          name="generalTreatment.systemTypes"
+          label="General Treatment & Disposal Type"
+          labelAs="h3"
+          labelClassName="text-lg font-medium"
+          description={
+            <FormDescription>
+              Select all system types that apply to this facility (GP 4.02 - 4.23).
+            </FormDescription>
+          }
+          className="space-y-4"
+        >
+          <div className="space-y-2">
+            {COMMON_SYSTEM_TYPES.map((systemType) => (
               <FormField
                 key={systemType.value}
                 control={form.control}
                 name="generalTreatment.systemTypes"
                 render={({ field }) => (
                   <FormItem>
-                    <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border p-3">
-                      <FormControl>
+                    <FormCheckboxRow
+                      labelClassName="leading-snug"
+                      control={
                         <Checkbox
                           checked={field.value?.includes(systemType.value)}
                           onCheckedChange={(checked) => {
@@ -148,14 +121,56 @@ export function StepGeneralTreatment({ inspectionId }: StepGeneralTreatmentProps
                             );
                           }}
                         />
-                      </FormControl>
-                      <span className="text-base leading-snug">{systemType.label}</span>
-                    </label>
+                      }
+                    >
+                      {systemType.label}
+                    </FormCheckboxRow>
                   </FormItem>
                 )}
               />
             ))}
-        </div>
+
+            <div className="flex items-center justify-between rounded-lg border border-dashed p-3">
+              <span className="text-sm text-muted-foreground">GP 4.03 - 4.23 Alternative Types</span>
+              <Switch
+                checked={showAllTypes}
+                onCheckedChange={setShowAllTypes}
+                aria-label="Show alternative system types"
+              />
+            </div>
+
+            {showAllTypes &&
+              RARE_SYSTEM_TYPES.map((systemType) => (
+                <FormField
+                  key={systemType.value}
+                  control={form.control}
+                  name="generalTreatment.systemTypes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormCheckboxRow
+                        labelClassName="leading-snug"
+                        control={
+                          <Checkbox
+                            checked={field.value?.includes(systemType.value)}
+                            onCheckedChange={(checked) => {
+                              const current = field.value ?? [];
+                              field.onChange(
+                                checked
+                                  ? [...current, systemType.value]
+                                  : current.filter((v: string) => v !== systemType.value),
+                              );
+                            }}
+                          />
+                        }
+                      >
+                        {systemType.label}
+                      </FormCheckboxRow>
+                    </FormItem>
+                  )}
+                />
+              ))}
+          </div>
+        </FormFieldGroup>
       </section>
 
       <Separator />
