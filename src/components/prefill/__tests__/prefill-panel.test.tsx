@@ -24,18 +24,28 @@ const ASSESSOR = {
   yearBuilt: "",
 };
 
-function Harness() {
+function Harness({ facility }: { facility?: Partial<InspectionFormData["facilityInfo"]> }) {
+  const defaults = getDefaultFormValues("Tech") as unknown as InspectionFormData;
   const form = useForm<InspectionFormData>({
-    defaultValues: getDefaultFormValues("Tech") as unknown as InspectionFormData,
+    defaultValues: { ...defaults, facilityInfo: { ...defaults.facilityInfo, ...facility } },
   });
+  const taxParcelNumber = form.watch("facilityInfo.taxParcelNumber");
   return (
     <ProvenanceProvider form={form} inspectionId="insp-1" initial={{}}>
       <PrefillPanel inspectionId="insp-1" form={form} initialRun={null} />
+      <output data-testid="tax-parcel-number">{taxParcelNumber}</output>
     </ProvenanceProvider>
   );
 }
 
-function installFetch() {
+function prefillPostBodies(mock: ReturnType<typeof vi.fn>): unknown[] {
+  return mock.mock.calls
+    .filter(([url, init]) => init?.method === "POST" && url === "/api/inspections/insp-1/prefill")
+    .map(([, init]) => JSON.parse(String(init?.body)));
+}
+
+function installFetch(opts: { runStatus?: "running" | "done" } = {}) {
+  const runStatus = opts.runStatus ?? "running";
   const mock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     if (url.startsWith("/api/apn-lookup")) {
@@ -53,12 +63,12 @@ function installFetch() {
             id: "run-1",
             inspectionId: "insp-1",
             trigger: "apn_lookup",
-            status: "running",
+            status: runStatus,
             input: {},
             stages: {
-              assessor: { status: "running", links: [] },
-              listing: { status: "pending", links: [] },
-              permits: { status: "pending", links: [] },
+              assessor: { status: runStatus, links: [] },
+              listing: { status: runStatus === "done" ? "skipped" : "pending", links: [] },
+              permits: { status: runStatus === "done" ? "not_found" : "pending", links: [] },
             },
             proposals: [],
             candidates: [],
@@ -120,16 +130,110 @@ describe("PrefillPanel", () => {
     });
   });
 
-  it("Find records starts a manual run", async () => {
-    const mock = installFetch();
+  it("a successful toolbar lookup writes the APN into the form's Tax Parcel Number, so a later Find records needs no apn", async () => {
+    const mock = installFetch({ runStatus: "done" });
     const user = userEvent.setup();
     render(<Harness />);
+
+    await user.type(screen.getByLabelText("Assessor Parcel Number"), "123-45-678");
+    await user.click(screen.getByRole("button", { name: /apn lookup/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId("tax-parcel-number")).toHaveTextContent("123-45-678");
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /find records/i })).toBeEnabled();
+    });
+
     await user.click(screen.getByRole("button", { name: /find records/i }));
     await waitFor(() => {
-      const post = mock.mock.calls.find(
-        ([url, init]) => init?.method === "POST" && url === "/api/inspections/insp-1/prefill",
+      expect(prefillPostBodies(mock)).toEqual([
+        { apn: "123-45-678", trigger: "apn_lookup" },
+        { trigger: "manual" },
+      ]);
+    });
+  });
+
+  describe("Find records", () => {
+    it("sends the toolbar box's APN when the form's Tax Parcel Number is empty", async () => {
+      const mock = installFetch();
+      const user = userEvent.setup();
+      render(<Harness />);
+
+      await user.type(screen.getByLabelText("Assessor Parcel Number"), "219-11-121");
+      await user.click(screen.getByRole("button", { name: /find records/i }));
+
+      await waitFor(() => {
+        expect(prefillPostBodies(mock)).toEqual([{ apn: "219-11-121", trigger: "manual" }]);
+      });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("prefers the form's Tax Parcel Number over the toolbar box", async () => {
+      const mock = installFetch();
+      const user = userEvent.setup();
+      render(<Harness facility={{ taxParcelNumber: "123-45-678" }} />);
+
+      await user.type(screen.getByLabelText("Assessor Parcel Number"), "219-11-121");
+      await user.click(screen.getByRole("button", { name: /find records/i }));
+
+      await waitFor(() => {
+        expect(prefillPostBodies(mock)).toEqual([{ trigger: "manual" }]);
+      });
+    });
+
+    it("starts a manual run without an apn when the box is empty and the form has a street address", async () => {
+      const mock = installFetch();
+      const user = userEvent.setup();
+      render(<Harness facility={{ facilityAddress: "8911 E Cave Creek Rd" }} />);
+
+      await user.click(screen.getByRole("button", { name: /find records/i }));
+
+      await waitFor(() => {
+        expect(prefillPostBodies(mock)).toEqual([{ trigger: "manual" }]);
+      });
+    });
+
+    it("sends nothing and explains where to enter an APN when both the box and the form are empty", async () => {
+      const mock = installFetch();
+      const user = userEvent.setup();
+      render(<Harness />);
+
+      await user.click(screen.getByRole("button", { name: /find records/i }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Enter an APN in the box above or a street address in the form first",
       );
-      expect(JSON.parse(String(post?.[1]?.body))).toEqual({ trigger: "manual" });
+      expect(prefillPostBodies(mock)).toEqual([]);
+      expect(screen.getByRole("button", { name: /find records/i })).toBeEnabled();
+    });
+
+    it("ignores toolbar text that is not a valid APN", async () => {
+      const mock = installFetch();
+      const user = userEvent.setup();
+      render(<Harness />);
+
+      await user.type(screen.getByLabelText("Assessor Parcel Number"), "not an apn");
+      await user.click(screen.getByRole("button", { name: /find records/i }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(/enter an apn in the box above/i);
+      expect(prefillPostBodies(mock)).toEqual([]);
+    });
+
+    it("clears the inline message once a run starts", async () => {
+      const mock = installFetch();
+      const user = userEvent.setup();
+      render(<Harness />);
+
+      await user.click(screen.getByRole("button", { name: /find records/i }));
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+      await user.type(screen.getByLabelText("Assessor Parcel Number"), "219-11-121");
+      await user.click(screen.getByRole("button", { name: /find records/i }));
+
+      await waitFor(() => {
+        expect(prefillPostBodies(mock)).toHaveLength(1);
+      });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
   });
 });

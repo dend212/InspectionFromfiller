@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
@@ -257,10 +257,14 @@ describe("ApnLookupInput", () => {
 
       expect(screen.getByRole("button", { name: /apn lookup/i })).toBeDisabled();
 
-      resolvePromise!({
-        ok: true,
-        json: () => Promise.resolve(assessorResponse),
+      // Let the lookup finish inside act so the loading-state update is not a stray render
+      await act(async () => {
+        resolvePromise!({
+          ok: true,
+          json: () => Promise.resolve(assessorResponse),
+        });
       });
+      expect(screen.getByRole("button", { name: /apn lookup/i })).toBeEnabled();
     });
   });
 
