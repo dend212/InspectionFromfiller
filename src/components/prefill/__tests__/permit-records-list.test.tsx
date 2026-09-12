@@ -176,6 +176,43 @@ describe("PermitRecordsList — records", () => {
     expect(row).toHaveTextContent("4/14/2025");
   });
 
+  it("notes a Notice of Transfer row as a transfer record, but not a permit row", () => {
+    render(
+      <PermitRecordsList
+        run={run({
+          records: [
+            record({ id: "rec-6" }),
+            record({
+              id: "rec-7",
+              permitNumber: "OWR-23-02001",
+              docType: "NOTICE OF TRANSFER",
+              docDate: "2023-06-07",
+            }),
+          ],
+        })}
+        onSelectCandidates={vi.fn()}
+      />,
+    );
+    const rows = within(screen.getByRole("list", { name: /permit documents/i })).getAllByRole(
+      "listitem",
+    );
+    expect(rows).toHaveLength(2);
+
+    expect(rows[0]).not.toHaveTextContent("transfer record — used only for facts no permit states");
+    expect(within(rows[0]).getByText("Queued")).toBeInTheDocument();
+    expect(within(rows[0]).getByRole("link", { name: /open pdf/i })).toHaveAttribute(
+      "href",
+      "/api/inspections/insp-1/records/rec-6",
+    );
+
+    expect(rows[1]).toHaveTextContent("transfer record — used only for facts no permit states");
+    expect(within(rows[1]).getByText("Queued")).toBeInTheDocument();
+    expect(within(rows[1]).getByRole("link", { name: /open pdf/i })).toHaveAttribute(
+      "href",
+      "/api/inspections/insp-1/records/rec-7",
+    );
+  });
+
   it("renders no list and no picker for an empty done run", () => {
     render(<PermitRecordsList run={run()} onSelectCandidates={vi.fn()} />);
     expect(screen.queryByRole("list", { name: /permit documents/i })).toBeNull();

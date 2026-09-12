@@ -145,6 +145,24 @@ describe("runPermitsStage", () => {
     );
   });
 
+  it("captions recordsAvailable as a transfer record, not a permit, when the top-ranked hit is a Notice of Transfer", async () => {
+    const deps = makeDeps({
+      searchPermits: vi.fn().mockResolvedValue({
+        kind: "found",
+        via: "apn",
+        hits: [
+          hit({ permitNumber: "OWR-23-02001", docType: "NOTICE OF TRANSFER", docDate: "2023-06-07" }),
+        ],
+        searched: ["APN 200-08-079"],
+        failedArchives: [],
+      }),
+    });
+    const result = await runPermitsStage(input, ctx, deps);
+    expect(result.proposals[0].provenance.explanation).toBe(
+      "Notice of Transfer OWR-23-02001 found on Maricopa EDMS (transfer record — no permit found)",
+    );
+  });
+
   it("caps pending extraction at MAX_DOCUMENTS_PER_RUN and skips non-extractable types", async () => {
     const many = [
       PLAN,

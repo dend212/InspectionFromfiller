@@ -20,7 +20,12 @@ import {
   type StageLink,
 } from "../types";
 import type { SearchHit } from "./candidates";
-import { isAbandonmentDocType, isExtractableDocType, rankForExtraction } from "./doc-types";
+import {
+  classifyDocType,
+  isAbandonmentDocType,
+  isExtractableDocType,
+  rankForExtraction,
+} from "./doc-types";
 import { EDMS_ARCHIVES } from "./edms-client";
 import { type StoreDocumentInput, type StoreDocumentResult, storeDocument } from "./fetch-document";
 import { type PermitSearchOutcome, searchPermits } from "./search";
@@ -213,11 +218,14 @@ async function storeHits(
 
   const first = ranked[0].candidate;
   const firstStored = stored[0]?.result ?? null;
+  const firstIsTransfer = classifyDocType(first.docType) === "notice_of_transfer";
   const proposals: ProposedField[] = [
     recordsAvailableProposal(
       "yes",
       1,
-      `Permit ${first.permitNumber} (${first.docType}) found on Maricopa EDMS`,
+      firstIsTransfer
+        ? `Notice of Transfer ${first.permitNumber} found on Maricopa EDMS (transfer record — no permit found)`
+        : `Permit ${first.permitNumber} (${first.docType}) found on Maricopa EDMS`,
       ctx.runId,
       firstStored
         ? {

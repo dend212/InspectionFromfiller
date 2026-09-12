@@ -4,7 +4,7 @@ import { Copy, ExternalLink } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { rankForExtraction } from "@/lib/prefill/permits/doc-types";
+import { classifyDocType, rankForExtraction } from "@/lib/prefill/permits/doc-types";
 import { groupByProperty } from "@/lib/prefill/permits/search";
 import type { PermitCandidate, PrefillRunDTO } from "@/lib/prefill/types";
 import { RecordExtractionBadge, isRecordBeingRead } from "./record-extraction-badge";
@@ -129,6 +129,9 @@ export function PermitRecordsList({ run, onSelectCandidates, disabled }: PermitR
                 </span>
               ) : (
                 <span className="text-muted-foreground">{r.docType}</span>
+              )}
+              {classifyDocType(r.docType) === "notice_of_transfer" && (
+                <span className="text-muted-foreground"> · transfer record — used only for facts no permit states</span>
               )}
               {r.docDate && (
                 <span className="text-muted-foreground">{formatDocDate(r.docDate)}</span>
