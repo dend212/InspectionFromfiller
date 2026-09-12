@@ -165,6 +165,19 @@ describe("mapListingFacts — homeType → wastewaterSource + facilityType (task
     expect(mapListingFacts(facts({ homeType: "LOT" }))).toEqual([]);
     expect(mapListingFacts(facts({}))).toEqual([]);
   });
+
+  it("skips the wastewaterSource fill when the listing says sewer, keeping the warning and the facilityType fill", () => {
+    const out = mapListingFacts(facts({ sewer: "sewer", homeType: "SINGLE_FAMILY" }));
+    expect(out.map((p) => `${p.kind}:${p.fieldPath}`)).toEqual([
+      "warning:facilityInfo.wastewaterSource",
+      "fill:facilityInfo.facilityType",
+    ]);
+    expect(out[0]).toMatchObject({ value: "", provenance: { explanation: LISTING_SEWER_WARNING } });
+    expect(out[1]).toMatchObject({
+      value: "single_family",
+      provenance: { confidence: 0.85, explanation: "Zillow lists the home as Single Family" },
+    });
+  });
 });
 
 describe("dedupeProposals — assessor property-use code beats the listing homeType fallback (existing SOURCE_RANK rule)", () => {

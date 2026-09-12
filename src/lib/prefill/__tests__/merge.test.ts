@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { LISTING_SEWER_WARNING, mapListingFacts } from "@/lib/prefill/map-facts-to-fields";
 import {
   getPath,
   isEmptyValue,
@@ -114,6 +115,28 @@ describe("mergeProposals", () => {
       runId: "run-1",
       at: NOW,
     });
+  });
+
+  it("keeps the listing sewer warning when the same listing also carries a homeType (same run)", () => {
+    // Regression: the homeType wastewaterSource fill used to follow the warning for the same
+    // path and, with one provenance slot per path, silently replaced it.
+    const proposals = mapListingFacts({
+      provider: "zillow",
+      url: "https://www.zillow.com/homedetails/8911-E-Cave-Creek-Rd/7921650_zpid/",
+      raw: {},
+      sewer: "sewer",
+      homeType: "SINGLE_FAMILY",
+    });
+    const { fills, provenance } = mergeProposals(form(), {}, proposals, OPTS);
+    expect(provenance["facilityInfo.wastewaterSource"]).toMatchObject({
+      state: "suggested",
+      kind: "warning",
+      value: "",
+      source: "listing",
+      explanation: LISTING_SEWER_WARNING,
+    });
+    expect(fills).toEqual([{ fieldPath: "facilityInfo.facilityType", value: "single_family" }]);
+    expect(provenance["facilityInfo.facilityType"]).toMatchObject({ state: "prefilled", value: "single_family" });
   });
 
   it("fills an empty field when confidence meets the threshold", () => {

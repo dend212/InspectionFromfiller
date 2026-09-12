@@ -452,12 +452,16 @@ export function mapListingFacts(facts: ListingFacts): ProposedField[] {
         evidence: `homeType: ${facts.homeType}`,
         ...sourceUrl,
       };
-      out.push({
-        fieldPath: "facilityInfo.wastewaterSource",
-        value: rule.wastewaterSource,
-        kind: "fill",
-        provenance: { ...provenance, confidence: rule.wsConfidence },
-      });
+      // A listing that says the home is on sewer must not also assert the onsite wastewater
+      // source: the warning above owns that field (one provenance slot per path in merge).
+      if (facts.sewer !== "sewer") {
+        out.push({
+          fieldPath: "facilityInfo.wastewaterSource",
+          value: rule.wastewaterSource,
+          kind: "fill",
+          provenance: { ...provenance, confidence: rule.wsConfidence },
+        });
+      }
       out.push({
         fieldPath: "facilityInfo.facilityType",
         value: rule.facilityType,
