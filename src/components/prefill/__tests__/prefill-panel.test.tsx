@@ -33,6 +33,7 @@ function Harness({ facility }: { facility?: Partial<InspectionFormData["facility
   return (
     <ProvenanceProvider form={form} inspectionId="insp-1" initial={{}}>
       <PrefillPanel inspectionId="insp-1" form={form} initialRun={null} />
+      <input aria-label="Tax Parcel Number" {...form.register("facilityInfo.taxParcelNumber")} />
       <output data-testid="tax-parcel-number">{taxParcelNumber}</output>
     </ProvenanceProvider>
   );
@@ -130,7 +131,7 @@ describe("PrefillPanel", () => {
     });
   });
 
-  it("a successful toolbar lookup writes the APN into the form's Tax Parcel Number, so a later Find records needs no apn", async () => {
+  it("a successful toolbar lookup writes the APN into the form's Tax Parcel Number, which a later Find records sends explicitly", async () => {
     const mock = installFetch({ runStatus: "done" });
     const user = userEvent.setup();
     render(<Harness />);
@@ -148,7 +149,7 @@ describe("PrefillPanel", () => {
     await waitFor(() => {
       expect(prefillPostBodies(mock)).toEqual([
         { apn: "123-45-678", trigger: "apn_lookup" },
-        { trigger: "manual" },
+        { apn: "123-45-678", trigger: "manual" },
       ]);
     });
   });
@@ -168,7 +169,7 @@ describe("PrefillPanel", () => {
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
 
-    it("prefers the form's Tax Parcel Number over the toolbar box", async () => {
+    it("sends the form's Tax Parcel Number in preference to the toolbar box", async () => {
       const mock = installFetch();
       const user = userEvent.setup();
       render(<Harness facility={{ taxParcelNumber: "123-45-678" }} />);
@@ -177,8 +178,25 @@ describe("PrefillPanel", () => {
       await user.click(screen.getByRole("button", { name: /find records/i }));
 
       await waitFor(() => {
-        expect(prefillPostBodies(mock)).toEqual([{ trigger: "manual" }]);
+        expect(prefillPostBodies(mock)).toEqual([{ apn: "123-45-678", trigger: "manual" }]);
       });
+    });
+
+    it("sends a Tax Parcel Number typed into the form moments before, so the server never depends on the autosave having landed", async () => {
+      // The route derives APN/address from the *persisted* formData, which trails the live
+      // form by the autosave debounce. A just-typed form APN must ride along in the body.
+      const mock = installFetch();
+      const user = userEvent.setup();
+      render(<Harness />);
+
+      await user.type(screen.getByLabelText("Tax Parcel Number"), "219-11-121");
+      expect(screen.getByLabelText("Assessor Parcel Number")).toHaveValue("");
+      await user.click(screen.getByRole("button", { name: /find records/i }));
+
+      await waitFor(() => {
+        expect(prefillPostBodies(mock)).toEqual([{ apn: "219-11-121", trigger: "manual" }]);
+      });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
 
     it("starts a manual run without an apn when the box is empty and the form has a street address", async () => {

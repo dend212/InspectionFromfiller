@@ -31,16 +31,16 @@ export function PrefillPanel({ inspectionId, form, initialRun }: PrefillPanelPro
   const [inputError, setInputError] = useState<string | null>(null);
 
   const findRecords = (): void => {
-    // The toolbar box is a first-class APN source: it wins whenever the form's own
-    // Tax Parcel Number is still empty. Otherwise the server derives APN/address from
-    // the form exactly as buildPrefillInput does here, so an empty result means the
-    // request would only come back as a 400 — say so inline instead.
+    // The form's Tax Parcel Number wins; the toolbar box is the fallback. Whichever
+    // resolves is sent explicitly: the route derives APN/address from the *persisted*
+    // formData, which trails the live form by the autosave debounce, so an APN typed
+    // moments before Find records would otherwise be missing server-side and 400.
+    // The same buildPrefillInput the server runs decides whether anything at all can
+    // be derived — an empty result would only come back as a 400, so say so inline.
     const boxApn = toolbarApn.trim();
     const formApn = (form.getValues("facilityInfo.taxParcelNumber") ?? "").trim();
-    const body = {
-      trigger: "manual" as const,
-      ...(!formApn && isValidApn(boxApn) ? { apn: boxApn } : {}),
-    };
+    const apn = formApn || (isValidApn(boxApn) ? boxApn : "");
+    const body = { trigger: "manual" as const, ...(apn ? { apn } : {}) };
     const input = buildPrefillInput(form.getValues(), body);
     if (!input.apn && !input.address) {
       setInputError(PREFILL_NO_INPUT_MESSAGE);
