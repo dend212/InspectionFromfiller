@@ -125,6 +125,39 @@ describe("withExtraction", () => {
     expect(d.extract).not.toHaveBeenCalled();
   });
 
+  it("keeps phase 2's recordsAvailable (the EDMS index row) over the mapper's, whatever the record class", async () => {
+    const phase2: ProposedField = {
+      fieldPath: "facilityInfo.recordsAvailable",
+      value: "yes",
+      kind: "fill",
+      provenance: {
+        source: "permit",
+        confidence: 1,
+        explanation: "Permit 071533 (PERMIT) found on Maricopa EDMS",
+        sourceUrl: "/api/inspections/insp-1/records/rec-permit",
+        recordId: "rec-permit",
+        runId: "run-1",
+      },
+    };
+    const fromMapper = (docRank: number, explanation: string): ProposedField => ({
+      ...fill("facilityInfo.recordsAvailable", "yes", 1),
+      provenance: { source: "permit", confidence: 1, explanation, recordId: "rec-x", page: 1 },
+      authority: { docRank },
+    });
+    for (const mapper of [
+      fromMapper(0, "Permit 071533 on file (PERMIT)"),
+      fromMapper(2, "Notice of Transfer OWR-23-02001 on file"),
+    ]) {
+      const d = deps({ extract: vi.fn().mockResolvedValue({ ...extraction, proposals: [mapper] }) });
+      const out = await withExtraction(ctx, { ...done, proposals: [phase2] }, d);
+      const ra = out.proposals.filter((p) => p.fieldPath === "facilityInfo.recordsAvailable");
+      expect(ra).toHaveLength(1);
+      expect(ra[0]).toBe(phase2);
+      expect(ra[0].provenance.explanation).toContain("found on Maricopa EDMS");
+      expect(ra[0].provenance.sourceUrl).toBe("/api/inspections/insp-1/records/rec-permit");
+    }
+  });
+
   it("keeps the stage done and notes the problem when extraction crashes", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const d = deps({ extract: vi.fn().mockRejectedValue(new Error("db down")) });

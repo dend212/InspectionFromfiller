@@ -39,12 +39,19 @@ export interface ProvenanceEntry {
 /** Keyed by dotted form field path, e.g. "septicTank.tankCapacity" */
 export type FieldProvenance = Record<string, ProvenanceEntry>;
 
+/** Which document class a permit-stage proposal came from; lower outranks higher (see DOC_CLASS_RANK) */
+export interface ProposalAuthority {
+  docRank: number;
+}
+
 /** What a prefill stage proposes for one field; the client merges these into the form */
 export interface ProposedField {
   fieldPath: string;
   value: ProvenanceValue;
   kind: ProposalKind;
   provenance: Omit<ProvenanceEntry, "state" | "value" | "at" | "kind">;
+  /** Permit-stage record proposals only; absent elsewhere (dedupe treats absent as rank 0) */
+  authority?: ProposalAuthority;
 }
 
 export type PrefillTrigger = "apn_lookup" | "manual" | "webhook";

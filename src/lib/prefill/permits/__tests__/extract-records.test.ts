@@ -7,6 +7,7 @@ vi.mock("@/lib/storage/record-storage", () => ({ RECORD_BUCKET: "inspection-medi
 
 import { ExtractionError } from "@/lib/ai/extract-permit-facts";
 import { emptyPermitFacts, type PermitFacts } from "@/lib/ai/permit-extraction-schema";
+import { dedupeProposals } from "@/lib/prefill/map-facts-to-fields";
 import {
   describeFacts,
   extractStoredRecords,
@@ -236,6 +237,47 @@ describe("extractStoredRecords", () => {
       const result = await extractStoredRecords([rec({ id: "r-old", extractionStatus: "done", extracted: null })], ctx(), d);
       expect(result.proposals).toEqual([]);
       expect(d.extract).not.toHaveBeenCalled();
+    });
+
+    it("Dove Valley: a replayed Notice of Transfer never supplies the age; the freshly read permit does", async () => {
+      // 1414 E Dove Valley Rd — the NOT was reused from an earlier run, the 2007 permit read fresh
+      const notFacts: PermitFacts = {
+        ...emptyPermitFacts(),
+        documentKind: "notice_of_transfer",
+        issueDate: { value: "2023-06-07", confidence: 0.95, page: 5, evidence: "Date 6/7/2023", handwritten: false },
+        finalDate: { value: "2023-04-27", confidence: 0.97, page: 1, evidence: "Inspection date 4/27/2023", handwritten: false },
+        designFlowGpd: { value: 450, confidence: 0.97, page: 2, evidence: "Design flow 450 gpd", handwritten: false },
+        systemType: { value: "conventional", confidence: 0.97, page: 2, evidence: "Conventional", handwritten: false },
+      };
+      const permitFacts: PermitFacts = {
+        ...emptyPermitFacts(),
+        documentKind: "other",
+        issueDate: { value: "2007-04-12", confidence: 0.75, page: 1, evidence: "Date Issued 4/12/07", handwritten: true },
+        tanks: [{ capacityGal: { value: 1500, confidence: 0.72, page: 4, evidence: "1500 gal", handwritten: true }, material: null, model: null, dimensions: null }],
+      };
+      const d = deps({
+        extract: vi.fn().mockResolvedValue({ facts: permitFacts, passes: 1, escalations: 0, pageCount: 15, usage: { calls: [], estimatedCostUsd: 0.05 } }),
+      });
+      const result = await extractStoredRecords(
+        [
+          rec({ id: "rec-not", permitNumber: "OWR-23-02001", docType: "NOTICE OF TRANSFER", docDate: "2023-06-07", extractionStatus: "done", extracted: notFacts }),
+          rec({ id: "rec-permit", permitNumber: "071533", docType: "PERMIT", docDate: "2007-04-12", extractionStatus: "pending" }),
+        ],
+        ctx(),
+        d,
+      );
+      expect(d.extract).toHaveBeenCalledTimes(1);
+      // the replayed NOT comes first in result.proposals (D7 order) and proposes no age at all
+      expect(result.proposals.filter((p) => p.fieldPath === "facilityInfo.facilityAge")).toHaveLength(1);
+      const ages = dedupeProposals(result.proposals).filter((p) => p.fieldPath === "facilityInfo.facilityAge");
+      expect(ages).toHaveLength(1);
+      expect(ages[0].value).toBe("19");
+      expect(ages[0].provenance.recordId).toBe("rec-permit");
+      expect(ages[0].provenance.explanation).toMatch(/^Permit issued 04\/2007 \(permit 071533\)$/);
+      // the NOT still supplies what the permit does not
+      const flow = dedupeProposals(result.proposals).find((p) => p.fieldPath === "designFlow.estimatedDesignFlow");
+      expect(flow?.value).toBe("450");
+      expect(flow?.provenance.recordId).toBe("rec-not");
     });
   });
 

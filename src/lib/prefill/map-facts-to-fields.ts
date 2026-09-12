@@ -6,7 +6,8 @@ import type { Fact, PermitDocumentKind, PermitFacts } from "@/lib/ai/permit-extr
 import { WATER_SOURCES } from "@/lib/constants/inspection";
 import type { ListingFacts } from "./listing/provider";
 import { SEWER_KEYS, WATER_KEYS, findFact, flattenText } from "./listing/zillow-apify";
-import type { PrefillSource, ProposedField } from "./types";
+import { DOC_CLASS_RANK, classifyDocType } from "./permits/doc-types";
+import type { PrefillSource, ProposalAuthority, ProposedField } from "./types";
 
 export interface PermitRecordRef {
   id: string;
@@ -34,6 +35,25 @@ const DOC_KIND_LABEL: Record<Exclude<PermitDocumentKind, "other">, string> = {
 
 type Provenance = ProposedField["provenance"];
 
+const AUTHORITATIVE_KINDS: ReadonlySet<PermitDocumentKind> = new Set([
+  "approval_to_construct",
+  "discharge_authorization",
+  "final_da",
+]);
+
+/** A Notice of Transfer by the model's verdict, or by the EDMS index when the model could not tell */
+export function isTransferRecord(kind: PermitDocumentKind, docType: string): boolean {
+  return kind === "notice_of_transfer" || (kind === "other" && classifyDocType(docType) === "notice_of_transfer");
+}
+
+/** Authority of a record's facts: what the model read outranks the EDMS index; lower wins */
+export function permitDocRank(kind: PermitDocumentKind, docType: string): number {
+  if (AUTHORITATIVE_KINDS.has(kind)) return DOC_CLASS_RANK.permit;
+  if (kind === "notice_of_transfer") return DOC_CLASS_RANK.notice_of_transfer;
+  if (kind === "abandonment") return DOC_CLASS_RANK.abandonment;
+  return DOC_CLASS_RANK[classifyDocType(docType)];
+}
+
 function parseIsoDate(value: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return null;
   const d = new Date(`${value.trim()}T00:00:00Z`);
@@ -59,25 +79,33 @@ export function mapPermitFacts(
   const label = facts.documentKind === "other" ? record.docType : DOC_KIND_LABEL[facts.documentKind];
   const permitNo = facts.permitNumber?.value.trim() || record.permitNumber;
   const url = (page: number) => `/api/inspections/${record.inspectionId}/records/${record.id}#page=${page}`;
+  // A transfer record's facts are secondary: a permit-class record beats them in dedupeProposals
+  const transfer = isTransferRecord(facts.documentKind, record.docType);
+  const authority: ProposalAuthority = { docRank: permitDocRank(facts.documentKind, record.docType) };
 
   const prov = (fact: Fact<unknown>, extra: Partial<Provenance> = {}): Provenance => ({
     source: "permit",
     confidence: fact.confidence,
-    explanation: `Permit ${permitNo} · ${label} p.${fact.page}`,
+    explanation: transfer
+      ? `Notice of Transfer ${record.permitNumber} · p.${fact.page} (transfer record — secondary source)`
+      : `Permit ${permitNo} · ${label} p.${fact.page}`,
     evidence: fact.evidence || undefined,
     sourceUrl: url(fact.page),
     recordId: record.id,
     page: fact.page,
     ...extra,
   });
+  // every proposal goes through here so all of them carry `authority`
   const fill = (fieldPath: string, value: ProposedField["value"], provenance: Provenance) =>
-    out.push({ fieldPath, value, kind: "fill", provenance });
+    out.push({ fieldPath, value, kind: "fill", provenance, authority });
 
   // §7 row: any selected permit found → recordsAvailable "yes" (conf 1.0)
   fill("facilityInfo.recordsAvailable", "yes", {
     source: "permit",
     confidence: 1,
-    explanation: `Permit ${permitNo} on file (${label})`,
+    explanation: transfer
+      ? `Notice of Transfer ${record.permitNumber} on file`
+      : `Permit ${permitNo} on file (${label})`,
     sourceUrl: url(1),
     recordId: record.id,
     page: 1,
@@ -114,8 +142,9 @@ export function mapPermitFacts(
     });
   }
 
-  // §7 row: issueDate → facilityAge (years) + explanation "Approval to construct issued MM/YYYY (permit N)"
-  if (facts.issueDate) {
+  // §7 row: issueDate → facilityAge (years) + explanation "Approval to construct issued MM/YYYY (permit N)".
+  // Never from a transfer record: its dates are the transfer's, not the system's install date.
+  if (facts.issueDate && !transfer) {
     const issued = parseIsoDate(facts.issueDate.value);
     if (issued) {
       const years = wholeYearsBetween(issued, opts.now ?? new Date());
@@ -213,24 +242,31 @@ export function mapPermitFacts(
 
 const SOURCE_RANK: Record<PrefillSource, number> = { permit: 3, assessor: 2, listing: 1, scan: 0 };
 
+function docRankOf(p: ProposedField): number {
+  return p.authority?.docRank ?? 0;
+}
+
+/** True when `p` should replace `cur` for the same `kind:fieldPath` */
+function beats(p: ProposedField, cur: ProposedField): boolean {
+  const rankDiff = SOURCE_RANK[p.provenance.source] - SOURCE_RANK[cur.provenance.source];
+  if (rankDiff !== 0) return rankDiff > 0;
+  const docDiff = docRankOf(p) - docRankOf(cur);
+  if (docDiff !== 0) return docDiff < 0;
+  return p.provenance.confidence > cur.provenance.confidence;
+}
+
 /**
- * Combine stage proposals: permit beats listing for the same fieldPath; higher
- * confidence wins within a source. Warnings never collide with fills.
- * Output keeps first-seen order per key.
+ * Combine stage proposals per `kind:fieldPath`: higher SOURCE_RANK wins (permit > assessor >
+ * listing > scan); within a source the more authoritative document wins (lower
+ * `authority.docRank`; no authority = rank 0, i.e. the EDMS index row); then strictly higher
+ * confidence; then first-seen. Warnings never collide with fills. Output keeps first-seen order.
  */
 export function dedupeProposals(proposals: ProposedField[]): ProposedField[] {
   const best = new Map<string, ProposedField>();
   for (const p of proposals) {
     const key = `${p.kind}:${p.fieldPath}`;
     const cur = best.get(key);
-    if (!cur) {
-      best.set(key, p);
-      continue;
-    }
-    const rankDiff = SOURCE_RANK[p.provenance.source] - SOURCE_RANK[cur.provenance.source];
-    if (rankDiff > 0 || (rankDiff === 0 && p.provenance.confidence > cur.provenance.confidence)) {
-      best.set(key, p);
-    }
+    if (!cur || beats(p, cur)) best.set(key, p);
   }
   return [...best.values()];
 }

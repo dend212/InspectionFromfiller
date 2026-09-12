@@ -159,6 +159,9 @@ describe("mapPermitFacts — document kinds", () => {
       const props = byPath(mapPermitFacts({ ...emptyPermitFacts(), documentKind }, record));
       expect(Object.keys(props)).toEqual(["facilityInfo.recordsAvailable"]);
     }
+    // a transfer record is captioned as such, never as "Permit … on file"
+    const not = byPath(mapPermitFacts({ ...emptyPermitFacts(), documentKind: "notice_of_transfer" }, record));
+    expect(not["facilityInfo.recordsAvailable"].provenance.explanation).toBe("Notice of Transfer OW-17-00474 on file");
   });
 
   it("falls back to the EDMS permit number when the model found none", () => {
@@ -238,6 +241,109 @@ describe("mapPermitFacts — edge cases", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Document authority — Dove Valley (1414 E Dove Valley Rd) fixture, verbatim from the fix plan
+// ---------------------------------------------------------------------------
+
+const PERMIT_REC = { id: "rec-permit", permitNumber: "071533", docType: "PERMIT", inspectionId: "insp-1" };
+const NOT_REC = { id: "rec-not", permitNumber: "OWR-23-02001", docType: "NOTICE OF TRANSFER", inspectionId: "insp-1" };
+
+const permitFacts: PermitFacts = {
+  ...emptyPermitFacts(),
+  documentKind: "other",
+  issueDate: { value: "2007-04-12", confidence: 0.75, page: 1, evidence: "Date Issued 4/12/07", handwritten: true },
+  tanks: [
+    {
+      capacityGal: { value: 1500, confidence: 0.72, page: 4, evidence: "1500 gal", handwritten: true },
+      material: null,
+      model: null,
+      dimensions: null,
+    },
+  ],
+};
+
+const notFacts: PermitFacts = {
+  ...emptyPermitFacts(),
+  documentKind: "notice_of_transfer",
+  issueDate: { value: "2023-06-07", confidence: 0.95, page: 5, evidence: "Date 6/7/2023", handwritten: false },
+  finalDate: { value: "2023-04-27", confidence: 0.97, page: 1, evidence: "Inspection date 4/27/2023", handwritten: false },
+  designFlowGpd: { value: 450, confidence: 0.97, page: 2, evidence: "Design flow 450 gpd", handwritten: false },
+  systemType: { value: "conventional", confidence: 0.97, page: 2, evidence: "Conventional", handwritten: false },
+};
+
+describe("mapPermitFacts — document authority (Dove Valley)", () => {
+  it("never derives the system age from a Notice of Transfer and captions its facts as secondary", () => {
+    const all = mapPermitFacts(notFacts, NOT_REC, { now: NOW });
+    const props = byPath(all);
+    expect(props["facilityInfo.facilityAge"]).toBeUndefined();
+    expect(props["facilityInfo.facilityAgeEstimateExplanation"]).toBeUndefined();
+    expect(props["designFlow.estimatedDesignFlow"].value).toBe("450");
+    expect(props["designFlow.estimatedDesignFlow"].provenance.explanation).toBe(
+      "Notice of Transfer OWR-23-02001 · p.2 (transfer record — secondary source)",
+    );
+    expect(props["facilityInfo.recordsAvailable"].provenance.explanation).toBe("Notice of Transfer OWR-23-02001 on file");
+    expect(all.length).toBeGreaterThan(0);
+    for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(2);
+  });
+
+  it("treats a document the model could not classify as a transfer record when EDMS filed it as one", () => {
+    const all = mapPermitFacts({ ...notFacts, documentKind: "other" }, NOT_REC, { now: NOW });
+    const props = byPath(all);
+    expect(props["facilityInfo.facilityAge"]).toBeUndefined();
+    expect(props["facilityInfo.facilityAgeEstimateExplanation"]).toBeUndefined();
+    expect(props["designFlow.estimatedDesignFlow"].value).toBe("450");
+    for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(2);
+  });
+
+  it("derives the age from a PERMIT-class record the model classed `other` and ranks it 0", () => {
+    const all = mapPermitFacts(permitFacts, PERMIT_REC, { now: NOW });
+    const props = byPath(all);
+    expect(props["facilityInfo.facilityAge"].value).toBe("19");
+    expect(props["facilityInfo.facilityAgeEstimateExplanation"].value).toBe("Permit issued 04/2007 (permit 071533)");
+    expect(props["facilityInfo.facilityAge"].provenance.explanation).toBe("Permit issued 04/2007 (permit 071533)");
+    expect(props["septicTank.tanks.0.tankCapacity"].provenance.explanation).toBe("Permit 071533 · PERMIT p.4");
+    for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(0);
+  });
+
+  it("trusts the model over the EDMS index for a permit mis-filed as NOTICE OF TRANSFER", () => {
+    const all = mapPermitFacts({ ...permitFacts, documentKind: "approval_to_construct" }, NOT_REC, { now: NOW });
+    const props = byPath(all);
+    expect(props["facilityInfo.facilityAge"].value).toBe("19");
+    expect(props["facilityInfo.facilityAgeEstimateExplanation"].value).toBe(
+      "Approval to construct issued 04/2007 (permit OWR-23-02001)",
+    );
+    for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(0);
+  });
+
+  it("D7 replay order: the permit's age wins over the NOT and the NOT still supplies the design flow", () => {
+    const out = dedupeProposals([
+      ...mapPermitFacts(notFacts, NOT_REC, { now: NOW }),
+      ...mapPermitFacts(permitFacts, PERMIT_REC, { now: NOW }),
+    ]);
+    const ages = out.filter((p) => p.fieldPath === "facilityInfo.facilityAge");
+    expect(ages).toHaveLength(1);
+    expect(ages[0].value).toBe("19");
+    expect(ages[0].provenance.recordId).toBe("rec-permit");
+    const flow = byPath(out)["designFlow.estimatedDesignFlow"];
+    expect(flow.value).toBe("450");
+    expect(flow.provenance.recordId).toBe("rec-not");
+  });
+
+  it("head-to-head: a less confident permit fact beats a more confident NOT fact", () => {
+    const permitWithFlow: PermitFacts = {
+      ...permitFacts,
+      designFlowGpd: { value: 400, confidence: 0.7, page: 2, evidence: "400 gpd", handwritten: true },
+    };
+    const out = dedupeProposals([
+      ...mapPermitFacts(notFacts, NOT_REC, { now: NOW }),
+      ...mapPermitFacts(permitWithFlow, PERMIT_REC, { now: NOW }),
+    ]);
+    const flow = byPath(out)["designFlow.estimatedDesignFlow"];
+    expect(flow.value).toBe("400");
+    expect(flow.provenance.recordId).toBe("rec-permit");
+  });
+});
+
 describe("dedupeProposals", () => {
   const permit = (fieldPath: string, value: string, confidence: number): ProposedField => ({
     fieldPath,
@@ -279,5 +385,61 @@ describe("dedupeProposals", () => {
     };
     const out = dedupeProposals([warning, permit("facilityInfo.wastewaterSource", "residential", 0.9)]);
     expect(out).toHaveLength(2);
+  });
+
+  describe("document authority", () => {
+    const ranked = (fieldPath: string, value: string, confidence: number, docRank: number): ProposedField => ({
+      ...permit(fieldPath, value, confidence),
+      authority: { docRank },
+    });
+
+    it("within one document class, strictly higher confidence wins and equal confidence keeps the first", () => {
+      const higher = dedupeProposals([ranked("f", "a", 0.8, 0), ranked("f", "b", 0.9, 0)]);
+      expect(higher.map((p) => p.value)).toEqual(["b"]);
+      const equal = dedupeProposals([ranked("f", "a", 0.9, 0), ranked("f", "b", 0.9, 0)]);
+      expect(equal.map((p) => p.value)).toEqual(["a"]);
+      const equalNot = dedupeProposals([ranked("f", "a", 0.9, 2), ranked("f", "b", 0.9, 2)]);
+      expect(equalNot.map((p) => p.value)).toEqual(["a"]);
+    });
+
+    it("keeps the phase-2 recordsAvailable (no authority) against both a permit and a NOT mapper proposal", () => {
+      const phase2: ProposedField = {
+        fieldPath: "facilityInfo.recordsAvailable",
+        value: "yes",
+        kind: "fill",
+        provenance: {
+          source: "permit",
+          confidence: 1,
+          explanation: "Permit 071533 (PERMIT) found on Maricopa EDMS",
+          sourceUrl: "/api/inspections/insp-1/records/rec-permit",
+          recordId: "rec-permit",
+        },
+      };
+      const fromPermit = mapPermitFacts(permitFacts, PERMIT_REC, { now: NOW }).find(
+        (p) => p.fieldPath === "facilityInfo.recordsAvailable",
+      ) as ProposedField;
+      const fromNot = mapPermitFacts(notFacts, NOT_REC, { now: NOW }).find(
+        (p) => p.fieldPath === "facilityInfo.recordsAvailable",
+      ) as ProposedField;
+      expect(fromPermit.authority).toEqual({ docRank: 0 });
+      expect(fromNot.authority).toEqual({ docRank: 2 });
+
+      const first = dedupeProposals([phase2, fromPermit]);
+      expect(first).toHaveLength(1);
+      expect(first[0]).toBe(phase2);
+
+      const second = dedupeProposals([fromNot, phase2]);
+      expect(second).toHaveLength(1);
+      expect(second[0]).toBe(phase2);
+    });
+
+    it("never lets a listing beat a Notice of Transfer for the same field", () => {
+      const fromNot = ranked("designFlow.numberOfBedrooms", "3", 0.6, 2);
+      const out = dedupeProposals([listing("designFlow.numberOfBedrooms", "4", 0.95), fromNot]);
+      expect(out).toHaveLength(1);
+      expect(out[0]).toBe(fromNot);
+      const reversed = dedupeProposals([fromNot, listing("designFlow.numberOfBedrooms", "4", 0.95)]);
+      expect(reversed[0]).toBe(fromNot);
+    });
   });
 });
