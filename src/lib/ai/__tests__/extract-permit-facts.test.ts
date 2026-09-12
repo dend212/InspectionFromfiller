@@ -90,6 +90,10 @@ const f = <T>(value: T, confidence = 0.9, page = 1, handwritten = false) => ({
   handwritten,
 });
 
+/**
+ * A permit identified on page 1 (kind + typed issue date) that also carries a tank capacity:
+ * for a PERMIT that is enough to stop after pass 1 (hasCoreFacts && hasPermitIdentity).
+ */
 function withCapacity(
   facts: PermitFacts,
   gal: number,
@@ -99,6 +103,8 @@ function withCapacity(
 ): PermitFacts {
   return {
     ...facts,
+    documentKind: "approval_to_construct",
+    issueDate: f("2000-03-01", 0.95, 1),
     tanks: [{ capacityGal: f(gal, confidence, page, handwritten), material: null, model: null, dimensions: null }],
   };
 }
@@ -141,11 +147,96 @@ describe("extractPermitFactsFromPdf — passes", () => {
     expect((await attachedPdf(second)).getPageCount()).toBe(3);
     expect((await attachedPdf(second)).getPage(0).getWidth()).toBe(105);
     expect(attachedText(second)).toContain("pages 5–7 of a 7-page document");
-    expect(attachedText(second)).toContain("did not state a tank capacity");
+    expect(attachedText(second)).toContain("did not settle its tank capacity / disposal type and/or its permit identity");
     // pass-2 page 2 → source page 6; pass-2 page 3 → source page 7
     expect(result.facts.tanks[0].capacityGal?.page).toBe(6);
     expect(result.facts.disposal.type?.page).toBe(7);
     expect(result.facts.permitNumber?.value).toBe("000972");
+  });
+
+  describe("permit identity (owner rule: read a permit-class document until the permit is identified)", () => {
+    /** Dove Valley pass 1: pages 1–4 carry a pump invoice's "1500 gal" but the model classed the permit `other` */
+    const dovePass1: PermitFacts = {
+      ...emptyPermitFacts(),
+      documentKind: "other",
+      issueDate: { value: "2007-04-12", confidence: 0.75, page: 1, evidence: "Date Issued 4/12/07", handwritten: true },
+      tanks: [
+        {
+          capacityGal: { value: 1500, confidence: 0.72, page: 4, evidence: "1500 gal", handwritten: true },
+          material: null,
+          model: null,
+          dimensions: null,
+        },
+      ],
+    };
+    /** Pass 2 (pages 5–15): the Authorization to Construct stamp on source page 14 = attachment page 10 */
+    const dovePass2: PermitFacts = {
+      ...emptyPermitFacts(),
+      documentKind: "approval_to_construct",
+      issueDate: { value: "2007-04-12", confidence: 0.97, page: 10, evidence: "APPROVED 04/12/2007", handwritten: false },
+    };
+
+    it("runs a second pass over the rest of a PERMIT when pass 1 has core facts but no permit identity, and pass 2 settles kind and issue date", async () => {
+      const { client, parse } = fakeClient(reply(dovePass1), reply(dovePass2));
+      const result = await extractPermitFactsFromPdf(await makePdf(15), meta, { client, escalate: false });
+
+      expect(parse).toHaveBeenCalledTimes(2);
+      expect(result.passes).toBe(2);
+      const second = parse.mock.calls[1][0];
+      const pdf = await attachedPdf(second);
+      expect(pdf.getPageCount()).toBe(11);
+      expect(pdf.getPage(0).getWidth()).toBe(105); // source page 5
+      expect(pdf.getPage(10).getWidth()).toBe(115); // source page 15
+      expect(attachedText(second)).toContain("pages 5–15 of a 15-page document");
+      expect(attachedText(second)).toContain("permit identity");
+
+      // mergePermitFacts: a positive kind beats `other`; the typed 0.97 issue date beats the handwritten 0.75
+      expect(result.facts.documentKind).toBe("approval_to_construct");
+      expect(result.facts.issueDate).toEqual({
+        value: "2007-04-12",
+        confidence: 0.97,
+        page: 14,
+        evidence: "APPROVED 04/12/2007",
+        handwritten: false,
+      });
+      // pass-1 core facts survive the merge
+      expect(result.facts.tanks[0].capacityGal?.value).toBe(1500);
+      expect(result.facts.tanks[0].capacityGal?.page).toBe(4);
+    });
+
+    it("does not read further for a NOTICE OF TRANSFER whose first pages carry core facts", async () => {
+      const { client, parse } = fakeClient(reply(dovePass1));
+      const result = await extractPermitFactsFromPdf(
+        await makePdf(15),
+        { ...meta, permitNumber: "OWR-23-02001", docType: "NOTICE OF TRANSFER" },
+        { client, escalate: false },
+      );
+      expect(parse).toHaveBeenCalledTimes(1);
+      expect(result.passes).toBe(1);
+      expect(result.facts.documentKind).toBe("other");
+    });
+
+    it("does not read further when pass 1 already identified the permit and found core facts", async () => {
+      const identified: PermitFacts = { ...dovePass1, documentKind: "approval_to_construct" };
+      const { client, parse } = fakeClient(reply(identified));
+      const result = await extractPermitFactsFromPdf(await makePdf(15), meta, { client, escalate: false });
+      expect(parse).toHaveBeenCalledTimes(1);
+      expect(result.passes).toBe(1);
+    });
+
+    it("still reads further when pass 1 lacks core facts, even with the permit identified", async () => {
+      const identifiedNoCore: PermitFacts = {
+        ...emptyPermitFacts(),
+        documentKind: "approval_to_construct",
+        issueDate: f("2007-04-12", 0.97, 1),
+      };
+      const { client, parse } = fakeClient(reply(identifiedNoCore), reply(withCapacity(emptyPermitFacts(), 1000, 3)));
+      const result = await extractPermitFactsFromPdf(await makePdf(15), meta, { client, escalate: false });
+      expect(parse).toHaveBeenCalledTimes(2);
+      expect(result.passes).toBe(2);
+      expect(result.facts.tanks[0].capacityGal?.value).toBe(1000);
+      expect(result.facts.tanks[0].capacityGal?.page).toBe(7);
+    });
   });
 
   it("does not run a second pass when the document has no more pages", async () => {
@@ -300,7 +391,7 @@ describe("extractPermitFactsFromPdf — Opus escalation", () => {
   });
 
   it("caps escalations at 3 per document, weakest first", async () => {
-    // a typed tank capacity keeps hasCoreFacts true so no second Sonnet pass runs
+    // a typed tank capacity plus the identified permit keeps this to one Sonnet pass
     const facts: PermitFacts = {
       ...withCapacity(emptyPermitFacts(), 1000, 1, 0.95, false),
       permitNumber: f("000972", 0.5, 1, true),

@@ -80,7 +80,7 @@ export function buildPassUserMessage(meta: PassMessageMeta): string {
     `Extract the facts from the attached PDF. It contains pages ${first}–${last} of a ${meta.totalPages}-page document from the Maricopa County EDMS "${archive}" archive.`,
     `EDMS index metadata for this document: permit number "${meta.permitNumber}", document type "${meta.docType}". Use the metadata only to disambiguate; report what the pages actually say.`,
     meta.pass === 2
-      ? "The first pages of this document did not state a tank capacity or a disposal type. Look for them on these later pages (inspection cards, as-built tables, plot plans, plan-check notes)."
+      ? "The first pages of this document did not settle its tank capacity / disposal type and/or its permit identity. Look for tank capacity and disposal type on these later pages (inspection cards, as-built tables, plot plans, plan-check notes). If any of these pages is an Approval / Authorization to Construct, a Discharge Authorization or a Final DA — including a county approval stamp — report that documentKind and the county approval/issue date as issueDate; otherwise report documentKind for these pages on their own."
       : "",
     "Page numbers in your answer are 1-based within THIS attachment (its first page is page 1).",
   ];

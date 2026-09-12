@@ -1,10 +1,12 @@
 /**
  * Structured extraction of PermitFacts from a stored Maricopa ESD permit PDF
  * (spec §6). Sonnet 4.6 reads a first-pass sub-PDF (pages 1–4 / 1–6) and, when
- * that yields neither a tank capacity nor a disposal type, a second sub-PDF of
- * the next ≤ 20 pages; the passes merge field-by-field (higher confidence
- * wins). Handwritten facts under HANDWRITING_ESCALATION_THRESHOLD are re-asked
- * on Opus 5 with only their page and a single question (max 3 per document).
+ * that yields neither a tank capacity nor a disposal type — or, for a
+ * permit-class document, has not yet identified the permit (kind + issue
+ * date) — a second sub-PDF of the next ≤ 20 pages; the passes merge
+ * field-by-field (higher confidence wins). Handwritten facts under
+ * HANDWRITING_ESCALATION_THRESHOLD are re-asked on Opus 5 with only their
+ * page and a single question (max 3 per document).
  *
  * The structured-output schema sent to the API is the flat PermitFactsWireSchema
  * (the nested PermitFactsSchema does not compile as a grammar — see
@@ -19,6 +21,7 @@ import Anthropic, {
   RateLimitError,
 } from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { classifyDocType } from "@/lib/prefill/permits/doc-types";
 import { buildSubPdf, loadPdfDocument, planPasses } from "@/lib/prefill/permits/triage";
 import { HANDWRITING_ESCALATION_THRESHOLD, type PermitArchive } from "@/lib/prefill/types";
 import {
@@ -39,6 +42,7 @@ import {
   coerceFactValue,
   getFactAt,
   hasCoreFacts,
+  hasPermitIdentity,
   mergePermitFacts,
   rebasePages,
   setFactAt,
@@ -345,7 +349,13 @@ export async function extractPermitFactsFromPdf(
   );
   let passes: 1 | 2 = 1;
 
-  if (!hasCoreFacts(facts) && plan.second.length > 0) {
+  // Owner rule: a permit-class document (EDMS class "permit") is read further until the
+  // permit itself is identified (kind + issue date), not only until the core facts appear —
+  // an invoice's "1500 gal" on page 4 must not hide the Approval to Construct stamp on page 14.
+  const permitClass = classifyDocType(meta.docType) === "permit";
+  const needsSecondPass =
+    plan.second.length > 0 && (!hasCoreFacts(facts) || (permitClass && !hasPermitIdentity(facts)));
+  if (needsSecondPass) {
     const more = await runPass(
       client,
       await buildSubPdf(doc, plan.second),

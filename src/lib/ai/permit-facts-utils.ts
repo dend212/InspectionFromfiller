@@ -129,6 +129,11 @@ export function hasCoreFacts(facts: PermitFacts): boolean {
   return facts.tanks[0]?.capacityGal != null || facts.disposal.type != null;
 }
 
+/** Owner rule: a permit-class document is read further until the permit itself is identified. */
+export function hasPermitIdentity(facts: PermitFacts): boolean {
+  return facts.documentKind !== "other" && facts.issueDate != null;
+}
+
 /**
  * The model reports pages relative to the sub-PDF it was shown. `pageNumbers[i]`
  * is the source-document page number of sub-PDF page i+1. Returns a new object.

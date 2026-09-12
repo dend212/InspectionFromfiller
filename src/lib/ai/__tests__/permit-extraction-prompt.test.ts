@@ -66,7 +66,8 @@ describe("buildPassUserMessage", () => {
     expect(text).toContain('document type "PERMIT"');
     expect(text).toContain("env (legacy)");
     expect(text).toContain("1-based within THIS attachment");
-    expect(text).not.toContain("did not state a tank capacity");
+    expect(text).not.toContain("permit identity");
+    expect(text).not.toContain("documentKind");
   });
 
   it("tells pass 2 why it is being asked and names the eplpav archive", () => {
@@ -79,7 +80,10 @@ describe("buildPassUserMessage", () => {
     });
     expect(text).toContain("pages 7–9 of a 30-page document");
     expect(text).toContain("eplpav (Permit Center)");
-    expect(text).toContain("did not state a tank capacity or a disposal type");
+    expect(text).toContain("tank capacity / disposal type and/or its permit identity");
+    expect(text).toContain("Approval / Authorization to Construct");
+    expect(text).toContain("documentKind");
+    expect(text).toContain("issueDate");
   });
 });
 

@@ -5,6 +5,7 @@ import {
   coerceFactValue,
   getFactAt,
   hasCoreFacts,
+  hasPermitIdentity,
   mergePermitFacts,
   rebasePages,
   setFactAt,
@@ -89,6 +90,16 @@ describe("hasCoreFacts", () => {
     expect(hasCoreFacts(withTank(emptyPermitFacts(), 1000))).toBe(true);
     expect(
       hasCoreFacts({ ...emptyPermitFacts(), disposal: { ...emptyPermitFacts().disposal, type: f("bed") } }),
+    ).toBe(true);
+  });
+});
+
+describe("hasPermitIdentity", () => {
+  it("needs both a positive document kind and an issue date", () => {
+    expect(hasPermitIdentity({ ...emptyPermitFacts(), documentKind: "other", issueDate: f("2007-04-12") })).toBe(false);
+    expect(hasPermitIdentity({ ...emptyPermitFacts(), documentKind: "approval_to_construct", issueDate: null })).toBe(false);
+    expect(
+      hasPermitIdentity({ ...emptyPermitFacts(), documentKind: "approval_to_construct", issueDate: f("2007-04-12") }),
     ).toBe(true);
   });
 });
