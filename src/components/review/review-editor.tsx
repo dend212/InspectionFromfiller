@@ -1,80 +1,90 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  ArrowLeft,
-  ChevronDown,
-  ChevronRight,
-  Download,
-  ImageIcon,
-  Loader2,
-  RefreshCw,
-  Save,
-  Video,
-} from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
-import { toast } from "sonner";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FieldPath, useForm, useWatch } from "react-hook-form";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
-import { PdfPreview } from "@/components/inspection/pdf-preview";
-import { Badge } from "@/components/ui/badge";
+import { StepAlternativeSystem } from "@/components/inspection/step-alternative-system";
+import { StepDesignFlow } from "@/components/inspection/step-design-flow";
+import { StepDisposalWorks } from "@/components/inspection/step-disposal-works";
+import { StepFacilityInfo } from "@/components/inspection/step-facility-info";
+import { StepGeneralTreatment } from "@/components/inspection/step-general-treatment";
+import { StepSepticTank } from "@/components/inspection/step-septic-tank";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { usePdfGeneration } from "@/hooks/use-pdf-generation";
-import {
-  BAFFLE_CONDITIONS,
-  BAFFLE_MATERIALS,
-  GP402_SYSTEM_TYPES,
-  STEP_LABELS,
-} from "@/lib/constants/inspection";
+import { Form } from "@/components/ui/form";
+import { useAutoSave } from "@/hooks/use-auto-save";
+import { STEP_LABELS } from "@/lib/constants/inspection";
 import { normalizeIncludeAlternativePages } from "@/lib/inspection-form";
 import { getDefaultFormValues, inspectionFormSchema } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
+import { PhotoSelection } from "./photo-selection";
+import { ReportPreview } from "./report-preview";
 import { ReviewActions } from "./review-actions";
+import { ReviewPill, useStepValidations } from "./review-pill";
 import { ReviewSection } from "./review-section";
+import { SaveStatusBar } from "./save-status-bar";
 
-interface ReviewEditorProps {
+// prefill provider mounted in prefill phase 1
+
+export interface ReviewEditorProps {
   inspection: {
     id: string;
     status: string;
     formData: InspectionFormData | null;
     facilityName: string | null;
     facilityAddress: string | null;
-    facilityCity: string | null;
-    facilityCounty: string | null;
-    createdAt: string;
-    reviewNotes: string | null;
     customerEmail: string | null;
     isFromWorkiz: boolean;
   };
   media: MediaRecord[];
 }
 
+/** How long the jumped-to field keeps its amber ring */
+const HIGHLIGHT_MS = 2000;
+
+/** DOM id of a section's header button (jump-to falls back to it when the field is not rendered) */
+const sectionHeaderId = (index: number) => `review-section-${index}`;
+
+const FOCUSABLE = 'input:not([type="hidden"]), select, textarea, button, [tabindex]:not([tabindex="-1"])';
+
 export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorProps) {
   const [status, setStatus] = useState(inspection.status);
-  const [saving, setSaving] = useState(false);
-  const [showAllFields, setShowAllFields] = useState<Record<number, boolean>>({});
+  const readOnly = status === "completed" || status === "sent";
+
+  // ── Form ────────────────────────────────────────────────────────────────────
+  // Normalize so the includeAlternativePages flag stays consistent with the
+  // presence of saved alt-system data round-tripping through review.
+  const initialFormValues =
+    normalizeIncludeAlternativePages(inspection.formData) ?? getDefaultFormValues("");
+
+  const form = useForm<InspectionFormData>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(inspectionFormSchema) as any,
+    defaultValues: initialFormValues,
+    mode: "onChange",
+  });
+
+  // seedFromInitial: opening the page (or reopening) must not write — only edits do
+  const { status: saveStatus, lastSaved, flush } = useAutoSave(form, inspection.id, {
+    enabled: !readOnly,
+    seedFromInitial: true,
+  });
+  const validations = useStepValidations(form.control);
+  const includeAlternativePages = useWatch({ control: form.control, name: "includeAlternativePages" });
+
+  // ── Media selection (photos included in the report) ─────────────────────────
   const [mediaItems, setMediaItems] = useState(initialMedia);
-
-  // Media selection state — default all photos selected
-  const photos = useMemo(() => mediaItems.filter((m) => m.type === "photo"), [mediaItems]);
-  const videos = useMemo(() => mediaItems.filter((m) => m.type === "video"), [mediaItems]);
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(
-    () => new Set(photos.map((p) => p.id)),
+    () => new Set(initialMedia.filter((m) => m.type === "photo").map((m) => m.id)),
   );
-
+  const selectedMedia = useMemo(
+    () => mediaItems.filter((m) => selectedMediaIds.has(m.id)),
+    [mediaItems, selectedMediaIds],
+  );
+  // Array form for ReviewActions/FinalizeDialog — memoised so it is not a new prop every keystroke
+  const selectedMediaIdList = useMemo(() => Array.from(selectedMediaIds), [selectedMediaIds]);
   const toggleMedia = useCallback((id: string) => {
     setSelectedMediaIds((prev) => {
       const next = new Set(prev);
@@ -83,318 +93,75 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
       return next;
     });
   }, []);
-
-  const selectAllPhotos = useCallback(() => {
-    setSelectedMediaIds(new Set(photos.map((p) => p.id)));
-  }, [photos]);
-
-  const deselectAllPhotos = useCallback(() => {
-    setSelectedMediaIds(new Set());
+  const selectAllPhotos = useCallback(
+    () => setSelectedMediaIds(new Set(mediaItems.filter((m) => m.type === "photo").map((m) => m.id))),
+    [mediaItems],
+  );
+  const deselectAllPhotos = useCallback(() => setSelectedMediaIds(new Set()), []);
+  const handleDescriptionSaved = useCallback((mediaId: string, description: string) => {
+    setMediaItems((prev) => prev.map((m) => (m.id === mediaId ? { ...m, description } : m)));
   }, []);
 
-  const [editingDescId, setEditingDescId] = useState<string | null>(null);
-  const [descDraft, setDescDraft] = useState("");
+  // ── Sections (controlled so the finalize dialog can jump to a field) ────────
+  const [openSections, setOpenSections] = useState<Record<number, boolean>>({});
+  const setSectionOpen = useCallback(
+    (index: number, open: boolean) => setOpenSections((prev) => ({ ...prev, [index]: open })),
+    [],
+  );
 
-  const saveDescription = useCallback(
-    async (mediaId: string, newDesc: string) => {
-      const trimmed = newDesc.trim();
-      const item = mediaItems.find((m) => m.id === mediaId);
-      if (trimmed === (item?.description ?? "")) {
-        setEditingDescId(null);
-        return;
-      }
-      try {
-        const res = await fetch(`/api/inspections/${inspection.id}/media`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mediaId, description: trimmed }),
-        });
-        if (res.ok) {
-          setMediaItems((prev) =>
-            prev.map((m) => (m.id === mediaId ? { ...m, description: trimmed } : m)),
-          );
-        }
-      } finally {
-        setEditingDescId(null);
-      }
+  // The active highlight: cleared on the next jump and on unmount
+  const highlightRef = useRef<{ el: HTMLElement; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const clearHighlight = useCallback(() => {
+    if (!highlightRef.current) return;
+    clearTimeout(highlightRef.current.timer);
+    highlightRef.current.el.removeAttribute("data-highlight");
+    highlightRef.current = null;
+  }, []);
+  useEffect(() => clearHighlight, [clearHighlight]);
+
+  const jumpToField = useCallback(
+    (path: string, stepIndex: number) => {
+      setSectionOpen(stepIndex, true);
+      // Two frames: one for the section to mount, one for layout
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const el = document.querySelector<HTMLElement>(`[data-field-path="${path}"]`);
+          if (!el) {
+            // Conditionally rendered field / tank index beyond the rendered cards:
+            // land on the section header instead of silently doing nothing
+            const header = document.getElementById(sectionHeaderId(stepIndex));
+            header?.focus({ preventScroll: true });
+            header?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+            return;
+          }
+          clearHighlight();
+          el.setAttribute("data-highlight", "true");
+          highlightRef.current = {
+            el,
+            timer: setTimeout(() => {
+              el.removeAttribute("data-highlight");
+              highlightRef.current = null;
+            }, HIGHLIGHT_MS),
+          };
+          // Focus first, without scrolling, so RHF's setFocus (a no-op on an already
+          // focused control) cannot fire an instant scroll that pre-empts the smooth one
+          el.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: true });
+          form.setFocus(path as FieldPath<InspectionFormData>, { shouldSelect: false });
+          el.scrollIntoView?.({ behavior: "smooth", block: "center" });
+        }),
+      );
     },
-    [inspection.id, mediaItems],
+    [form, setSectionOpen, clearHighlight],
   );
 
-  const isReadOnly = status === "completed";
-
-  // Normalize so the includeAlternativePages flag stays consistent with the
-  // presence of saved alt-system data round-tripping through review.
-  const initialFormValues =
-    normalizeIncludeAlternativePages(inspection.formData) ?? getDefaultFormValues("");
-
-  const form = useForm<InspectionFormData>({
-    resolver: zodResolver(inspectionFormSchema) as any,
-    defaultValues: initialFormValues,
-  });
-
-  const facilityName = useWatch({ control: form.control, name: "facilityInfo.facilityName" });
-  const isCesspool = useWatch({ control: form.control, name: "facilityInfo.isCesspool" });
-  const { generatePdf, pdfData, isGenerating, error, clearPdf } = usePdfGeneration();
-
-  // Finalized PDF state — for showing the exact server-generated PDF
-  const [finalizedPdfUrl, setFinalizedPdfUrl] = useState<string | null>(null);
-  const [finalizedDownloadUrl, setFinalizedDownloadUrl] = useState<string | null>(null);
-  const [loadingFinalizedPdf, setLoadingFinalizedPdf] = useState(false);
-
-  const fetchFinalizedPdf = useCallback(async () => {
-    setLoadingFinalizedPdf(true);
-    try {
-      const res = await fetch(`/api/inspections/${inspection.id}/download`);
-      if (res.ok) {
-        const data = await res.json();
-        setFinalizedPdfUrl(data.previewUrl ?? data.downloadUrl);
-        setFinalizedDownloadUrl(data.downloadUrl);
-      }
-    } catch (err) {
-      console.error("Failed to fetch finalized PDF:", err);
-    } finally {
-      setLoadingFinalizedPdf(false);
-    }
-  }, [inspection.id]);
-
-  // Auto-fetch finalized PDF on mount if already completed/sent
-  useEffect(() => {
-    if ((status === "completed" || status === "sent") && !finalizedPdfUrl) {
-      fetchFinalizedPdf();
-    }
-  }, [status, finalizedPdfUrl, fetchFinalizedPdf]);
-
-  const isDirty = form.formState.isDirty;
-
-  const handleRegenerate = useCallback(async () => {
-    clearPdf();
-    const formData = form.getValues();
-    const signatureDataUrl = formData.disposalWorks?.signatureDataUrl ?? null;
-    // Only include selected photos in the PDF
-    const selectedMedia = mediaItems.filter((m) => selectedMediaIds.has(m.id));
-    await generatePdf(formData, signatureDataUrl, selectedMedia);
-  }, [form, mediaItems, selectedMediaIds, generatePdf, clearPdf]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const data = form.getValues();
-      const res = await fetch(`/api/inspections/${inspection.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to save");
-      }
-      form.reset(data);
-      toast.success("Changes saved");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save changes");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleStatusChange = (newStatus: string) => {
-    setStatus(newStatus);
-    if (newStatus === "completed") {
-      fetchFinalizedPdf();
-    } else {
-      setFinalizedPdfUrl(null);
-    }
-  };
-
-  const toggleShowAll = (section: number) => {
-    setShowAllFields((prev) => ({ ...prev, [section]: !prev[section] }));
-  };
-
-  // Helper to render a text input field
-  const renderTextField = (
-    name: string,
-    label: string,
-    options?: { textarea?: boolean; disabled?: boolean },
-  ) => (
-    <FormField
-      control={form.control}
-      name={name as any}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel className="text-xs font-medium text-muted-foreground">{label}</FormLabel>
-          <FormControl>
-            {options?.textarea ? (
-              <Textarea
-                {...field}
-                value={(field.value as string) ?? ""}
-                disabled={isReadOnly || options?.disabled}
-                rows={4}
-                className="resize-none text-sm"
-              />
-            ) : (
-              <Input
-                {...field}
-                value={(field.value as string) ?? ""}
-                disabled={isReadOnly || options?.disabled}
-                className="text-sm"
-              />
-            )}
-          </FormControl>
-        </FormItem>
-      )}
-    />
-  );
-
-  // Helper to render a checkbox field
-  const renderCheckbox = (name: string, label: string, options?: { disabled?: boolean }) => (
-    <FormField
-      control={form.control}
-      name={name as any}
-      render={({ field }) => (
-        <FormItem className="flex items-center gap-2 space-y-0">
-          <FormControl>
-            <Checkbox
-              checked={field.value as boolean}
-              onCheckedChange={field.onChange}
-              disabled={isReadOnly || options?.disabled}
-            />
-          </FormControl>
-          <FormLabel className="text-xs font-normal">{label}</FormLabel>
-        </FormItem>
-      )}
-    />
-  );
-
-  // Helper to render a select field (for yes/no and similar option fields)
-  const renderSelectField = (
-    name: string,
-    label: string,
-    options: readonly { value: string; label: string }[],
-  ) => (
-    <FormField
-      control={form.control}
-      name={name as any}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel className="text-xs font-medium text-muted-foreground">{label}</FormLabel>
-          <Select
-            onValueChange={field.onChange}
-            value={(field.value as string) ?? ""}
-            disabled={isReadOnly}
-          >
-            <FormControl>
-              <SelectTrigger className="text-sm">
-                <SelectValue placeholder="Select" />
-              </SelectTrigger>
-            </FormControl>
-            <SelectContent>
-              {options.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </FormItem>
-      )}
-    />
-  );
-
-  const YES_NO_OPTIONS = [
-    { value: "yes", label: "Yes" },
-    { value: "no", label: "No" },
-  ] as const;
-
-  const PRESENT_OPTIONS = [
-    { value: "present", label: "Present" },
-    { value: "not_present", label: "Not Present" },
-  ] as const;
-
-  // Helper to render a read-only display value
-  const renderReadOnly = (label: string, value: string | undefined | null) => (
-    <div className="space-y-1">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="text-sm">{value || "-"}</p>
-    </div>
-  );
-
-  // Helper to render a button group selector (matches frontend ButtonGroup)
-  const renderButtonGroup = (
-    name: string,
-    label: string,
-    options: readonly { value: string; label: string }[],
-  ) => (
-    <FormField
-      control={form.control}
-      name={name as any}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel className="text-xs font-medium text-muted-foreground">{label}</FormLabel>
-          <div className="flex gap-1">
-            {options.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                disabled={isReadOnly}
-                onClick={() => field.onChange(field.value === opt.value ? "" : opt.value)}
-                className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
-                  field.value === opt.value
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-input bg-background text-foreground hover:bg-accent"
-                } ${isReadOnly ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </FormItem>
-      )}
-    />
-  );
-
-  // Helper to render a multi-select checkbox group (matches frontend checkbox arrays)
-  const renderCheckboxGroup = (
-    name: string,
-    label: string,
-    options: readonly { value: string; label: string }[],
-  ) => (
-    <FormField
-      control={form.control}
-      name={name as any}
-      render={({ field }) => {
-        const selected: string[] = (field.value as string[]) ?? [];
-        const toggle = (value: string) => {
-          const next = selected.includes(value)
-            ? selected.filter((v) => v !== value)
-            : [...selected, value];
-          field.onChange(next);
-        };
-        return (
-          <FormItem>
-            <FormLabel className="text-xs font-medium text-muted-foreground">{label}</FormLabel>
-            <div className="flex flex-wrap gap-1">
-              {options.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  disabled={isReadOnly}
-                  onClick={() => toggle(opt.value)}
-                  className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
-                    selected.includes(opt.value)
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-input bg-background text-foreground hover:bg-accent"
-                  } ${isReadOnly ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </FormItem>
-        );
-      }}
-    />
-  );
+  const steps = [
+    <StepFacilityInfo key="0" inspectionId={inspection.id} readOnly={readOnly} />,
+    <StepGeneralTreatment key="1" inspectionId={inspection.id} readOnly={readOnly} />,
+    <StepDesignFlow key="2" inspectionId={inspection.id} readOnly={readOnly} />,
+    <StepSepticTank key="3" inspectionId={inspection.id} readOnly={readOnly} />,
+    <StepDisposalWorks key="4" inspectionId={inspection.id} readOnly={readOnly} />,
+    <StepAlternativeSystem key="5" inspectionId={inspection.id} readOnly={readOnly} />,
+  ];
 
   return (
     <div className="space-y-4">
@@ -412,661 +179,65 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
       </div>
 
       <Form {...form}>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left panel: scrollable form sections */}
-          <div className="space-y-4">
-            {/* Action bar */}
-            <ReviewActions
-              inspectionId={inspection.id}
-              status={status}
-              facilityAddress={inspection.facilityAddress}
-              customerEmail={inspection.customerEmail}
-              isFromWorkiz={inspection.isFromWorkiz}
-              selectedMediaIds={Array.from(selectedMediaIds)}
-              onStatusChange={handleStatusChange}
-            />
+        {/* Status header + actions */}
+        <ReviewActions
+          inspectionId={inspection.id}
+          status={status}
+          facilityAddress={inspection.facilityAddress}
+          customerEmail={inspection.customerEmail}
+          isFromWorkiz={inspection.isFromWorkiz}
+          selectedMediaIds={selectedMediaIdList}
+          onStatusChange={setStatus}
+          flush={flush}
+          getFormData={form.getValues}
+          onJumpToField={jumpToField}
+        />
 
-            {/* Dirty indicator */}
-            {isDirty && !isReadOnly && (
-              <p className="text-xs text-amber-600">
-                Form data changed -- regenerate PDF to see updates
-              </p>
-            )}
-
-            {/* Section 1: Facility Information */}
-            <ReviewSection title={STEP_LABELS[0]} defaultOpen>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {renderTextField("facilityInfo.facilityName", "Facility / Property Name")}
-                {renderTextField("facilityInfo.facilityAddress", "Address")}
-                {renderTextField("facilityInfo.facilityCity", "City")}
-                {renderTextField("facilityInfo.facilityCounty", "County")}
-                {renderTextField("facilityInfo.facilityState", "State")}
-                {renderTextField("facilityInfo.facilityZip", "Zip")}
-                {renderTextField("facilityInfo.taxParcelNumber", "Tax Parcel Number")}
-                {renderTextField("facilityInfo.dateOfInspection", "Date of Inspection")}
-                {renderButtonGroup("facilityInfo.recordsAvailable", "Records Available", YES_NO_OPTIONS)}
-                {renderButtonGroup("facilityInfo.isCesspool", "Is Cesspool", YES_NO_OPTIONS)}
-              </div>
-
-              {isCesspool === "yes" && (
-                <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-950/30">
-                  <p className="mb-2 text-xs text-amber-800/90 dark:text-amber-300/90">
-                    Cesspool / cesspit selected -- remaining pages are voided with a red X on
-                    the generated report; these comments are appended to the Inspector Comments page.
-                  </p>
-                  {renderTextField("facilityInfo.cesspoolComments", "Cesspool / Cesspit Comments", {
-                    textarea: true,
-                  })}
-                </div>
-              )}
-
-              <div className="mt-4 border-t pt-4">
-                <p className="mb-3 text-xs font-semibold uppercase text-muted-foreground">
-                  Seller / Transferor
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {renderTextField("facilityInfo.sellerName", "Seller Name")}
-                  {renderTextField("facilityInfo.sellerAddress", "Seller Address")}
-                  {renderTextField("facilityInfo.sellerCity", "Seller City")}
-                  {renderTextField("facilityInfo.sellerState", "Seller State")}
-                  {renderTextField("facilityInfo.sellerZip", "Seller Zip")}
-                </div>
-              </div>
-
-              <div className="mt-4 border-t pt-4">
-                <p className="mb-3 text-xs font-semibold uppercase text-muted-foreground">
-                  Inspector
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {renderTextField("facilityInfo.inspectorName", "Inspector Name")}
-                  {renderTextField("facilityInfo.company", "Company")}
-                  {renderTextField("facilityInfo.certificationNumber", "Certification #")}
-                  {renderTextField("facilityInfo.registrationNumber", "Registration #")}
-                  {renderTextField("facilityInfo.truckNumber", "Truck #")}
-                  {renderTextField("facilityInfo.employeeName", "Employee Name")}
-                </div>
-              </div>
-
-              {/* Show All toggle for less common fields */}
-              <button
-                type="button"
-                className="mt-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => toggleShowAll(0)}
-              >
-                {showAllFields[0] ? (
-                  <ChevronDown className="size-3" />
-                ) : (
-                  <ChevronRight className="size-3" />
-                )}
-                {showAllFields[0] ? "Hide" : "Show"} qualification &amp; records fields
-              </button>
-              {showAllFields[0] && (
-                <div className="mt-3 space-y-4 border-t pt-4">
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">
-                    Inspector Qualifications
-                  </p>
-                  <div className="space-y-2">
-                    {renderCheckbox("facilityInfo.hasAdeqCourse", "Completed ADEQ Course")}
-                    {renderTextField("facilityInfo.adeqCourseDetails", "ADEQ Course Details")}
-                    {renderCheckbox("facilityInfo.isProfessionalEngineer", "Professional Engineer")}
-                    {renderCheckbox("facilityInfo.isRegisteredSanitarian", "Registered Sanitarian")}
-                    {renderCheckbox("facilityInfo.isWastewaterOperator", "Wastewater Operator")}
-                    {renderCheckbox("facilityInfo.isLicensedContractor", "Licensed Contractor")}
-                    {renderCheckbox("facilityInfo.hasPumperTruck", "Has Pumper Truck")}
-                  </div>
-
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">Records</p>
-                  <div className="space-y-2">
-                    {renderCheckbox("facilityInfo.hasDischargeAuth", "Discharge Authorization")}
-                    {renderTextField(
-                      "facilityInfo.dischargeAuthPermitNo",
-                      "Discharge Auth Permit #",
-                    )}
-                    {renderCheckbox(
-                      "facilityInfo.hasApprovalOfConstruction",
-                      "Approval of Construction",
-                    )}
-                    {renderTextField("facilityInfo.approvalPermitNo", "Approval Permit #")}
-                    {renderCheckbox("facilityInfo.hasSitePlan", "Site Plan Available")}
-                    {renderCheckbox("facilityInfo.hasOperationDocs", "Operation Docs Available")}
-                    {renderCheckbox("facilityInfo.hasOtherRecords", "Other Records")}
-                    {renderTextField(
-                      "facilityInfo.otherRecordsDescription",
-                      "Other Records Description",
-                    )}
-                  </div>
-
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">
-                    Facility Details
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {renderTextField("facilityInfo.waterSource", "Water Source")}
-                    {renderTextField("facilityInfo.wellDistance", "Well Distance")}
-                    {renderTextField("facilityInfo.wastewaterSource", "Wastewater Source")}
-                    {renderTextField("facilityInfo.occupancyType", "Occupancy Type")}
-                    {renderTextField("facilityInfo.facilityType", "Facility Type")}
-                    {renderTextField("facilityInfo.numberOfSystems", "# of Systems")}
-                    {renderTextField("facilityInfo.facilityAge", "Facility Age")}
-                  </div>
-
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">
-                    Overall Condition Ratings
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {renderTextField("facilityInfo.septicTankCondition", "Septic Tank Condition")}
-                    {renderTextField(
-                      "facilityInfo.disposalWorksCondition",
-                      "Disposal Works Condition",
-                    )}
-                    {renderTextField(
-                      "facilityInfo.alternativeSystemCondition",
-                      "Alternative System Condition",
-                    )}
-                    {renderTextField(
-                      "facilityInfo.alternativeDisposalCondition",
-                      "Alternative Disposal Condition",
-                    )}
-                  </div>
-                </div>
-              )}
+        {/* Six wizard sections */}
+        <div className="space-y-3">
+          {steps.map((step, index) => (
+            <ReviewSection
+              key={STEP_LABELS[index]}
+              id={sectionHeaderId(index)}
+              title={STEP_LABELS[index]}
+              open={openSections[index] ?? false}
+              onOpenChange={(open) => setSectionOpen(index, open)}
+              pill={
+                <ReviewPill
+                  result={index === 5 && !includeAlternativePages ? null : validations[index]}
+                />
+              }
+            >
+              {step}
             </ReviewSection>
-
-            {/* Section 2: General Treatment */}
-            <ReviewSection title={STEP_LABELS[1]}>
-              <div className="space-y-4">
-                {renderCheckboxGroup(
-                  "generalTreatment.systemTypes",
-                  "System Types",
-                  GP402_SYSTEM_TYPES,
-                )}
-                {renderButtonGroup(
-                  "generalTreatment.hasPerformanceAssurancePlan",
-                  "Performance Assurance Plan",
-                  YES_NO_OPTIONS,
-                )}
-                {renderCheckbox("generalTreatment.alternativeSystem", "Alternative System")}
-
-                <button
-                  type="button"
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => toggleShowAll(1)}
-                >
-                  {showAllFields[1] ? (
-                    <ChevronDown className="size-3" />
-                  ) : (
-                    <ChevronRight className="size-3" />
-                  )}
-                  {showAllFields[1] ? "Hide" : "Show"} alternative system details
-                </button>
-                {showAllFields[1] && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4">
-                    {renderTextField("generalTreatment.altSystemManufacturer", "Manufacturer")}
-                    {renderTextField("generalTreatment.altSystemModel", "Model")}
-                    {renderTextField("generalTreatment.altSystemCapacity", "Capacity")}
-                    {renderTextField("generalTreatment.altSystemDateInstalled", "Date Installed")}
-                    {renderTextField("generalTreatment.altSystemCondition", "Condition")}
-                    {renderTextField("generalTreatment.altSystemNotes", "Notes", {
-                      textarea: true,
-                    })}
-                  </div>
-                )}
-              </div>
-            </ReviewSection>
-
-            {/* Section 3: Design Flow */}
-            <ReviewSection title={STEP_LABELS[2]}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {renderTextField("designFlow.estimatedDesignFlow", "Estimated Design Flow")}
-                {renderTextField("designFlow.designFlowBasis", "Design Flow Basis")}
-                {renderTextField("designFlow.numberOfBedrooms", "Number of Bedrooms")}
-                {renderTextField("designFlow.fixtureCount", "Fixture Count")}
-                {renderTextField("designFlow.nonDwellingGpd", "Non-Dwelling GPD")}
-                {renderTextField("designFlow.actualFlowEvaluation", "Actual Flow Evaluation")}
-              </div>
-              <div className="mt-4">
-                {renderTextField("designFlow.designFlowComments", "Design Flow Comments", {
-                  textarea: true,
-                })}
-              </div>
-            </ReviewSection>
-
-            {/* Section 4: Septic Tank */}
-            <ReviewSection title={STEP_LABELS[3]}>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {renderTextField("septicTank.numberOfTanks", "Number of Tanks")}
-                  {renderSelectField("septicTank.tanksPumped", "Tanks Pumped", YES_NO_OPTIONS)}
-                  {renderTextField("septicTank.haulerCompany", "Hauler Company")}
-                  {renderTextField("septicTank.haulerLicense", "Hauler License")}
-                  {renderTextField("septicTank.tankInspectionDate", "Tank Inspection Date")}
-                </div>
-
-                {/* Per-tank data */}
-                {(form.getValues("septicTank.tanks") ?? []).map((_tank: any, index: number) => (
-                  <div key={index} className="rounded-lg border p-4 space-y-4">
-                    <p className="text-sm font-semibold">Tank {index + 1}</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {renderTextField(`septicTank.tanks.${index}.liquidLevel`, "Liquid Level")}
-                      {renderTextField(`septicTank.tanks.${index}.tankCapacity`, "Tank Capacity")}
-                      {renderTextField(`septicTank.tanks.${index}.tankMaterial`, "Tank Material")}
-                      {renderTextField(
-                        `septicTank.tanks.${index}.tankDimensions`,
-                        "Tank Dimensions",
-                      )}
-                      {renderTextField(
-                        `septicTank.tanks.${index}.numberOfCompartments`,
-                        "Compartments",
-                      )}
-                      {renderTextField(
-                        `septicTank.tanks.${index}.primaryScumThickness`,
-                        "Scum Thickness",
-                      )}
-                      {renderTextField(
-                        `septicTank.tanks.${index}.primarySludgeThickness`,
-                        "Sludge Thickness",
-                      )}
-                    </div>
-
-                    <p className="text-xs font-semibold uppercase text-muted-foreground">
-                      Deficiencies
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {renderCheckbox(
-                        `septicTank.tanks.${index}.deficiencyRootInvasion`,
-                        "Root Invasion",
-                      )}
-                      {renderCheckbox(
-                        `septicTank.tanks.${index}.deficiencyExposedRebar`,
-                        "Exposed Rebar",
-                      )}
-                      {renderCheckbox(`septicTank.tanks.${index}.deficiencyCracks`, "Cracks")}
-                      {renderCheckbox(
-                        `septicTank.tanks.${index}.deficiencyDamagedInlet`,
-                        "Damaged Inlet",
-                      )}
-                      {renderCheckbox(
-                        `septicTank.tanks.${index}.deficiencyDamagedOutlet`,
-                        "Damaged Outlet",
-                      )}
-                      {renderCheckbox(
-                        `septicTank.tanks.${index}.deficiencyDamagedLids`,
-                        "Damaged Lids",
-                      )}
-                      {renderCheckbox(
-                        `septicTank.tanks.${index}.deficiencyDeterioratingConcrete`,
-                        "Deteriorating Concrete",
-                      )}
-                      {renderCheckbox(`septicTank.tanks.${index}.deficiencyOther`, "Other")}
-                    </div>
-
-                    <button
-                      type="button"
-                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => toggleShowAll(30 + index)}
-                    >
-                      {showAllFields[30 + index] ? (
-                        <ChevronDown className="size-3" />
-                      ) : (
-                        <ChevronRight className="size-3" />
-                      )}
-                      {showAllFields[30 + index] ? "Hide" : "Show"} all tank fields
-                    </button>
-                    {showAllFields[30 + index] && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4">
-                        {renderTextField(
-                          `septicTank.tanks.${index}.capacityBasis`,
-                          "Capacity Basis",
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.accessOpenings`,
-                          "Access Openings",
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.lidsRisersPresent`,
-                          "Lids/Risers Present",
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.lidsSecurelyFastened`,
-                          "Lids Securely Fastened",
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.compromisedTank`,
-                          "Compromised Tank",
-                        )}
-                        {renderCheckboxGroup(
-                          `septicTank.tanks.${index}.baffleMaterial`,
-                          "Baffle Material",
-                          BAFFLE_MATERIALS,
-                        )}
-                        {renderCheckboxGroup(
-                          `septicTank.tanks.${index}.inletBaffleCondition`,
-                          "Inlet Baffle",
-                          BAFFLE_CONDITIONS,
-                        )}
-                        {renderCheckboxGroup(
-                          `septicTank.tanks.${index}.outletBaffleCondition`,
-                          "Outlet Baffle",
-                          BAFFLE_CONDITIONS,
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.effluentFilterPresent`,
-                          "Effluent Filter Present",
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.effluentFilterServiced`,
-                          "Effluent Filter Serviced",
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.secondaryScumThickness`,
-                          "Secondary Scum Thickness",
-                        )}
-                        {renderTextField(
-                          `septicTank.tanks.${index}.secondarySludgeThickness`,
-                          "Secondary Sludge Thickness",
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {renderTextField("septicTank.septicTankComments", "Inspector Comments", {
-                  textarea: true,
-                })}
-              </div>
-            </ReviewSection>
-
-            {/* Section 5: Disposal Works -- PRIMARY editing section for Dan */}
-            <ReviewSection title={STEP_LABELS[4]}>
-              <div className="space-y-4">
-                {/* Key summary fields -- prominent */}
-                <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-4">
-                  <p className="text-xs font-semibold uppercase text-primary">
-                    Inspector Summary &amp; Recommendations
-                  </p>
-                  {renderTextField(
-                    "disposalWorks.disposalWorksComments",
-                    "Inspector Summary / Comments",
-                    { textarea: true },
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {renderSelectField(
-                    "disposalWorks.disposalWorksLocationDetermined",
-                    "Location Determined",
-                    YES_NO_OPTIONS,
-                  )}
-                  {renderTextField("disposalWorks.disposalType", "Disposal Type")}
-                  {renderTextField("disposalWorks.distributionMethod", "Distribution Method")}
-                  {renderTextField("disposalWorks.supplyLineMaterial", "Supply Line Material")}
-                  {renderSelectField(
-                    "disposalWorks.distributionComponentInspected",
-                    "Distribution Component Inspected",
-                    YES_NO_OPTIONS,
-                  )}
-                  {renderSelectField(
-                    "disposalWorks.inspectionPortsPresent",
-                    "Inspection Ports Present",
-                    PRESENT_OPTIONS,
-                  )}
-                  {renderTextField("disposalWorks.numberOfPorts", "Number of Ports")}
-                  {renderButtonGroup(
-                    "disposalWorks.hydraulicLoadTestPerformed",
-                    "Hydraulic Load Test",
-                    YES_NO_OPTIONS,
-                  )}
-                  {renderSelectField(
-                    "disposalWorks.hasDisposalDeficiency",
-                    "Has Deficiency",
-                    YES_NO_OPTIONS,
-                  )}
-                  {renderSelectField(
-                    "disposalWorks.repairsRecommended",
-                    "Repairs Recommended",
-                    YES_NO_OPTIONS,
-                  )}
-                </div>
-
-                {/* Disposal Works Deficiencies */}
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                    Disposal Works Deficiencies
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {renderCheckbox("disposalWorks.defCrushedOutletPipe", "Crushed Outlet Pipe")}
-                    {renderCheckbox("disposalWorks.defRootInvasion", "Root Invasion")}
-                    {renderCheckbox("disposalWorks.defHighWaterLines", "High Water Lines")}
-                    {renderCheckbox("disposalWorks.defDboxNotFunctioning", "D-box Not Functioning")}
-                    {renderCheckbox("disposalWorks.defSurfacing", "Surfacing")}
-                    {renderCheckbox("disposalWorks.defLushVegetation", "Lush Vegetation")}
-                    {renderCheckbox("disposalWorks.defErosion", "Erosion")}
-                    {renderCheckbox("disposalWorks.defPondingWater", "Ponding Water")}
-                    {renderCheckbox("disposalWorks.defAnimalIntrusion", "Animal Intrusion")}
-                    {renderCheckbox("disposalWorks.defLoadTestFailure", "Load Test Failure")}
-                    {renderCheckbox("disposalWorks.defCouldNotDetermine", "Could Not Determine")}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {renderTextField("disposalWorks.printedName", "Printed Name")}
-                  <p className="text-sm text-muted-foreground flex items-center">Date auto-filled at finalization</p>
-                </div>
-              </div>
-            </ReviewSection>
-
-            {/* Media Selection */}
-            {(photos.length > 0 || videos.length > 0) && (
-              <ReviewSection
-                title={`Inspection Media (${selectedMediaIds.size} of ${photos.length} photos selected)`}
-              >
-                <div className="space-y-4">
-                  {/* Photos */}
-                  {photos.length > 0 && (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold uppercase text-muted-foreground">
-                          Photos
-                        </p>
-                        {!isReadOnly && (
-                          <div className="flex gap-1">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 text-xs"
-                              onClick={selectAllPhotos}
-                            >
-                              Select All
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 text-xs"
-                              onClick={deselectAllPhotos}
-                            >
-                              Deselect All
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                        {photos.map((photo, idx) => {
-                          const isSelected = selectedMediaIds.has(photo.id);
-                          const isEditingThis = editingDescId === photo.id;
-                          return (
-                            <div
-                              key={photo.id}
-                              className={`relative rounded-lg border overflow-hidden text-left transition-all ${
-                                isSelected
-                                  ? "ring-2 ring-primary border-primary"
-                                  : "opacity-50 border-muted"
-                              }`}
-                            >
-                              <button
-                                type="button"
-                                disabled={isReadOnly}
-                                className={`w-full ${!isReadOnly ? "cursor-pointer hover:opacity-80" : ""}`}
-                                onClick={() => toggleMedia(photo.id)}
-                              >
-                                {photo.signedUrl ? (
-                                  <img
-                                    src={photo.signedUrl}
-                                    alt={photo.label ?? `Photo ${idx + 1}`}
-                                    className="aspect-square w-full object-cover"
-                                    loading="lazy"
-                                  />
-                                ) : (
-                                  <div className="flex aspect-square w-full items-center justify-center bg-muted">
-                                    <ImageIcon className="size-6 text-muted-foreground" />
-                                  </div>
-                                )}
-                                <div className="absolute left-1.5 top-1.5">
-                                  <div
-                                    className={`flex size-5 items-center justify-center rounded border text-[10px] font-bold ${
-                                      isSelected
-                                        ? "border-primary bg-primary text-primary-foreground"
-                                        : "border-muted-foreground/50 bg-background/80 text-muted-foreground"
-                                    }`}
-                                  >
-                                    {isSelected ? "✓" : ""}
-                                  </div>
-                                </div>
-                              </button>
-                              {isEditingThis && !isReadOnly ? (
-                                <input
-                                  type="text"
-                                  autoFocus
-                                  value={descDraft}
-                                  onChange={(e) => setDescDraft(e.target.value)}
-                                  onBlur={() => saveDescription(photo.id, descDraft)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      saveDescription(photo.id, descDraft);
-                                    } else if (e.key === "Escape") {
-                                      setEditingDescId(null);
-                                    }
-                                  }}
-                                  className="w-full border-t bg-background px-1.5 py-1 text-[10px] outline-none focus:ring-1 focus:ring-ring"
-                                  placeholder="Add description…"
-                                />
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled={isReadOnly}
-                                  className="w-full truncate px-1.5 py-1 text-left text-[10px] text-muted-foreground hover:text-foreground"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDescDraft(photo.description ?? "");
-                                    setEditingDescId(photo.id);
-                                  }}
-                                >
-                                  {photo.description || "Add description…"}
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-
-                  {/* Videos */}
-                  {videos.length > 0 && (
-                    <>
-                      <p className="text-xs font-semibold uppercase text-muted-foreground">
-                        Videos
-                      </p>
-                      <div className="space-y-1">
-                        {videos.map((video) => (
-                          <div
-                            key={video.id}
-                            className="flex items-center gap-2 rounded-md border px-3 py-2"
-                          >
-                            <Video className="size-4 text-muted-foreground" />
-                            <span className="text-sm">{video.label || "Video"}</span>
-                            <span className="ml-auto text-xs text-muted-foreground">
-                              {new Date(video.createdAt).toLocaleDateString()}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </ReviewSection>
-            )}
-
-            {/* Save button */}
-            {!isReadOnly && (
-              <Button onClick={handleSave} disabled={saving} className="w-full" size="lg">
-                {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                Save Changes
-              </Button>
-            )}
-          </div>
-
-          {/* Right panel: sticky PDF preview */}
-          <div className="lg:sticky lg:top-20 lg:self-start space-y-4">
-            <Card>
-              <CardContent className="pt-6 space-y-4">
-                {!isReadOnly && (
-                  <Button onClick={handleRegenerate} disabled={isGenerating} className="w-full">
-                    {isGenerating ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="size-4" />
-                    )}
-                    Regenerate PDF
-                  </Button>
-                )}
-
-                {error && <p className="text-sm text-destructive">{error}</p>}
-
-                {isDirty && !isReadOnly && (
-                  <p className="text-xs text-amber-600">
-                    Form data changed -- click &quot;Regenerate PDF&quot; to see updates
-                  </p>
-                )}
-
-                {isReadOnly && finalizedPdfUrl ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-medium">Finalized Report</h3>
-                      <Button variant="outline" size="sm" asChild>
-                        <a href={finalizedDownloadUrl ?? finalizedPdfUrl} target="_blank" rel="noopener noreferrer">
-                          <Download className="size-4" />
-                          Download PDF
-                        </a>
-                      </Button>
-                    </div>
-                    <iframe
-                      src={finalizedPdfUrl}
-                      className="h-[80vh] w-full rounded-lg border"
-                      title="Finalized PDF"
-                    />
-                  </div>
-                ) : isReadOnly && loadingFinalizedPdf ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                    <Loader2 className="size-8 mb-2 animate-spin opacity-30" />
-                    <p className="text-sm">Loading finalized report...</p>
-                  </div>
-                ) : pdfData ? (
-                  <PdfPreview
-                    pdfData={pdfData}
-                    facilityName={facilityName || undefined}
-                  />
-                ) : !isReadOnly ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                    <RefreshCw className="size-8 mb-2 opacity-30" />
-                    <p className="text-sm">Click &quot;Regenerate PDF&quot; to preview</p>
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-          </div>
+          ))}
         </div>
+
+        <PhotoSelection
+          inspectionId={inspection.id}
+          media={mediaItems}
+          selectedIds={selectedMediaIds}
+          onToggle={toggleMedia}
+          onSelectAll={selectAllPhotos}
+          onDeselectAll={deselectAllPhotos}
+          onDescriptionSaved={handleDescriptionSaved}
+          readOnly={readOnly}
+        />
+
+        <ReportPreview
+          inspectionId={inspection.id}
+          status={status}
+          form={form}
+          selectedMedia={selectedMedia}
+          readOnly={readOnly}
+        />
+
+        <SaveStatusBar
+          status={saveStatus}
+          lastSaved={lastSaved}
+          onRetry={() => void flush()}
+          readOnly={readOnly}
+        />
       </Form>
     </div>
   );

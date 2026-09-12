@@ -64,9 +64,14 @@ const PUMP_CHECKLIST_ITEMS = [
 
 interface StepAlternativeSystemProps {
   inspectionId: string;
+  /** Review page, completed/sent: disables every control and hides upload/AI actions */
+  readOnly?: boolean;
 }
 
-export function StepAlternativeSystem({ inspectionId: _inspectionId }: StepAlternativeSystemProps) {
+export function StepAlternativeSystem({
+  inspectionId: _inspectionId,
+  readOnly = false,
+}: StepAlternativeSystemProps) {
   const form = useFormContext<InspectionFormData>();
 
   const pumpSystems = useWatch({ control: form.control, name: "alternativeSystem.pumpSystems" });
@@ -85,7 +90,7 @@ export function StepAlternativeSystem({ inspectionId: _inspectionId }: StepAlter
   const altOperationalTest = useWatch({ control: form.control, name: "alternativeSystem.altOperationalTest" });
 
   return (
-    <div className="space-y-6">
+    <fieldset disabled={readOnly} className="min-w-0 space-y-6">
 
       {/* ------------------------------------------------------------------ */}
       {/* Section 5: Alternative System Info                                  */}
@@ -862,6 +867,6 @@ export function StepAlternativeSystem({ inspectionId: _inspectionId }: StepAlter
           Date will be auto-filled when the report is finalized.
         </FormDescription>
       </section>
-    </div>
+    </fieldset>
   );
 }

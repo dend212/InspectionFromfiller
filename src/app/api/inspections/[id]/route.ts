@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { inspections } from "@/lib/db/schema";
+import { getUserRole } from "@/lib/supabase/auth-helpers";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -87,28 +88,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
   }
 
-  let isPrivileged = false;
+  const userRole = await getUserRole(supabase);
+  const isPrivileged = userRole === "admin" || userRole === "office_staff";
 
-  if (existing.inspectorId !== user.id) {
-    let userRole: string | null = null;
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session) {
-        const payload = JSON.parse(
-          Buffer.from(session.access_token.split(".")[1], "base64").toString(),
-        );
-        userRole = payload.user_role ?? null;
-      }
-    } catch {
-      // Role decode failed
-    }
-
-    isPrivileged = userRole === "admin" || userRole === "office_staff";
-    if (!isPrivileged) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  if (existing.inspectorId !== user.id && !isPrivileged) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   // Field techs can only edit drafts (defense in depth -- RLS also enforces this)

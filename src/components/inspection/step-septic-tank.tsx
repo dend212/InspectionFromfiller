@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CheckIcon } from "lucide-react";
 import { useFormContext, useWatch, type Control, type FieldPath } from "react-hook-form";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -114,9 +114,11 @@ function BaffleConditionField({
 
 interface StepSepticTankProps {
   inspectionId: string;
+  /** Review page, completed/sent: disables every control and hides upload/AI actions */
+  readOnly?: boolean;
 }
 
-export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
+export function StepSepticTank({ inspectionId, readOnly = false }: StepSepticTankProps) {
   const form = useFormContext<InspectionFormData>();
   const [media, setMedia] = useState<MediaRecord[]>([]);
 
@@ -229,7 +231,7 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
   }, [form]);
 
   return (
-    <div className="space-y-8">
+    <fieldset disabled={readOnly} className="min-w-0 space-y-8">
       {/* Section 4A: Number of Tanks & Pumping */}
       <section className="space-y-4">
         <h3 className="text-lg font-medium">Section 4A: Septic Tank Overview</h3>
@@ -933,6 +935,7 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
                   section="septicTank"
                   fieldPath="septicTank.septicTankComments"
                   buildContext={buildTankContext}
+                  readOnly={readOnly}
                 />
               </div>
               <FormControl>
@@ -967,8 +970,9 @@ export function StepSepticTank({ inspectionId }: StepSepticTankProps) {
           inspectionId={inspectionId}
           section={SECTION_NAME}
           onUploadComplete={(newMedia) => setMedia((prev) => [...prev, newMedia])}
+          readOnly={readOnly}
         />
       </div>
-    </div>
+    </fieldset>
   );
 }

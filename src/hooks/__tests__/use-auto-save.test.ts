@@ -341,3 +341,228 @@ describe("useAutoSave", () => {
     });
   });
 });
+
+// ── flush() / status / enabled ────────────────────────────────────────────────
+
+describe("flush()", () => {
+  it("resolves true on 2xx and cancels the pending debounce", async () => {
+    const form = makeMockForm({ field: "v1" });
+    const { result, rerender } = renderHook(() => useAutoSave(form, "insp-1", 1000));
+
+    watchedValuesRef.current = { field: "v2" };
+    form.getValues.mockReturnValue({ field: "v2" });
+    rerender();
+
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await result.current.flush();
+    });
+
+    expect(ok).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith("/api/inspections/insp-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ field: "v2" }),
+    });
+
+    // The debounce that was pending must not fire a second PATCH
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBe("saved");
+  });
+
+  it("resolves false and sets status=error when the PATCH fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    const form = makeMockForm({ field: "v1" });
+    const { result } = renderHook(() => useAutoSave(form, "insp-1", 1000));
+
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await result.current.flush();
+    });
+
+    expect(ok).toBe(false);
+    expect(result.current.status).toBe("error");
+    expect(toast.error).toHaveBeenCalledWith("Auto-save failed");
+  });
+
+  it("resolves true without a request when nothing changed since the last save", async () => {
+    const form = makeMockForm({ field: "same" });
+    const { result } = renderHook(() => useAutoSave(form, "insp-1", 1000));
+
+    await act(async () => {
+      await result.current.flush();
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await result.current.flush();
+    });
+    expect(ok).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("dedupes an in-flight save: a second flush waits for the first instead of PATCHing again", async () => {
+    let resolveFetch: (v: any) => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockReturnValue(new Promise((resolve) => { resolveFetch = resolve; })),
+    );
+    const form = makeMockForm({ field: "v1" });
+    const { result } = renderHook(() => useAutoSave(form, "insp-1", 1000));
+
+    let first: Promise<boolean> = Promise.resolve(false);
+    let second: Promise<boolean> = Promise.resolve(false);
+    act(() => {
+      first = result.current.flush();
+      second = result.current.flush();
+    });
+    expect(result.current.status).toBe("saving");
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFetch({ ok: true });
+      await first;
+      await second;
+    });
+
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBe("saved");
+  });
+
+  it("exposes status transitions idle → saving → saved", async () => {
+    let resolveFetch: (v: any) => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockReturnValue(new Promise((resolve) => { resolveFetch = resolve; })),
+    );
+    const form = makeMockForm({ field: "v1" });
+    const { result, rerender } = renderHook(() => useAutoSave(form, "insp-1", 100));
+    expect(result.current.status).toBe("idle");
+
+    watchedValuesRef.current = { field: "v1" };
+    rerender();
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(result.current.status).toBe("saving");
+    expect(result.current.saving).toBe(true);
+
+    await act(async () => {
+      resolveFetch({ ok: true });
+    });
+    expect(result.current.status).toBe("saved");
+    expect(result.current.saving).toBe(false);
+  });
+});
+
+describe("enabled: false", () => {
+  it("never saves, flush() resolves true, and no beforeunload listener is added", async () => {
+    const addSpy = vi.spyOn(window, "addEventListener");
+    const form = makeMockForm({ field: "v1" });
+    const { result, rerender, unmount } = renderHook(() =>
+      useAutoSave(form, "insp-1", { debounceMs: 100, enabled: false }),
+    );
+
+    watchedValuesRef.current = { field: "v2" };
+    form.getValues.mockReturnValue({ field: "v2" });
+    rerender();
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await result.current.flush();
+    });
+    unmount();
+
+    expect(ok).toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(addSpy).not.toHaveBeenCalledWith("beforeunload", expect.any(Function));
+  });
+});
+
+describe("seedFromInitial: true", () => {
+  it("does not PATCH on mount when nothing changed, then PATCHes once after a real edit", async () => {
+    const initial = { field: "initial" };
+    watchedValuesRef.current = initial;
+    const form = makeMockForm(initial);
+    const { rerender } = renderHook(() =>
+      useAutoSave(form, "insp-1", { debounceMs: 100, seedFromInitial: true }),
+    );
+
+    // Mount tick: the watched snapshot equals the seeded snapshot → no save scheduled
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(fetch).not.toHaveBeenCalled();
+
+    // A real edit → exactly one PATCH with the new values
+    watchedValuesRef.current = { field: "changed" };
+    form.getValues.mockReturnValue({ field: "changed" });
+    rerender();
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith("/api/inspections/insp-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ field: "changed" }),
+    });
+  });
+
+  it("flush() resolves true without a request when the form still matches the seed", async () => {
+    const initial = { field: "initial" };
+    watchedValuesRef.current = initial;
+    const form = makeMockForm(initial);
+    const { result } = renderHook(() =>
+      useAutoSave(form, "insp-1", { debounceMs: 100, seedFromInitial: true }),
+    );
+
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await result.current.flush();
+    });
+    expect(ok).toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps the seed across an enabled: false → true flip (Reopen) so no save fires", async () => {
+    const initial = { field: "initial" };
+    watchedValuesRef.current = initial;
+    const form = makeMockForm(initial);
+    let enabled = false;
+    const { rerender } = renderHook(() =>
+      useAutoSave(form, "insp-1", { debounceMs: 100, enabled, seedFromInitial: true }),
+    );
+
+    enabled = true;
+    rerender();
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("seedFromInitial omitted (wizard default)", () => {
+  it("still saves the first watch tick, preserving the wizard contract", async () => {
+    const initial = { field: "initial" };
+    watchedValuesRef.current = initial;
+    const form = makeMockForm(initial);
+    renderHook(() => useAutoSave(form, "insp-1", { debounceMs: 100 }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});

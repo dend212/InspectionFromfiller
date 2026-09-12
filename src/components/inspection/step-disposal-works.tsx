@@ -55,9 +55,11 @@ const SECTION_NAME = "disposal-works";
 
 interface StepDisposalWorksProps {
   inspectionId: string;
+  /** Review page, completed/sent: disables every control and hides upload/AI actions */
+  readOnly?: boolean;
 }
 
-export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
+export function StepDisposalWorks({ inspectionId, readOnly = false }: StepDisposalWorksProps) {
   const form = useFormContext<InspectionFormData>();
   const [media, setMedia] = useState<MediaRecord[]>([]);
 
@@ -139,7 +141,7 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
   }, [form, portCount]);
 
   return (
-    <div className="space-y-8">
+    <fieldset disabled={readOnly} className="min-w-0 space-y-8">
       {/* Disposal Works Location */}
       <section className="space-y-4">
         <h3 className="text-lg font-medium">Disposal Works Location</h3>
@@ -515,6 +517,7 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
                   section="disposalWorks"
                   fieldPath="disposalWorks.disposalWorksComments"
                   buildContext={buildDisposalContext}
+                  readOnly={readOnly}
                 />
               </div>
               <FormControl>
@@ -574,6 +577,7 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
           inspectionId={inspectionId}
           section={SECTION_NAME}
           onUploadComplete={(newMedia) => setMedia((prev) => [...prev, newMedia])}
+          readOnly={readOnly}
         />
       </div>
 
@@ -585,6 +589,7 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
         <VideoUpload
           inspectionId={inspectionId}
           onUploadComplete={(newMedia) => setMedia((prev) => [...prev, newMedia])}
+          readOnly={readOnly}
         />
         <MediaGallery
           inspectionId={inspectionId}
@@ -622,6 +627,6 @@ export function StepDisposalWorks({ inspectionId }: StepDisposalWorksProps) {
           </FormItem>
         )}
       />
-    </div>
+    </fieldset>
   );
 }

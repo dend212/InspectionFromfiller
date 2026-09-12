@@ -10,9 +10,11 @@ interface PhotoCaptureProps {
   inspectionId: string;
   section: string;
   onUploadComplete: (media: MediaRecord) => void;
+  /** Completed/sent inspections: render nothing (no upload, no drop zone) */
+  readOnly?: boolean;
 }
 
-export function PhotoCapture({ inspectionId, section, onUploadComplete }: PhotoCaptureProps) {
+export function PhotoCapture({ inspectionId, section, onUploadComplete, readOnly }: PhotoCaptureProps) {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -128,6 +130,8 @@ export function PhotoCapture({ inspectionId, section, onUploadComplete }: PhotoC
     },
     [uploading, uploadFile],
   );
+
+  if (readOnly) return null;
 
   return (
     <div

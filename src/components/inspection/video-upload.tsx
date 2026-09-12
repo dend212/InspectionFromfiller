@@ -10,6 +10,8 @@ import type { MediaRecord } from "./media-gallery";
 interface VideoUploadProps {
   inspectionId: string;
   onUploadComplete: (media: MediaRecord) => void;
+  /** Completed/sent inspections: render nothing */
+  readOnly?: boolean;
 }
 
 // Hard ceiling on bucket side (migration 0010 bumped bucket file_size_limit to 500 MB).
@@ -74,7 +76,7 @@ function friendlyError(raw: string): string {
   return raw;
 }
 
-export function VideoUpload({ inspectionId, onUploadComplete }: VideoUploadProps) {
+export function VideoUpload({ inspectionId, onUploadComplete, readOnly }: VideoUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [progressPct, setProgressPct] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -200,6 +202,8 @@ export function VideoUpload({ inspectionId, onUploadComplete }: VideoUploadProps
 
   const labelText =
     uploading && progressPct !== null ? `Uploading ${progressPct}%…` : "Upload Video";
+
+  if (readOnly) return null;
 
   return (
     <div className="w-full max-w-sm">

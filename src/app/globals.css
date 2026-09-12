@@ -168,3 +168,21 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Review page read-only mode: every step is wrapped in <fieldset disabled> */
+@layer components {
+  fieldset:disabled {
+    opacity: 0.6;
+  }
+  /* Non-native widgets (canvas/signature pads) opt in with .pointer-none */
+  fieldset:disabled .pointer-none {
+    pointer-events: none;
+  }
+  /* Finalize dialog "jump to issue" highlight, set on the field's FormItem for 2 s */
+  [data-slot="form-item"][data-highlight="true"] {
+    outline: 3px solid var(--color-amber-400);
+    outline-offset: 6px;
+    border-radius: var(--radius-md);
+    transition: outline-color 300ms ease-out;
+  }
+}
