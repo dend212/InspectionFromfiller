@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ReviewEditor } from "@/components/review/review-editor";
 import { db } from "@/lib/db";
 import { inspectionMedia, inspections } from "@/lib/db/schema";
+import type { FieldProvenance } from "@/lib/prefill/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { InspectionFormData } from "@/types/inspection";
@@ -116,6 +117,7 @@ export default async function ReviewDetailPage({ params }: { params: Promise<{ i
           id: inspection.id,
           status: inspection.status,
           formData: inspection.formData as InspectionFormData | null,
+          fieldProvenance: (inspection.fieldProvenance ?? {}) as FieldProvenance,
           facilityName: inspection.facilityName,
           facilityAddress: inspection.facilityAddress,
           customerEmail: inspection.customerEmail ?? null,

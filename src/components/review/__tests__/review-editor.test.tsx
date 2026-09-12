@@ -32,9 +32,32 @@ function stepStub(index: number, fieldPath: string) {
     </fieldset>
   );
 }
-vi.mock("@/components/inspection/step-facility-info", () => ({
-  StepFacilityInfo: stepStub(0, "facilityInfo.facilityName"),
-}));
+// Step 0 renders one REAL FormField/FormItem/FormLabel so the provenance badge (rendered
+// centrally by form.tsx via ProvenanceProvider context) is exercised end to end.
+vi.mock("@/components/inspection/step-facility-info", async () => {
+  const { FormControl, FormField, FormItem, FormLabel } = await import("@/components/ui/form");
+  const { useFormContext } = await import("react-hook-form");
+  const StepFacilityInfo = ({ readOnly }: { inspectionId: string; readOnly?: boolean }) => {
+    const form = useFormContext<InspectionFormData>();
+    return (
+      <fieldset disabled={readOnly} data-testid="step-0">
+        <FormField
+          control={form.control}
+          name="facilityInfo.facilityName"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Facility Name</FormLabel>
+              <FormControl>
+                <input aria-label="facilityInfo.facilityName" {...field} />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+      </fieldset>
+    );
+  };
+  return { StepFacilityInfo };
+});
 vi.mock("@/components/inspection/step-general-treatment", () => ({
   StepGeneralTreatment: stepStub(1, "generalTreatment.systemTypes"),
 }));
@@ -81,6 +104,7 @@ vi.mock("@/hooks/use-pdf-generation", () => ({
   }),
 }));
 
+import type { ProvenanceEntry } from "@/lib/prefill/types";
 import { getDefaultFormValues } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 import { ReviewEditor } from "@/components/review/review-editor";
@@ -109,6 +133,29 @@ function makeInspection(overrides: Partial<Parameters<typeof ReviewEditor>[0]["i
     isFromWorkiz: false,
     ...overrides,
   };
+}
+
+const ASSESSOR_ENTRY: ProvenanceEntry = {
+  source: "assessor",
+  state: "prefilled",
+  kind: "fill",
+  value: "Smith Residence",
+  confidence: 1,
+  explanation: "Maricopa County Assessor · parcel 219-11-121",
+  sourceUrl: "https://mcassessor.maricopa.gov/mcs/?q=219-11-121",
+  at: "2026-09-11T10:00:00.000Z",
+};
+const FACILITY_PROVENANCE = { "facilityInfo.facilityName": ASSESSOR_ENTRY };
+
+/** Every PATCH the editor sent to the provenance sidecar route */
+function provenancePatches() {
+  return vi
+    .mocked(fetch)
+    .mock.calls.filter(
+      ([url, init]) =>
+        String(url) === "/api/inspections/insp-1/provenance" &&
+        (init as RequestInit | undefined)?.method === "PATCH",
+    );
 }
 
 const media = [
@@ -351,5 +398,114 @@ describe("ReviewEditor", () => {
     // Toggling a photo yields a new array
     await user.click(screen.getByRole("button", { name: /deselect all/i }));
     expect(reviewActionsProps.mock.lastCall![0].selectedMediaIds).toEqual([]);
+  });
+});
+
+// ── Prefill provenance (amendment A5) ─────────────────────────────────────────
+
+describe("ReviewEditor provenance", () => {
+  it("renders the provenance badge for a prefilled field while in review", async () => {
+    const user = userEvent.setup();
+    render(
+      <ReviewEditor
+        inspection={makeInspection({ fieldProvenance: FACILITY_PROVENANCE })}
+        media={media}
+      />,
+    );
+
+    await user.click(screen.getByText("Facility Info"));
+
+    const badge = screen.getByRole("button", {
+      name: "Prefilled from County Assessor, 100% confidence",
+    });
+    expect(badge).toHaveAttribute("data-provenance-state", "prefilled");
+    expect(badge).toHaveTextContent("100%");
+  });
+
+  it("renders no badge when the inspection has no provenance", async () => {
+    const user = userEvent.setup();
+    render(<ReviewEditor inspection={makeInspection()} media={media} />);
+
+    await user.click(screen.getByText("Facility Info"));
+    expect(screen.getByLabelText("facilityInfo.facilityName")).toBeInTheDocument();
+    expect(document.querySelector("[data-slot=provenance-badge]")).toBeNull();
+  });
+
+  it("in_review: Verify is enabled, flips the badge to verified and PATCHes the sidecar route", async () => {
+    const user = userEvent.setup();
+    render(
+      <ReviewEditor
+        inspection={makeInspection({ fieldProvenance: FACILITY_PROVENANCE })}
+        media={media}
+      />,
+    );
+
+    await user.click(screen.getByText("Facility Info"));
+    await user.click(
+      screen.getByRole("button", { name: "Prefilled from County Assessor, 100% confidence" }),
+    );
+
+    const verify = await screen.findByRole("button", { name: "Verify" });
+    expect(verify).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Clear" })).toBeEnabled();
+    await user.click(verify);
+
+    const verified = screen.getByRole("button", {
+      name: "Verified. Prefilled from County Assessor, 100% confidence",
+    });
+    expect(verified).toHaveAttribute("data-provenance-state", "verified");
+
+    // Debounced (1 s) whole-map PATCH to /api/inspections/[id]/provenance — not the form route
+    await waitFor(() => expect(provenancePatches()).toHaveLength(1), { timeout: 3000 });
+    const [, init] = provenancePatches()[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.fieldProvenance["facilityInfo.facilityName"]).toMatchObject({
+      source: "assessor",
+      state: "verified",
+      value: "Smith Residence",
+    });
+  });
+
+  it("sent: the badge still renders but Verify/Clear are absent and nothing is persisted", async () => {
+    const user = userEvent.setup();
+    render(
+      <ReviewEditor
+        inspection={makeInspection({ status: "sent", fieldProvenance: FACILITY_PROVENANCE })}
+        media={media}
+      />,
+    );
+
+    await user.click(screen.getByText("Facility Info"));
+    expect(screen.getByTestId("step-0")).toBeDisabled();
+
+    // The badge is a <button> inside the disabled fieldset, so clicks are inert — hover peeks it
+    const badge = screen.getByRole("button", {
+      name: "Prefilled from County Assessor, 100% confidence",
+    });
+    expect(badge).toBeInTheDocument();
+    await user.hover(badge);
+
+    await screen.findByText("County Assessor");
+    expect(screen.queryByRole("button", { name: "Verify" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear" })).not.toBeInTheDocument();
+    expect(provenancePatches()).toHaveLength(0);
+  });
+
+  it("completed: Verify/Clear are absent on the badge popover", async () => {
+    const user = userEvent.setup();
+    render(
+      <ReviewEditor
+        inspection={makeInspection({ status: "completed", fieldProvenance: FACILITY_PROVENANCE })}
+        media={media}
+      />,
+    );
+
+    await user.click(screen.getByText("Facility Info"));
+    await user.hover(
+      screen.getByRole("button", { name: "Prefilled from County Assessor, 100% confidence" }),
+    );
+    await screen.findByText("County Assessor");
+    expect(screen.queryByRole("button", { name: "Verify" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear" })).not.toBeInTheDocument();
   });
 });

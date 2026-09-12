@@ -129,6 +129,22 @@ describe("PATCH /api/inspections/[id]/provenance", () => {
     expect(res.status).toBe(200);
   });
 
+  it("lets office staff verify provenance on another tech's in_review inspection (review page)", async () => {
+    mockGetSession.mockResolvedValueOnce({
+      data: { session: { access_token: fakeAccessToken({ user_role: "office_staff" }) } },
+    });
+    mockDbSelect.mockResolvedValueOnce([{ inspectorId: "other", status: "in_review", formData: {} }]);
+    const verified = { ...ENTRY, state: "verified" };
+    const res = await PATCH(
+      makeRequest({ fieldProvenance: { "facilityInfo.taxParcelNumber": verified } }),
+      makeParams("insp-1"),
+    );
+    expect(res.status).toBe(200);
+    expect(mockSet).toHaveBeenCalledWith({
+      fieldProvenance: { "facilityInfo.taxParcelNumber": verified },
+    });
+  });
+
   it("returns 400 for invalid JSON", async () => {
     const res = await PATCH(makeRequest("{not json", true), makeParams("insp-1"));
     expect(res.status).toBe(400);

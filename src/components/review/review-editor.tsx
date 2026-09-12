@@ -12,11 +12,13 @@ import { StepDisposalWorks } from "@/components/inspection/step-disposal-works";
 import { StepFacilityInfo } from "@/components/inspection/step-facility-info";
 import { StepGeneralTreatment } from "@/components/inspection/step-general-treatment";
 import { StepSepticTank } from "@/components/inspection/step-septic-tank";
+import { ProvenanceProvider } from "@/components/prefill/provenance-context";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import { useAutoSave } from "@/hooks/use-auto-save";
 import { STEP_LABELS } from "@/lib/constants/inspection";
 import { normalizeIncludeAlternativePages } from "@/lib/inspection-form";
+import type { FieldProvenance } from "@/lib/prefill/types";
 import { getDefaultFormValues, inspectionFormSchema } from "@/lib/validators/inspection";
 import type { InspectionFormData } from "@/types/inspection";
 import { PhotoSelection } from "./photo-selection";
@@ -26,13 +28,13 @@ import { ReviewPill, useStepValidations } from "./review-pill";
 import { ReviewSection } from "./review-section";
 import { SaveStatusBar } from "./save-status-bar";
 
-// prefill provider mounted in prefill phase 1
-
 export interface ReviewEditorProps {
   inspection: {
     id: string;
     status: string;
     formData: InspectionFormData | null;
+    /** Per-field prefill provenance sidecar (inspections.field_provenance) */
+    fieldProvenance?: FieldProvenance;
     facilityName: string | null;
     facilityAddress: string | null;
     customerEmail: string | null;
@@ -179,6 +181,14 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
       </div>
 
       <Form {...form}>
+        {/* Badges / popovers / suggestion chips render centrally from form.tsx via this context.
+            Find records (PrefillPanel) stays a wizard action — not mounted here. */}
+        <ProvenanceProvider
+          form={form}
+          inspectionId={inspection.id}
+          initial={inspection.fieldProvenance ?? {}}
+          readOnly={readOnly}
+        >
         {/* Status header + actions */}
         <ReviewActions
           inspectionId={inspection.id}
@@ -238,6 +248,7 @@ export function ReviewEditor({ inspection, media: initialMedia }: ReviewEditorPr
           onRetry={() => void flush()}
           readOnly={readOnly}
         />
+        </ProvenanceProvider>
       </Form>
     </div>
   );
