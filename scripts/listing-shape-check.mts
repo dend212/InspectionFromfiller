@@ -4,8 +4,13 @@
  * actual output keys. Prints raw keys, water/sewer-ish raw values and the
  * normalised facts. Never prints the token.
  *
- * Usage: npx tsx --env-file=.env.local scripts/listing-shape-check.mts ["<full address>"]
- * Default address: 8911 E Cave Creek Rd, Carefree, AZ 85377
+ * Actor: api-ninja/zillow-property-details-scraper (A10), ~$0.015 per lookup.
+ * Water source / sewer come from the MLS `resoFacts` block, which Zillow only
+ * serves for active listings (homeStatus FOR_SALE / PENDING) — an off-market
+ * parcel returns null for both, so test with an active listing.
+ *
+ * Usage: npx tsx --env-file=.env.local --tsconfig tsconfig.json scripts/listing-shape-check.mts ["<full address>"]
+ * Default address: 8956 E Venus Dr, Carefree, AZ 85377 (active listing as of 2026-09-11)
  */
 
 import { dirname, join, resolve } from "node:path";
@@ -24,14 +29,14 @@ if (!token) {
   process.exit(1);
 }
 
-const address = process.argv[2] ?? "8911 E Cave Creek Rd, Carefree, AZ 85377";
+const address = process.argv[2] ?? "8956 E Venus Dr, Carefree, AZ 85377";
 console.log(`Looking up: ${address}`);
 
 const started = Date.now();
 const res = await fetch(buildApifyUrl(token), {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ addresses: [address] }),
+  body: JSON.stringify({ property: [address] }),
   signal: AbortSignal.timeout(90_000),
 });
 console.log(`HTTP ${res.status} in ${((Date.now() - started) / 1000).toFixed(1)} s`);
@@ -52,6 +57,14 @@ if (items.length === 0) {
 }
 
 const item = items[0] as Record<string, unknown>;
+const homeStatus = typeof item.homeStatus === "string" ? item.homeStatus : "<missing>";
+console.log(`homeStatus: ${homeStatus}`);
+if (homeStatus !== "FOR_SALE" && homeStatus !== "PENDING") {
+  console.log(
+    "NOTE: not an active listing — Zillow serves resoFacts.waterSource/sewer only for FOR_SALE/PENDING, " +
+      "so utilities will be null here. Retry with an active listing to check the water/sewer mapping.",
+  );
+}
 console.log("\nTop-level keys:");
 for (const key of Object.keys(item).sort()) {
   const v = item[key];
