@@ -37,6 +37,8 @@ function makeDeps(overrides: Partial<StoreDocumentDeps> = {}): StoreDocumentDeps
     insertRecord: vi.fn().mockResolvedValue(undefined),
     countPages: vi.fn().mockResolvedValue(21),
     newId: () => "rec-1",
+    findExisting: vi.fn().mockResolvedValue(null),
+    reuseRecord: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -158,6 +160,127 @@ describe("storeDocument", () => {
     const result = await storeDocument(baseInput, deps);
     expect(deps.upload).not.toHaveBeenCalled();
     expect(result).toMatchObject({ stored: false, extractionStatus: "skipped" });
+  });
+
+  it("looks up an existing stored row by identity (never the ephemeral document ID) before any EDMS call", async () => {
+    await storeDocument(baseInput, deps);
+    expect(deps.findExisting).toHaveBeenCalledTimes(1);
+    expect(deps.findExisting).toHaveBeenCalledWith("insp-1", {
+      source: "edms_env",
+      permitNumber: "OW-17-00474",
+      docType: "PERMIT",
+      docDate: "2018-02-08",
+    });
+    expect(JSON.stringify((deps.findExisting as ReturnType<typeof vi.fn>).mock.calls[0])).not.toContain("ephemeral");
+    const findOrder = (deps.findExisting as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+    const infoOrder = (deps.getDocumentInfo as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+    expect(findOrder).toBeLessThan(infoOrder);
+    expect(deps.reuseRecord).not.toHaveBeenCalled();
+  });
+
+  it("passes a null doc date through to the identity lookup", async () => {
+    const { docDate: _omit, ...candidate } = hit.candidate;
+    await storeDocument({ ...baseInput, hit: { ...hit, candidate } }, deps);
+    expect(deps.findExisting).toHaveBeenCalledWith("insp-1", expect.objectContaining({ docDate: null }));
+  });
+
+  describe("reusing an already-stored document (D7)", () => {
+    const existing = {
+      id: "rec-old",
+      storagePath: "records/insp-1/rec-old.pdf",
+      sizeBytes: 712751,
+      pageCount: 4,
+      extractionStatus: "done",
+      extractionError: null,
+    };
+
+    it("reuses a `done` row as-is: no EDMS call, no download, no upload, no new row, no re-extraction", async () => {
+      deps = makeDeps({ findExisting: vi.fn().mockResolvedValue(existing) });
+      const result = await storeDocument(baseInput, deps);
+
+      expect(deps.getDocumentInfo).not.toHaveBeenCalled();
+      expect(deps.fetchDocumentBytes).not.toHaveBeenCalled();
+      expect(deps.upload).not.toHaveBeenCalled();
+      expect(deps.insertRecord).not.toHaveBeenCalled();
+      expect(deps.reuseRecord).toHaveBeenCalledTimes(1);
+      expect(deps.reuseRecord).toHaveBeenCalledWith("rec-old", {
+        runId: "run-1",
+        extractionStatus: "done",
+        extractionError: null,
+      });
+      expect(result).toEqual({
+        recordId: "rec-old",
+        stored: true,
+        reused: true,
+        sizeBytes: 712751,
+        pageCount: 4,
+        extractionStatus: "done",
+      });
+    });
+
+    it("re-queues a `failed` row for extraction without re-downloading it", async () => {
+      deps = makeDeps({
+        findExisting: vi.fn().mockResolvedValue({
+          ...existing,
+          extractionStatus: "failed",
+          extractionError: "Claude API error: 500 boom",
+        }),
+      });
+      const result = await storeDocument(baseInput, deps);
+      expect(deps.fetchDocumentBytes).not.toHaveBeenCalled();
+      expect(deps.insertRecord).not.toHaveBeenCalled();
+      expect(deps.reuseRecord).toHaveBeenCalledWith("rec-old", {
+        runId: "run-1",
+        extractionStatus: "pending",
+        extractionError: null,
+      });
+      expect(result).toMatchObject({ recordId: "rec-old", stored: true, reused: true, extractionStatus: "pending" });
+    });
+
+    it("re-queues a `pending` row (a previous run died mid-extraction) the same way", async () => {
+      deps = makeDeps({ findExisting: vi.fn().mockResolvedValue({ ...existing, extractionStatus: "pending" }) });
+      const result = await storeDocument(baseInput, deps);
+      expect(deps.fetchDocumentBytes).not.toHaveBeenCalled();
+      expect(deps.reuseRecord).toHaveBeenCalledWith("rec-old", expect.objectContaining({ extractionStatus: "pending" }));
+      expect(result.extractionStatus).toBe("pending");
+    });
+
+    it("keeps a `done` row done even when this run has no extraction slot left for it", async () => {
+      deps = makeDeps({ findExisting: vi.fn().mockResolvedValue(existing) });
+      const result = await storeDocument(
+        { ...baseInput, extractionStatus: "skipped", extractionError: "Over the 3-document limit" },
+        deps,
+      );
+      expect(deps.reuseRecord).toHaveBeenCalledWith("rec-old", {
+        runId: "run-1",
+        extractionStatus: "done",
+        extractionError: null,
+      });
+      expect(result.extractionStatus).toBe("done");
+    });
+
+    it("carries this run's skipped status + reason onto a reused row that was never read", async () => {
+      deps = makeDeps({ findExisting: vi.fn().mockResolvedValue({ ...existing, extractionStatus: "skipped", extractionError: "old reason" }) });
+      await storeDocument(
+        { ...baseInput, extractionStatus: "skipped", extractionError: "Over the 3-document limit" },
+        deps,
+      );
+      expect(deps.reuseRecord).toHaveBeenCalledWith("rec-old", {
+        runId: "run-1",
+        extractionStatus: "skipped",
+        extractionError: "Over the 3-document limit",
+      });
+    });
+
+    it("stores normally when the lookup itself fails (reuse is an optimisation, not a gate)", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      deps = makeDeps({ findExisting: vi.fn().mockRejectedValue(new Error("db down")) });
+      const result = await storeDocument(baseInput, deps);
+      expect(result).toMatchObject({ recordId: "rec-1", stored: true });
+      expect(deps.fetchDocumentBytes).toHaveBeenCalledTimes(1);
+      expect(deps.insertRecord).toHaveBeenCalledTimes(1);
+      warn.mockRestore();
+    });
   });
 
   it("carries a caller-supplied skipped status + reason onto a stored document", async () => {

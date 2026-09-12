@@ -1,7 +1,9 @@
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { inspectionPrefillRuns, inspectionRecords, inspections } from "@/lib/db/schema";
 import type {
+  ExtractionStatus,
+  PermitArchive,
   PermitCandidate,
   PrefillInput,
   PrefillRunStatus,
@@ -134,4 +136,55 @@ export async function createRecordRow(row: NewInspectionRecordRow): Promise<stri
     .values(row)
     .returning({ id: inspectionRecords.id });
   return created.id;
+}
+
+/** The stable identity of a permit document — the same fields as `PermitCandidate.key` */
+export interface RecordIdentity {
+  source: PermitArchive;
+  permitNumber: string;
+  docType: string;
+  docDate: string | null;
+}
+
+/**
+ * D7: the newest row this inspection already holds for the same document, if it
+ * was actually stored (`storage_path` ≠ ""). Rows that were never stored (over
+ * 25 MB, failed download) are not reusable — those go through the normal path.
+ */
+export async function findStoredRecordByIdentity(
+  inspectionId: string,
+  identity: RecordIdentity,
+): Promise<InspectionRecordRow | null> {
+  const [row] = await db
+    .select()
+    .from(inspectionRecords)
+    .where(
+      and(
+        eq(inspectionRecords.inspectionId, inspectionId),
+        eq(inspectionRecords.source, identity.source),
+        eq(inspectionRecords.permitNumber, identity.permitNumber),
+        eq(inspectionRecords.docType, identity.docType),
+        identity.docDate === null
+          ? isNull(inspectionRecords.docDate)
+          : eq(inspectionRecords.docDate, identity.docDate),
+        ne(inspectionRecords.storagePath, ""),
+      ),
+    )
+    .orderBy(desc(inspectionRecords.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
+export interface ReuseRecordPatch {
+  runId: string;
+  extractionStatus: ExtractionStatus;
+  extractionError: string | null;
+}
+
+/** D7: re-parents an already-stored row onto the current run so it is listed (and read) as that run's */
+export async function reuseRecordRow(recordId: string, patch: ReuseRecordPatch): Promise<void> {
+  await db
+    .update(inspectionRecords)
+    .set({ ...patch, selected: true })
+    .where(eq(inspectionRecords.id, recordId));
 }

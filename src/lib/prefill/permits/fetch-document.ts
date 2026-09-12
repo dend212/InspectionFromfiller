@@ -10,12 +10,25 @@
  * (too large, download/upload failure) get `storage_path = ""` plus a
  * human-readable `extraction_error`, so the tile can list them and the
  * records route can refuse them.
+ *
+ * D7: a document this inspection already stored (same archive + permit number +
+ * doc type + doc date — the `PermitCandidate.key` fields) is reused instead:
+ * no EDMS call, no upload, no new row — the existing row is re-parented onto
+ * this run, and one that was already read keeps its facts (no re-extraction).
  */
 
 import { randomUUID } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
 import { recordStoragePath, uploadRecordPdf } from "@/lib/storage/record-storage";
-import { type NewInspectionRecordRow, createRecordRow } from "../run-store";
+import {
+  type InspectionRecordRow,
+  type NewInspectionRecordRow,
+  type RecordIdentity,
+  type ReuseRecordPatch,
+  createRecordRow,
+  findStoredRecordByIdentity,
+  reuseRecordRow,
+} from "../run-store";
 import { type ExtractionStatus, MAX_DOCUMENT_BYTES } from "../types";
 import type { SearchHit } from "./candidates";
 import {
@@ -40,11 +53,19 @@ export interface StoreDocumentInput {
 export interface StoreDocumentResult {
   recordId: string;
   stored: boolean;
+  /** D7: an earlier run's row was reused — nothing was downloaded or inserted */
+  reused?: true;
   sizeBytes: number | null;
   pageCount: number | null;
   extractionStatus: ExtractionStatus;
   error?: string;
 }
+
+/** What the reuse path needs from an existing row */
+export type ExistingRecord = Pick<
+  InspectionRecordRow,
+  "id" | "storagePath" | "sizeBytes" | "pageCount" | "extractionStatus" | "extractionError"
+>;
 
 export interface StoreDocumentDeps {
   getDocumentInfo: typeof getDocumentInfo;
@@ -53,6 +74,10 @@ export interface StoreDocumentDeps {
   insertRecord: (row: NewInspectionRecord) => Promise<void>;
   countPages: (bytes: Uint8Array) => Promise<number | null>;
   newId: () => string;
+  /** D7: an already-stored row for this document on this inspection, if any */
+  findExisting: (inspectionId: string, identity: RecordIdentity) => Promise<ExistingRecord | null>;
+  /** D7: re-parent that row onto this run */
+  reuseRecord: (recordId: string, patch: ReuseRecordPatch) => Promise<void>;
 }
 
 /** Page count via pdf-lib; null when the file is not parseable (row still stored). */
@@ -74,6 +99,8 @@ const defaultDeps: StoreDocumentDeps = {
   },
   countPages: countPdfPages,
   newId: () => randomUUID(),
+  findExisting: (inspectionId, identity) => findStoredRecordByIdentity(inspectionId, identity),
+  reuseRecord: (recordId, patch) => reuseRecordRow(recordId, patch),
 };
 
 function archiveFor(hit: SearchHit): EdmsArchiveConfig {
@@ -92,6 +119,30 @@ function tooLargeMessage(bytes: number): string {
   return `Larger than 25 MB (${megabytes(bytes)}) — open it on Maricopa EDMS`;
 }
 
+/**
+ * D7: reuse the row an earlier run stored for this document. A row already read
+ * keeps `done` + its facts; anything else takes this run's extraction decision
+ * (so a failed/pending/skipped read is re-queued when the run has a slot for it).
+ */
+async function reuseStoredDocument(
+  input: StoreDocumentInput,
+  existing: ExistingRecord,
+  deps: StoreDocumentDeps,
+): Promise<StoreDocumentResult> {
+  const keepDone = existing.extractionStatus === "done";
+  const extractionStatus: ExtractionStatus = keepDone ? "done" : input.extractionStatus;
+  const extractionError = keepDone ? existing.extractionError : (input.extractionError ?? null);
+  await deps.reuseRecord(existing.id, { runId: input.runId, extractionStatus, extractionError });
+  return {
+    recordId: existing.id,
+    stored: true,
+    reused: true,
+    sizeBytes: existing.sizeBytes,
+    pageCount: existing.pageCount,
+    extractionStatus,
+  };
+}
+
 export async function storeDocument(
   input: StoreDocumentInput,
   deps: StoreDocumentDeps = defaultDeps,
@@ -99,6 +150,20 @@ export async function storeDocument(
   const { hit, signal } = input;
   const candidate = hit.candidate;
   const archive = archiveFor(hit);
+
+  // 0. D7: already on file for this inspection? Reuse it — identity only, never the ephemeral ID.
+  try {
+    const existing = await deps.findExisting(input.inspectionId, {
+      source: candidate.archive,
+      permitNumber: candidate.permitNumber,
+      docType: candidate.docType,
+      docDate: candidate.docDate ?? null,
+    });
+    if (existing) return await reuseStoredDocument(input, existing, deps);
+  } catch (err) {
+    console.warn(`[prefill/permits] existing-record lookup failed for ${candidate.permitNumber}:`, err);
+  }
+
   const recordId = deps.newId();
 
   // Row template — note: no EDMS document ID anywhere in here.

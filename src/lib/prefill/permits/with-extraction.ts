@@ -5,11 +5,17 @@
  * resulting proposals and a one-line digest into the stage result.
  * Never throws — a crash here leaves the phase-2 result intact with a note.
  */
+import type { PermitFacts } from "@/lib/ai/permit-extraction-schema";
 import type { StageContext, StageResult } from "@/lib/prefill/stage";
 import { dedupeProposals } from "../map-facts-to-fields";
 import { listRecordRows } from "../run-store";
 import type { ExtractionStatus, PermitArchive } from "../types";
-import { type ExtractRecordsResult, type StoredRecord, extractStoredRecords } from "./extract-records";
+import {
+  type ExtractRecordsResult,
+  type StoredRecord,
+  extractStoredRecords,
+  hasReusableFacts,
+} from "./extract-records";
 
 export interface WithExtractionDeps {
   loadRecords: (runId: string) => Promise<StoredRecord[]>;
@@ -31,6 +37,7 @@ export function defaultWithExtractionDeps(): WithExtractionDeps {
         docDate: r.docDate,
         sizeBytes: r.sizeBytes,
         extractionStatus: r.extractionStatus as ExtractionStatus,
+        extracted: (r.extracted as PermitFacts | null) ?? null,
       }));
     },
     extract: (records, ctx) => extractStoredRecords(records, ctx),
@@ -61,8 +68,10 @@ function withSummary<T extends StageResult>(result: T, summary: string): T {
 
 /**
  * Reads the run's pending records (rank order, ≤ MAX_DOCUMENTS_PER_RUN) and
- * merges their proposals into `result`. Results that are not `done` (not
- * found, error, awaiting selection) pass through untouched.
+ * merges their proposals into `result` — along with the stored facts of rows
+ * reused from an earlier run (D7), which are replayed rather than re-read.
+ * Results that are not `done` (not found, error, awaiting selection) pass
+ * through untouched.
  */
 export async function withExtraction<T extends StageResult>(
   ctx: StageContext,
@@ -72,7 +81,7 @@ export async function withExtraction<T extends StageResult>(
   if (result.stage.status !== "done") return result;
   try {
     const records = await deps.loadRecords(ctx.runId);
-    if (!records.some((r) => r.extractionStatus === "pending")) return result;
+    if (!records.some((r) => r.extractionStatus === "pending" || hasReusableFacts(r))) return result;
     const x = await deps.extract(records, ctx);
     return {
       ...result,

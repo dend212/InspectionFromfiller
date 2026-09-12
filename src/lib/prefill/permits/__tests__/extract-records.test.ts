@@ -183,6 +183,62 @@ describe("extractStoredRecords", () => {
     expect(result.done).toBe(1);
   });
 
+  describe("records reused from an earlier run (D7)", () => {
+    it("replays the stored facts of a `done` record without downloading, calling Claude or persisting", async () => {
+      const d = deps();
+      const c = ctx();
+      const result = await extractStoredRecords([rec({ id: "r-old", extractionStatus: "done", extracted: daFacts })], c, d);
+      expect(d.loadPdf).not.toHaveBeenCalled();
+      expect(d.extract).not.toHaveBeenCalled();
+      expect(d.persist).not.toHaveBeenCalled();
+      expect(result.estimatedCostUsd).toBe(0);
+      expect(result.done).toBe(0);
+      expect(result.failed).toBe(0);
+      const cap = result.proposals.find((p) => p.fieldPath === "septicTank.tanks.0.tankCapacity");
+      expect(cap?.value).toBe("1250");
+      expect(cap?.provenance.sourceUrl).toBe("/api/inspections/insp-1/records/r-old#page=1");
+      expect(result.highlights).toEqual(["OW-17-00474: 1,250 gal tank · 2 seepage pits · 450 gpd design flow"]);
+      expect(d.log).toHaveBeenCalledWith(expect.stringContaining("OW-17-00474: reused stored facts"));
+    });
+
+    it("flags a reused abandonment record without proposing from it", async () => {
+      const facts: PermitFacts = { ...emptyPermitFacts(), documentKind: "abandonment", isAbandonment: true };
+      const result = await extractStoredRecords(
+        [rec({ id: "ab", docType: "ABANDONMENT", permitNumber: "AB-01", extractionStatus: "done", extracted: facts })],
+        ctx(),
+        deps(),
+      );
+      expect(result.abandonmentPermits).toEqual(["AB-01"]);
+      expect(result.proposals).toEqual([]);
+      expect(result.highlights).toEqual([]);
+    });
+
+    it("reads a re-queued (formerly failed) record again alongside the replayed ones", async () => {
+      const d = deps();
+      const result = await extractStoredRecords(
+        [
+          rec({ id: "r-old", docDate: "2018-01-01", extractionStatus: "done", extracted: daFacts }),
+          rec({ id: "r-retry", docDate: "2017-01-01", extractionStatus: "pending" }),
+        ],
+        ctx(),
+        d,
+      );
+      expect(d.loadPdf).toHaveBeenCalledTimes(1);
+      expect(d.loadPdf).toHaveBeenCalledWith("records/insp-1/r-retry.pdf");
+      expect(d.extract).toHaveBeenCalledTimes(1);
+      expect(d.persist).toHaveBeenCalledWith("r-retry", expect.objectContaining({ extractionStatus: "done" }));
+      expect(result.done).toBe(1);
+      expect(result.proposals.filter((p) => p.fieldPath === "septicTank.tanks.0.tankCapacity")).toHaveLength(2);
+    });
+
+    it("ignores a `done` record without stored facts", async () => {
+      const d = deps();
+      const result = await extractStoredRecords([rec({ id: "r-old", extractionStatus: "done", extracted: null })], ctx(), d);
+      expect(result.proposals).toEqual([]);
+      expect(d.extract).not.toHaveBeenCalled();
+    });
+  });
+
   it("fails remaining records without calling Claude once the run budget is exhausted", async () => {
     const controller = new AbortController();
     controller.abort();

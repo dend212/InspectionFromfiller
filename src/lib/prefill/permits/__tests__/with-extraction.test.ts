@@ -104,6 +104,27 @@ describe("withExtraction", () => {
     expect(d.extract).not.toHaveBeenCalled();
   });
 
+  it("still runs the extraction pass when the run only holds reused `done` records (D7)", async () => {
+    const reused = record({ id: "r-old", extractionStatus: "done", extracted: { isAbandonment: false } as never });
+    const d = deps({
+      loadRecords: vi.fn().mockResolvedValue([reused]),
+      extract: vi.fn().mockResolvedValue({ ...extraction, done: 0, estimatedCostUsd: 0 }),
+    });
+    const out = await withExtraction(ctx, done, d);
+    expect(d.extract).toHaveBeenCalledWith([reused], ctx);
+    expect(out.proposals.map((p) => p.fieldPath)).toEqual([
+      "facilityInfo.recordsAvailable",
+      "septicTank.tanks.0.tankCapacity",
+    ]);
+    expect(out.stage.summary).toBe("2 permits found · OW-17-00474: 1,250 gal tank · 2 seepage pits");
+  });
+
+  it("returns the input unchanged when the only `done` records carry no facts", async () => {
+    const d = deps({ loadRecords: vi.fn().mockResolvedValue([record({ id: "r-old", extractionStatus: "done", extracted: null })]) });
+    expect(await withExtraction(ctx, done, d)).toBe(done);
+    expect(d.extract).not.toHaveBeenCalled();
+  });
+
   it("keeps the stage done and notes the problem when extraction crashes", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const d = deps({ extract: vi.fn().mockRejectedValue(new Error("db down")) });

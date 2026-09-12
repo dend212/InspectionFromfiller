@@ -38,6 +38,8 @@ export interface StoredRecord {
   sizeBytes: number | null;
   /** Phase 2 stores at most MAX_DOCUMENTS_PER_RUN records as "pending" and the rest as "skipped" */
   extractionStatus: ExtractionStatus;
+  /** D7: the facts an earlier run already read from this document (`done` rows reused by this run) */
+  extracted?: PermitFacts | null;
 }
 
 export interface RecordExtractionPatch {
@@ -134,6 +136,11 @@ const DISPOSAL_LABEL: Record<string, string> = {
   other: "disposal works",
 };
 
+/** D7: a `done` row reused from an earlier run whose facts can be replayed without reading it again */
+export function hasReusableFacts(r: StoredRecord): r is StoredRecord & { extracted: PermitFacts } {
+  return r.extractionStatus === "done" && r.extracted != null;
+}
+
 /** "OW-17-00474: 1,250 gal tank · 2 seepage pits · 450 gpd design flow" */
 export function describeFacts(permitNumber: string, facts: PermitFacts): string {
   const bits: string[] = [];
@@ -147,6 +154,28 @@ export function describeFacts(permitNumber: string, facts: PermitFacts): string 
   if (facts.designFlowGpd) bits.push(`${Math.round(facts.designFlowGpd.value)} gpd design flow`);
   if (facts.isAbandonment) bits.push("ABANDONMENT");
   return `${permitNumber}: ${bits.length ? bits.join(" · ") : "no system facts found"}`;
+}
+
+/** Turns one document's facts into proposals + a highlight (or an abandonment flag) */
+function foldFacts(
+  result: ExtractRecordsResult,
+  record: StoredRecord,
+  facts: PermitFacts,
+  ctx: StageContext,
+): void {
+  if (facts.isAbandonment) {
+    result.abandonmentPermits.push(record.permitNumber);
+    return;
+  }
+  result.proposals.push(
+    ...mapPermitFacts(facts, {
+      id: record.id,
+      permitNumber: record.permitNumber,
+      docType: record.docType,
+      inspectionId: ctx.inspectionId,
+    }),
+  );
+  result.highlights.push(describeFacts(record.permitNumber, facts));
 }
 
 export async function extractStoredRecords(
@@ -170,6 +199,12 @@ export async function extractStoredRecords(
     result.skipped++;
   }
 
+  // D7: rows an earlier run already read — replay their stored facts, no download / Claude / persist
+  for (const record of records.filter(hasReusableFacts)) {
+    foldFacts(result, record, record.extracted, ctx);
+    deps.log(`[prefill] ${record.permitNumber}: reused stored facts from an earlier run (not re-read)`);
+  }
+
   for (const record of toExtract) {
     if (ctx.signal.aborted) {
       await deps.persist(record.id, {
@@ -190,19 +225,7 @@ export async function extractStoredRecords(
       await deps.persist(record.id, { extractionStatus: "done", extractionError: null, extracted: facts });
       result.done++;
       result.estimatedCostUsd += usage.estimatedCostUsd;
-      if (facts.isAbandonment) {
-        result.abandonmentPermits.push(record.permitNumber);
-      } else {
-        result.proposals.push(
-          ...mapPermitFacts(facts, {
-            id: record.id,
-            permitNumber: record.permitNumber,
-            docType: record.docType,
-            inspectionId: ctx.inspectionId,
-          }),
-        );
-      }
-      if (!facts.isAbandonment) result.highlights.push(describeFacts(record.permitNumber, facts));
+      foldFacts(result, record, facts, ctx);
       const tokens = usage.calls.reduce(
         (n, c) => n + c.inputTokens + c.outputTokens + c.cacheReadInputTokens + c.cacheCreationInputTokens,
         0,
