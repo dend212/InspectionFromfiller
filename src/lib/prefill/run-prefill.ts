@@ -1,5 +1,6 @@
 import { runAssessorStage } from "./assessor";
 import { runListingStage } from "./listing";
+import { dedupeProposals } from "./map-facts-to-fields";
 import type { PermitsStageResult } from "./permits";
 import { runPermitsSelection, runPermitsStage } from "./permits";
 import type { PrefillRunRow } from "./run-store";
@@ -124,7 +125,8 @@ export async function runPrefill(runId: string): Promise<void> {
     await updateRun(runId, {
       status: awaiting ? "awaiting_selection" : "done",
       stages: { ...stages },
-      proposals,
+      // Spec §7: permit beats listing for the same field (dedupeProposals ranks by source)
+      proposals: dedupeProposals(proposals),
       candidates,
       finishedAt: awaiting ? null : new Date(),
     });
@@ -180,7 +182,8 @@ export async function continuePrefillAfterSelection(
     await updateRun(runId, {
       status: "done",
       stages: { ...stages },
-      proposals: [...kept, ...selection.proposals],
+      // Spec §7 again: a selected permit's field beats the listing value kept from the first pass
+      proposals: dedupeProposals([...kept, ...selection.proposals]),
       candidates: [],
       finishedAt: new Date(),
     });
