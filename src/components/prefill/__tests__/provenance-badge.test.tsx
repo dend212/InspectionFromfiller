@@ -102,6 +102,18 @@ describe("ProvenanceBadge", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
+  it("shows a human label instead of the raw enum token in the popover value line", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness initial={{ "facilityInfo.wastewaterSource": { ...ENTRY, value: "residential" } }}>
+        <ProvenanceBadge fieldPath="facilityInfo.wastewaterSource" />
+      </Harness>,
+    );
+    await user.click(screen.getByRole("button", { name: /prefilled from permit records/i }));
+    expect(await screen.findByText("Residential")).toBeInTheDocument();
+    expect(screen.queryByText("residential")).toBeNull();
+  });
+
   it("renders an https:// source URL as a link", async () => {
     const user = userEvent.setup();
     renderBadge({ ...ENTRY, sourceUrl: "https://mcassessor.maricopa.gov/mcs/?q=219-11-121" });

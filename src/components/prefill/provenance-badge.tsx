@@ -8,7 +8,7 @@ import { isSafeSourceUrl } from "@/lib/prefill/provenance-schema";
 import { EDITED_DOT_CLASS, SOURCE_META, VERIFIED_DOT_CLASS } from "@/lib/prefill/sources";
 import type { ProvenanceEntry } from "@/lib/prefill/types";
 import { cn } from "@/lib/utils";
-import { confidencePercent, formatProvenanceValue } from "./format";
+import { confidencePercent, formatFieldValue } from "./format";
 import { useProvenance } from "./provenance-context";
 
 /** Visible badge text — always present so colour is never the only signal */
@@ -198,7 +198,7 @@ export function ProvenanceBadge({ fieldPath }: ProvenanceBadgeProps) {
         </div>
         <p>
           <span className="text-muted-foreground">Value: </span>
-          <span className="font-medium">{formatProvenanceValue(entry.value)}</span>
+          <span className="font-medium">{formatFieldValue(fieldPath, entry.value)}</span>
           <span className="text-muted-foreground">
             {" "}
             · {confidencePercent(entry.confidence)} confidence

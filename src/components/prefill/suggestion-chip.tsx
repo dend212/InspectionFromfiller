@@ -6,7 +6,7 @@ import { valuesEqual } from "@/lib/prefill/merge";
 import { SOURCE_META } from "@/lib/prefill/sources";
 import type { ProvenanceEntry } from "@/lib/prefill/types";
 import { cn } from "@/lib/utils";
-import { confidencePercent, formatProvenanceValue } from "./format";
+import { confidencePercent, formatFieldValue } from "./format";
 import { useProvenance } from "./provenance-context";
 
 const WARNING_CLASS = "border-amber-300 text-amber-900 bg-amber-50";
@@ -20,9 +20,9 @@ function shortenValue(value: string): string {
   return `${value.slice(0, SUGGESTION_VALUE_HEAD_CHARS)}…`;
 }
 
-function buildSuggestionText(entry: ProvenanceEntry, shorten: boolean): string {
+function buildSuggestionText(entry: ProvenanceEntry, fieldPath: string, shorten: boolean): string {
   if (entry.kind === "warning") return entry.explanation;
-  const value = formatProvenanceValue(entry.value);
+  const value = formatFieldValue(fieldPath, entry.value);
   const head = `Suggested: ${shorten ? shortenValue(value) : value} · ${confidencePercent(entry.confidence)}`;
   // Some sources explain a value with the value itself (e.g. an age-estimate basis) — don't say it twice
   if (value.trim().toLowerCase() === entry.explanation.trim().toLowerCase()) return head;
@@ -30,13 +30,13 @@ function buildSuggestionText(entry: ProvenanceEntry, shorten: boolean): string {
 }
 
 /** Full text — used for `title` so the chip is always readable in full */
-export function suggestionText(entry: ProvenanceEntry): string {
-  return buildSuggestionText(entry, false);
+export function suggestionText(entry: ProvenanceEntry, fieldPath: string): string {
+  return buildSuggestionText(entry, fieldPath, false);
 }
 
 /** Text shown on the chip: same as `suggestionText` with an over-long value shortened */
-export function suggestionDisplayText(entry: ProvenanceEntry): string {
-  return buildSuggestionText(entry, true);
+export function suggestionDisplayText(entry: ProvenanceEntry, fieldPath: string): string {
+  return buildSuggestionText(entry, fieldPath, true);
 }
 
 interface SuggestionChipProps {
@@ -91,12 +91,12 @@ function SuggestionChipBody({
         <button
           type="button"
           disabled={readOnly}
-          aria-label={`Accept suggestion from ${meta.label}: ${formatProvenanceValue(entry.value)}`}
-          title={suggestionText(entry)}
+          aria-label={`Accept suggestion from ${meta.label}: ${formatFieldValue(fieldPath, entry.value)}`}
+          title={suggestionText(entry, fieldPath)}
           onClick={() => acceptSuggestion(fieldPath)}
           className="min-w-0 whitespace-normal break-words text-left underline-offset-2 hover:underline disabled:no-underline"
         >
-          {suggestionDisplayText(entry)}
+          {suggestionDisplayText(entry, fieldPath)}
         </button>
       )}
       {!readOnly && (

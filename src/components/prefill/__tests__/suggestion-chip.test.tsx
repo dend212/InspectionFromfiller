@@ -80,22 +80,34 @@ afterEach(() => {
 
 describe("suggestionText", () => {
   it("formats value, confidence and explanation", () => {
-    expect(suggestionText(SUGGESTION)).toBe("Suggested: 3 · 61% · Permit OW-17-00474 p.2");
-    expect(suggestionText({ ...SUGGESTION, value: true })).toBe("Suggested: Yes · 61% · Permit OW-17-00474 p.2");
-    expect(suggestionText({ ...SUGGESTION, value: ["a", "b"] })).toBe("Suggested: a, b · 61% · Permit OW-17-00474 p.2");
-    expect(suggestionText(WARNING)).toBe('Listing says "Sewer" — confirm this property is on septic');
+    expect(suggestionText(SUGGESTION, FIELD)).toBe("Suggested: 3 · 61% · Permit OW-17-00474 p.2");
+    expect(suggestionText({ ...SUGGESTION, value: true }, FIELD)).toBe("Suggested: Yes · 61% · Permit OW-17-00474 p.2");
+    expect(suggestionText({ ...SUGGESTION, value: ["a", "b"] }, FIELD)).toBe("Suggested: a, b · 61% · Permit OW-17-00474 p.2");
+    expect(suggestionText(WARNING, FIELD)).toBe('Listing says "Sewer" — confirm this property is on septic');
+  });
+
+  it("labels an enum/array value using the field's option list", () => {
+    expect(
+      suggestionText(
+        { ...SUGGESTION, value: ["gp402_septic_tank", "gp402_seepage_pit"], confidence: 0.9 },
+        "generalTreatment.systemTypes",
+      ),
+    ).toBe("Suggested: Septic Tank, Disposal by Seepage Pit · 90% · Permit OW-17-00474 p.2");
+    expect(
+      suggestionText({ ...SUGGESTION, value: "residential" }, "facilityInfo.wastewaterSource"),
+    ).toBe("Suggested: Residential · 61% · Permit OW-17-00474 p.2");
   });
 
   it("drops the explanation when it merely repeats the value (trimmed, case-insensitive)", () => {
     const basis = "Approval to construct issued 04/2000 (permit 000972)";
-    expect(suggestionText({ ...SUGGESTION, value: basis, explanation: basis })).toBe(
+    expect(suggestionText({ ...SUGGESTION, value: basis, explanation: basis }, FIELD)).toBe(
       `Suggested: ${basis} · 61%`,
     );
     expect(
-      suggestionText({ ...SUGGESTION, value: `  ${basis.toUpperCase()} `, explanation: basis }),
+      suggestionText({ ...SUGGESTION, value: `  ${basis.toUpperCase()} `, explanation: basis }, FIELD),
     ).toBe(`Suggested:   ${basis.toUpperCase()}  · 61%`);
     // A genuinely different explanation is kept
-    expect(suggestionText({ ...SUGGESTION, value: "26", explanation: basis })).toBe(
+    expect(suggestionText({ ...SUGGESTION, value: "26", explanation: basis }, FIELD)).toBe(
       `Suggested: 26 · 61% · ${basis}`,
     );
   });
@@ -104,20 +116,20 @@ describe("suggestionText", () => {
 describe("suggestionDisplayText", () => {
   it("shortens a long value to 57 characters + ellipsis, leaving short values alone", () => {
     const long = "x".repeat(61);
-    expect(suggestionDisplayText({ ...SUGGESTION, value: long })).toBe(
+    expect(suggestionDisplayText({ ...SUGGESTION, value: long }, FIELD)).toBe(
       `Suggested: ${"x".repeat(57)}… · 61% · Permit OW-17-00474 p.2`,
     );
     const exactly60 = "y".repeat(60);
-    expect(suggestionDisplayText({ ...SUGGESTION, value: exactly60 })).toBe(
+    expect(suggestionDisplayText({ ...SUGGESTION, value: exactly60 }, FIELD)).toBe(
       `Suggested: ${exactly60} · 61% · Permit OW-17-00474 p.2`,
     );
-    expect(suggestionDisplayText(SUGGESTION)).toBe(suggestionText(SUGGESTION));
-    expect(suggestionDisplayText(WARNING)).toBe(WARNING.explanation);
+    expect(suggestionDisplayText(SUGGESTION, FIELD)).toBe(suggestionText(SUGGESTION, FIELD));
+    expect(suggestionDisplayText(WARNING, FIELD)).toBe(WARNING.explanation);
   });
 
   it("also dedupes a long explanation that repeats the value", () => {
     const long = "Approval to construct issued 04/2000 (permit 000972) — county EDMS record";
-    expect(suggestionDisplayText({ ...SUGGESTION, value: long, explanation: long })).toBe(
+    expect(suggestionDisplayText({ ...SUGGESTION, value: long, explanation: long }, FIELD)).toBe(
       `Suggested: ${long.slice(0, 57)}… · 61%`,
     );
   });
@@ -179,7 +191,30 @@ describe("SuggestionChip", () => {
     );
     expect(screen.getByRole("button", { name: /accept suggestion/i })).toHaveAttribute(
       "title",
-      suggestionText(SUGGESTION),
+      suggestionText(SUGGESTION, FIELD),
+    );
+  });
+
+  it("shows human labels, not raw tokens, for a field-aware enum/array value", () => {
+    const entry: ProvenanceEntry = {
+      source: "permit",
+      state: "suggested",
+      kind: "fill",
+      value: ["gp402_septic_tank", "gp402_seepage_pit"],
+      confidence: 0.9,
+      explanation: "Permit OW-17-00474 · Discharge Authorization p.2",
+      at: "2026-09-11T10:00:00.000Z",
+    };
+    render(
+      <Harness initial={{ "generalTreatment.systemTypes": entry }}>
+        <SuggestionChip fieldPath="generalTreatment.systemTypes" />
+      </Harness>,
+    );
+    const accept = screen.getByRole("button", {
+      name: "Accept suggestion from Permit records: Septic Tank, Disposal by Seepage Pit",
+    });
+    expect(accept).toHaveTextContent(
+      "Suggested: Septic Tank, Disposal by Seepage Pit · 90% · Permit OW-17-00474 · Discharge Authorization p.2",
     );
   });
 
