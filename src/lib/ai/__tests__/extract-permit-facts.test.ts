@@ -17,6 +17,8 @@ import {
   extractPermitFactsFromPdf,
 } from "@/lib/ai/extract-permit-facts";
 import { emptyPermitFacts, type PermitFacts } from "@/lib/ai/permit-extraction-schema";
+import { allFactSpecs, getFactAt } from "@/lib/ai/permit-facts-utils";
+import type { PermitFactsWire } from "@/lib/ai/permit-facts-wire";
 
 /** Page N is (100+N) points wide so we can tell which page was attached */
 async function makePdf(pages: number): Promise<Uint8Array> {
@@ -38,8 +40,21 @@ const opusUsage = {
   cache_read_input_tokens: 0,
 };
 
-function reply(parsed: unknown, extra: Record<string, unknown> = {}) {
-  return { parsed_output: parsed, stop_reason: "end_turn", usage: sonnetUsage, content: [], ...extra };
+/** Sonnet answers in the flat wire shape (permit-facts-wire.ts); tests describe facts nested and flatten here */
+function toWire(facts: PermitFacts): PermitFactsWire {
+  return {
+    documentKind: facts.documentKind,
+    isAbandonment: facts.isAbandonment,
+    notes: facts.notes,
+    facts: allFactSpecs(facts).flatMap(({ path }) => {
+      const fact = getFactAt(facts, path);
+      return fact ? [{ path, ...fact }] : [];
+    }),
+  };
+}
+
+function reply(parsed: PermitFacts | null, extra: Record<string, unknown> = {}) {
+  return { parsed_output: parsed && toWire(parsed), stop_reason: "end_turn", usage: sonnetUsage, content: [], ...extra };
 }
 
 function opusReply(answer: unknown) {

@@ -5,6 +5,10 @@
  * the next ≤ 20 pages; the passes merge field-by-field (higher confidence
  * wins). Handwritten facts under HANDWRITING_ESCALATION_THRESHOLD are re-asked
  * on Opus 5 with only their page and a single question (max 3 per document).
+ *
+ * The structured-output schema sent to the API is the flat PermitFactsWireSchema
+ * (the nested PermitFactsSchema does not compile as a grammar — see
+ * permit-facts-wire.ts); each pass is converted back to PermitFacts here.
  */
 import Anthropic, {
   APIConnectionError,
@@ -26,7 +30,6 @@ import {
 } from "./permit-extraction-prompt";
 import {
   EscalationAnswerSchema,
-  PermitFactsSchema,
   type EscalationAnswer,
   type Fact,
   type PermitFacts,
@@ -42,6 +45,7 @@ import {
   type FactSpec,
   type FactValue,
 } from "./permit-facts-utils";
+import { PermitFactsWireSchema, permitFactsFromWire } from "./permit-facts-wire";
 import type { PDFDocument } from "pdf-lib";
 
 // Built lazily: constructing the SDK client at import time throws under vitest's jsdom
@@ -207,7 +211,7 @@ async function runPass(
             ],
           },
         ],
-        output_config: { format: zodOutputFormat(PermitFactsSchema) },
+        output_config: { format: zodOutputFormat(PermitFactsWireSchema) },
       },
       { timeout: EXTRACTION_TIMEOUT_MS, maxRetries: 0, signal },
     ),
@@ -221,7 +225,7 @@ async function runPass(
       `Claude returned no structured output (stop_reason: ${message.stop_reason ?? "unknown"})`,
     );
   }
-  return rebasePages(message.parsed_output, meta.pageNumbers);
+  return rebasePages(permitFactsFromWire(message.parsed_output), meta.pageNumbers);
 }
 
 async function askEscalation(

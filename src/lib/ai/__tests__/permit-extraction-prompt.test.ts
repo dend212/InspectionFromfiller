@@ -5,7 +5,8 @@ import {
   buildEscalationUserMessage,
   buildPassUserMessage,
 } from "@/lib/ai/permit-extraction-prompt";
-import { FACT_SPECS } from "@/lib/ai/permit-facts-utils";
+import { FACT_SPECS, tankFactSpecs } from "@/lib/ai/permit-facts-utils";
+import { MAX_WIRE_TANKS } from "@/lib/ai/permit-facts-wire";
 
 describe("PERMIT_EXTRACTION_SYSTEM_PROMPT", () => {
   it("matches the committed snapshot (prompt changes must be deliberate)", () => {
@@ -36,6 +37,15 @@ describe("PERMIT_EXTRACTION_SYSTEM_PROMPT", () => {
     // no template-literal hazards leaked into the text
     expect(p).not.toContain("${");
     expect(p).not.toContain("`");
+  });
+
+  it("names every wire fact path and tells the model to omit, not null, what it cannot find", () => {
+    const p = PERMIT_EXTRACTION_SYSTEM_PROMPT;
+    for (const { path } of [...FACT_SPECS, ...tankFactSpecs(0)]) expect(p).toContain(path);
+    expect(p).toContain(`tanks.${MAX_WIRE_TANKS - 1}.`);
+    expect(p).toContain("facts array");
+    expect(p).toContain("left out of the array");
+    expect(p).not.toMatch(/return null/);
   });
 });
 

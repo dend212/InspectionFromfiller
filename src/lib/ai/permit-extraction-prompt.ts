@@ -20,16 +20,21 @@ DOCUMENT LAYOUTS YOU WILL SEE
 
 4. "Notice of Transfer" (a CivicPlus web-form email printout). Records a property-transfer inspection: address, parcel, inspector, date and the permit referenced. It rarely carries tank or disposal data; extract the permit number and dates only, unless system facts are explicitly stated on the page.
 
-5. "Abandonment" / Permit to Abandon / Abandonment Notice. Documents the decommissioning of a septic system (tank pumped and crushed or filled with slurry). Set isAbandonment to true and extract the dates and the permit number; do not report the abandoned tank's capacity or disposal works as current system facts (leave tanks empty and disposal null).
+5. "Abandonment" / Permit to Abandon / Abandonment Notice. Documents the decommissioning of a septic system (tank pumped and crushed or filled with slurry). Set isAbandonment to true and extract the dates and the permit number; do not report the abandoned tank's capacity or disposal works as current system facts (emit no tanks.* or disposal.* facts).
 
 6. Anything else: plan review letters, correction notices, a "PERMIT SUB" resubmittal, soil reports, an engineer's site plan or a fee receipt. Use documentKind "other" and extract only what is plainly stated on the pages.
+
+OUTPUT SHAPE
+Your answer is one JSON object with documentKind, isAbandonment, notes and a facts array. Each entry in facts is ONE value you actually found on the pages: { path, value, confidence, page, evidence, handwritten }. Facts you cannot find are simply left out of the array — never emit a row with a null, empty or placeholder value, and never emit the same path twice.
+- path is exactly one of: permitNumber, issueDate, finalDate, contractor, designFlowGpd, bedrooms, disposal.type, disposal.count, disposal.dimensions, disposal.absorptionAreaSqft, waterSource, isCesspool, hasSitePlan, systemType, and per tank tanks.0.capacityGal, tanks.0.material, tanks.0.model, tanks.0.dimensions (the second tank uses tanks.1.…, the third tanks.2.…).
+- value is a JSON number for capacityGal, designFlowGpd, bedrooms, disposal.count and disposal.absorptionAreaSqft (digits only, no units); true or false for isCesspool and hasSitePlan; one of the listed tokens for material (precast_concrete, fiberglass, plastic, steel, cast_in_place, other), disposal.type, waterSource and systemType; otherwise a string exactly as written on the page.
 
 WHAT TO EXTRACT
 - permitNumber: exactly as printed, keeping dashes and prefixes (OW-17-00474, not OW1700474).
 - documentKind: from the title of the FIRST page you were given. A DA packet that also contains an older Approval to Construct is a discharge_authorization.
 - issueDate / finalDate: ISO yyyy-mm-dd. If only the month and year are legible, use the first of the month and lower the confidence. Never guess a year from context.
 - designFlowGpd, bedrooms, tanks (capacityGal, material, model, dimensions), disposal (type, count, dimensions, absorptionAreaSqft), waterSource, isCesspool, hasSitePlan, systemType.
-- Every tank listed on the document gets its own entry in tanks; a "1500 gal two-compartment tank" is ONE tank. A dosing or pump tank with its own listed capacity is a separate tank entry with model "dosing tank".
+- Every tank listed on the document gets its own index in tanks.N.*; a "1500 gal two-compartment tank" is ONE tank. A dosing or pump tank with its own listed capacity is a separate tank with model "dosing tank".
 - disposal.type: "trench" for leach lines / leach fields / disposal trenches, "bed" for leach beds / disposal beds, "chamber" for chamber technology (Infiltrator, Quick4), "seepage_pit" for pits / dry wells / seepage pits, otherwise "other".
 - systemType: "alternative" only when the document names an alternative technology (aerobic treatment unit, ATU, mound, pressure distribution, drip, sand filter, textile filter, peat filter, ET bed, disinfection). Chambers, seepage pits, trenches and beds behind a septic tank are "conventional".
 - isCesspool: true only if the document itself describes the system as a cesspool or cesspit. This flag voids the inspection report, so never infer it.
@@ -45,11 +50,11 @@ CONFIDENCE CALIBRATION (0 to 1)
 - 0.85 to 0.94: clear handwriting, or a typed value with a minor doubt such as a faint scan or a partially cut-off field.
 - 0.70 to 0.84: legible handwriting with some ambiguity (a digit that could be read two ways).
 - 0.50 to 0.69: hard to read; your best reading of ambiguous digits or a smudged word. Anything you had to squint at is ≤ 0.6.
-- below 0.50: mostly a guess. Prefer returning null over any value below 0.40.
-- A value that is inferred rather than read (for example bedrooms derived from the design flow, or a tank size assumed from the bedroom count) is not allowed; return null instead.
+- below 0.50: mostly a guess. Prefer leaving a fact out over reporting any value below 0.40.
+- A value that is inferred rather than read (for example bedrooms derived from the design flow, or a tank size assumed from the bedroom count) is not allowed; leave the fact out instead.
 
 RULES
-- Never invent a value. If a field is not on the pages you were given, return null for that field (or an empty tanks array). Blank form fields are null, not 0 and not an empty string.
+- Never invent a value. If a fact is not on the pages you were given, leave it out of facts. A blank form field is a missing fact, not 0 and not an empty string.
 - Do not convert units: report gallons as gallons and dimensions as written. Do not compute an absorption area unless it is printed.
 - When two pages disagree, report the value from the most authoritative page (a Discharge Authorization or an as-built table beats an application or a plan-check note) and mention the disagreement in notes.
 - Do not use the EDMS index metadata you are told about (permit number, document type) as evidence; report what the pages actually say and let the metadata only help you disambiguate.
