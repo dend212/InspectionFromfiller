@@ -1,7 +1,8 @@
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { describe, expect, it } from "vitest";
-import { emptyPermitFacts } from "@/lib/ai/permit-extraction-schema";
+import { PermitFactsSchema, emptyPermitFacts } from "@/lib/ai/permit-extraction-schema";
 import {
+  MAX_NOTES_CHARS,
   MAX_UNION_PARAMETERS,
   MAX_WIRE_TANKS,
   type PermitFactRow,
@@ -84,6 +85,14 @@ describe("PermitFactsWireSchema", () => {
     expect(() => format.parse(JSON.stringify({ ...wire([]), documentKind: "letter" }))).toThrow(
       /Failed to parse structured output/,
     );
+  });
+
+  it("accepts a verbose notes string — the API cannot enforce string lengths, so a long note must not fail the pass", () => {
+    // Seen live on the 15-page 071533 permit: pass 2's notes ran to 635 chars against the persisted 500 cap
+    // and the SDK's client-side re-check threw, failing the whole document.
+    const format = zodOutputFormat(PermitFactsWireSchema);
+    const parsed = format.parse(JSON.stringify(wire([], { notes: "n".repeat(635) })));
+    expect(parsed.notes).toHaveLength(635);
   });
 });
 
@@ -188,6 +197,14 @@ describe("permitFactsFromWire", () => {
       { capacityGal: fact(500), material: null, model: fact("dosing tank"), dimensions: null },
       { capacityGal: null, material: fact("fiberglass"), model: null, dimensions: null },
     ]);
+  });
+
+  it("trims verbose notes to the persisted cap so the result still satisfies PermitFactsSchema", () => {
+    const facts = permitFactsFromWire(wire([], { notes: "n".repeat(635) }));
+    expect(facts.notes).toHaveLength(MAX_NOTES_CHARS);
+    expect(facts.notes.endsWith("…")).toBe(true);
+    expect(PermitFactsSchema.safeParse(facts).success).toBe(true);
+    expect(permitFactsFromWire(wire([], { notes: "As-built table used." })).notes).toBe("As-built table used.");
   });
 
   it("keeps page, evidence and handwritten from the row", () => {

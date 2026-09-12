@@ -36,6 +36,11 @@ describe("PERMIT_EXTRACTION_SYSTEM_PROMPT", () => {
     expect(p).toContain("1-based page number");
     expect(p).toContain("isCesspool");
     expect(p).toContain("isAbandonment");
+    // documentKind comes from the first page's title, EXCEPT on a later-pages pass, where an
+    // approval stamp / DA on any page settles it — must agree with the pass-2 user message
+    expect(p).toMatch(/documentKind: from the title of the FIRST page you were given.*except on a later-pages pass/);
+    expect(p).toMatch(/later-pages pass.*ANY page you were given.*Approval \/ Authorization to Construct/);
+    expect(p).toMatch(/later-pages pass.*county approval stamp.*report that kind/);
     // no template-literal hazards leaked into the text
     expect(p).not.toContain("${");
     expect(p).not.toContain("`");

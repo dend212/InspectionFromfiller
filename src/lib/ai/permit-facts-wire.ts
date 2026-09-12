@@ -29,6 +29,9 @@ export const MAX_UNION_PARAMETERS = 16;
 /** Tank indexes the model may address (tanks.0 … tanks.2); a fourth tank on a residential permit is unheard of */
 export const MAX_WIRE_TANKS = 3;
 
+/** The persisted cap on notes (PermitFactsSchema); the wire trims to it rather than rejecting the pass */
+export const MAX_NOTES_CHARS: number = PermitFactsSchema.shape.notes.maxLength ?? 500;
+
 export const WIRE_FACT_SPECS: readonly FactSpec[] = [
   ...FACT_SPECS,
   ...Array.from({ length: MAX_WIRE_TANKS }, (_, i) => tankFactSpecs(i)).flat(),
@@ -56,7 +59,10 @@ export type PermitFactRow = z.infer<typeof PermitFactRowSchema>;
 export const PermitFactsWireSchema = z.object({
   documentKind: PermitFactsSchema.shape.documentKind,
   isAbandonment: z.boolean(),
-  notes: z.string().max(500),
+  // No length cap here: structured outputs do not support minLength/maxLength, so the SDK strips
+  // them from the grammar and only re-checks client-side — a verbose note would then fail the whole
+  // pass (seen live on the 15-page 071533 permit: pass 2 wrote 635 chars). permitFactsFromWire trims.
+  notes: z.string(),
   /** One row per fact actually found on the pages; absent facts are simply not listed */
   facts: z.array(PermitFactRowSchema),
 });
@@ -94,7 +100,8 @@ export function permitFactsFromWire(wire: PermitFactsWire): PermitFacts {
   const facts = emptyPermitFacts();
   facts.documentKind = wire.documentKind;
   facts.isAbandonment = wire.isAbandonment;
-  facts.notes = wire.notes;
+  facts.notes =
+    wire.notes.length > MAX_NOTES_CHARS ? `${wire.notes.slice(0, MAX_NOTES_CHARS - 1)}…` : wire.notes;
 
   for (const row of wire.facts) {
     const spec = SPEC_BY_PATH.get(row.path.trim());
