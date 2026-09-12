@@ -1,8 +1,18 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useForm } from "react-hook-form";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProvenanceProvider } from "@/components/prefill/provenance-context";
-import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Form,
+  FormCheckboxRow,
+  FormControl,
+  FormField,
+  FormFieldGroup,
+  FormItem,
+  FormLabel,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import type { FieldProvenance, ProvenanceEntry } from "@/lib/prefill/types";
 import { getDefaultFormValues } from "@/lib/validators/inspection";
@@ -69,6 +79,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount before unstubbing fetch — otherwise RTL's auto-unmount cleanup fires after the
+  // stub is gone and the provider's unmount flush hits real fetch (stderr noise).
+  cleanup();
   vi.unstubAllGlobals();
 });
 
@@ -122,5 +135,209 @@ describe("FormLabel / FormItem provenance integration", () => {
     );
     expect(screen.getByRole("button", { name: /accept suggestion from county assessor/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /prefilled from/i })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Checkbox groups (one field path, many controls) and boolean checkbox rows
+// ---------------------------------------------------------------------------
+
+const SYSTEM_TYPES = [
+  { value: "conventional", label: "Conventional System" },
+  { value: "alternative", label: "Alternative System" },
+  { value: "gray_water", label: "Gray Water System Observed" },
+] as const;
+const GROUP_FIELD = "facilityInfo.facilitySystemTypes";
+const GROUP_SUGGESTION: ProvenanceEntry = {
+  source: "permit",
+  state: "suggested",
+  kind: "fill",
+  value: ["conventional"],
+  confidence: 0.7,
+  explanation: "Permit 000972 · Approval to Construct p.1",
+  at: "2026-09-11T10:00:00.000Z",
+};
+
+function SystemTypeGroup({ initial }: { initial: FieldProvenance }) {
+  const form = useForm<InspectionFormData>({
+    defaultValues: getDefaultFormValues("Tech") as unknown as InspectionFormData,
+  });
+  return (
+    <ProvenanceProvider form={form} inspectionId="insp-1" initial={initial}>
+      <Form {...form}>
+        <FormFieldGroup name={GROUP_FIELD} label="System Type" className="space-y-3">
+          {SYSTEM_TYPES.map((type) => (
+            <FormField
+              key={type.value}
+              control={form.control}
+              name={GROUP_FIELD}
+              render={({ field }) => (
+                <FormItem>
+                  <FormCheckboxRow
+                    control={
+                      <Checkbox
+                        checked={field.value?.includes(type.value)}
+                        onCheckedChange={(checked) => {
+                          const current = field.value ?? [];
+                          field.onChange(
+                            checked
+                              ? [...current, type.value]
+                              : current.filter((v: string) => v !== type.value),
+                          );
+                        }}
+                      />
+                    }
+                  >
+                    {type.label}
+                  </FormCheckboxRow>
+                </FormItem>
+              )}
+            />
+          ))}
+        </FormFieldGroup>
+      </Form>
+    </ProvenanceProvider>
+  );
+}
+
+describe("FormFieldGroup (checkbox group sharing one field path)", () => {
+  it("renders exactly one chip for the group, after the last option", () => {
+    render(<SystemTypeGroup initial={{ [GROUP_FIELD]: GROUP_SUGGESTION }} />);
+    const chips = document.querySelectorAll("[data-slot=suggestion-chip]");
+    expect(chips).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /accept suggestion from permit records/i })).toHaveLength(1);
+    // Placement: the chip follows every option row inside the group container
+    const group = screen.getByRole("group", { name: "System Type" });
+    expect(group).toContainElement(chips[0] as HTMLElement);
+    const lastRow = screen.getByRole("checkbox", { name: "Gray Water System Observed" });
+    expect(lastRow.compareDocumentPosition(chips[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Members render no per-option badge either
+    expect(screen.queryByRole("button", { name: /prefilled from/i })).toBeNull();
+  });
+
+  it("accepting the chip ticks the right checkbox and shows one badge beside the group label", async () => {
+    const user = userEvent.setup();
+    render(<SystemTypeGroup initial={{ [GROUP_FIELD]: GROUP_SUGGESTION }} />);
+    await user.click(screen.getByRole("button", { name: /accept suggestion from permit records/i }));
+
+    expect(screen.getByRole("checkbox", { name: "Conventional System" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Alternative System" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Gray Water System Observed" })).not.toBeChecked();
+    expect(document.querySelectorAll("[data-slot=suggestion-chip]")).toHaveLength(0);
+
+    const badges = screen.getAllByRole("button", { name: "Prefilled from Permit records, 70% confidence" });
+    expect(badges).toHaveLength(1);
+    // Beside the group label, in the same inline-flex row
+    const label = screen.getByText("System Type");
+    expect(badges[0].parentElement).toBe(label.parentElement);
+    expect(label.parentElement).toHaveClass("inline-flex");
+    // The group is named by its label, not by the badge
+    expect(screen.getByRole("group", { name: "System Type" })).toBeInTheDocument();
+  });
+
+  it("renders one badge next to the group label for a prefilled group and none inside the rows", () => {
+    render(
+      <SystemTypeGroup
+        initial={{ [GROUP_FIELD]: { ...GROUP_SUGGESTION, state: "prefilled", confidence: 0.99 } }}
+      />,
+    );
+    const badges = screen.getAllByRole("button", { name: "Prefilled from Permit records, 99% confidence" });
+    expect(badges).toHaveLength(1);
+    expect(badges[0].closest("label")).toBeNull();
+    for (const type of SYSTEM_TYPES) {
+      const row = screen.getByText(type.label).closest("[data-slot=form-checkbox-row]");
+      expect(row).not.toBeNull();
+      expect(within(row as HTMLElement).queryByRole("button", { name: /prefilled from/i })).toBeNull();
+    }
+  });
+});
+
+const BOOL_FIELD = "facilityInfo.hasApprovalOfConstruction";
+const BOOL_ENTRY: ProvenanceEntry = {
+  source: "permit",
+  state: "prefilled",
+  kind: "fill",
+  value: true,
+  confidence: 0.99,
+  explanation: "Approval to construct issued 04/2000 (permit 000972)",
+  at: "2026-09-11T10:00:00.000Z",
+};
+
+function BooleanRow({
+  initial,
+  controlPosition,
+}: {
+  initial: FieldProvenance;
+  controlPosition?: "start" | "end";
+}) {
+  const form = useForm<InspectionFormData>({
+    defaultValues: getDefaultFormValues("Tech") as unknown as InspectionFormData,
+  });
+  return (
+    <ProvenanceProvider form={form} inspectionId="insp-1" initial={initial}>
+      <Form {...form}>
+        <FormField
+          control={form.control}
+          name={BOOL_FIELD}
+          render={({ field }) => (
+            <FormItem>
+              <FormCheckboxRow
+                controlPosition={controlPosition}
+                control={<Checkbox checked={field.value} onCheckedChange={field.onChange} />}
+              >
+                Approval of Construction
+              </FormCheckboxRow>
+            </FormItem>
+          )}
+        />
+      </Form>
+    </ProvenanceProvider>
+  );
+}
+
+describe("FormCheckboxRow (boolean checkbox row)", () => {
+  it("names the checkbox by the label only and toggles it when the label text is clicked", async () => {
+    const user = userEvent.setup();
+    render(<BooleanRow initial={{}} />);
+    const box = screen.getByRole("checkbox", { name: "Approval of Construction" });
+    expect(box).not.toBeChecked();
+    await user.click(screen.getByText("Approval of Construction"));
+    expect(box).toBeChecked();
+    await user.click(box);
+    expect(box).not.toBeChecked();
+    expect(screen.queryByRole("button", { name: /prefilled from/i })).toBeNull();
+  });
+
+  it("renders the provenance badge after the label text, outside the <label>, for a prefilled field", () => {
+    render(<BooleanRow initial={{ [BOOL_FIELD]: BOOL_ENTRY }} />);
+    const badge = screen.getByRole("button", { name: "Prefilled from Permit records, 99% confidence" });
+    const label = screen.getByText("Approval of Construction").closest("label");
+    expect(label).not.toBeNull();
+    expect(label).toHaveTextContent(/^Approval of Construction$/);
+    expect(badge.closest("label")).toBeNull();
+    expect(label!.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Same bordered row
+    expect(badge.closest("[data-slot=form-checkbox-row]")).toBe(label!.closest("[data-slot=form-checkbox-row]"));
+    // The checkbox is still named by the label alone
+    expect(screen.getByRole("checkbox", { name: "Approval of Construction" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /prefilled from/i })).toHaveLength(1);
+  });
+
+  it("keeps the badge between the label and a trailing control", () => {
+    render(<BooleanRow initial={{ [BOOL_FIELD]: BOOL_ENTRY }} controlPosition="end" />);
+    const badge = screen.getByRole("button", { name: /prefilled from permit records/i });
+    const box = screen.getByRole("checkbox", { name: "Approval of Construction" });
+    const label = screen.getByText("Approval of Construction").closest("label") as HTMLElement;
+    expect(label.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(badge.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows the source label in the badge popover so Verify / Clear are reachable", async () => {
+    const user = userEvent.setup();
+    render(<BooleanRow initial={{ [BOOL_FIELD]: BOOL_ENTRY }} />);
+    await user.click(screen.getByRole("button", { name: /prefilled from permit records/i }));
+    expect(await screen.findByText("Permit records")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Verify" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear" })).toBeInTheDocument();
   });
 });

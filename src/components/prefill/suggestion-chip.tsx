@@ -77,7 +77,9 @@ function SuggestionChipBody({
     <div
       data-slot="suggestion-chip"
       className={cn(
-        "inline-flex min-w-0 max-w-full items-start gap-1 whitespace-normal break-words rounded-lg border px-2 py-0.5 text-xs",
+        // w-fit + justify-self-start: hug the text instead of stretching to the grid column;
+        // max-w-full + min-w-0: still wrap inside that column.
+        "inline-flex w-fit min-w-0 max-w-full justify-self-start items-start gap-1 whitespace-normal break-words rounded-lg border px-2 py-0.5 text-xs",
         isWarning ? WARNING_CLASS : meta.accentClass,
       )}
     >

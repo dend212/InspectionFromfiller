@@ -1,9 +1,9 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 import { useForm } from "react-hook-form";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ProvenanceBadge } from "@/components/prefill/provenance-badge";
+import { BADGE_HOVER_CLOSE_DELAY_MS, ProvenanceBadge } from "@/components/prefill/provenance-badge";
 import { ProvenanceProvider } from "@/components/prefill/provenance-context";
 import type { FieldProvenance, ProvenanceEntry } from "@/lib/prefill/types";
 import { getDefaultFormValues } from "@/lib/validators/inspection";
@@ -145,6 +145,93 @@ describe("ProvenanceBadge", () => {
     await user.click(screen.getByRole("button", { name: /prefilled from permit records/i }));
     await user.click(await screen.findByRole("button", { name: "Clear" }));
     expect(screen.queryByRole("button", { name: /prefilled from/i })).toBeNull();
+  });
+
+  it("opens on hover and closes shortly after the pointer leaves", async () => {
+    const user = userEvent.setup();
+    renderBadge(ENTRY);
+    const badge = screen.getByRole("button", { name: /prefilled from permit records/i });
+    await user.hover(badge);
+    expect(await screen.findByText("Permit records")).toBeInTheDocument();
+    // A hover peek never steals focus from where the user is
+    expect(document.activeElement).not.toBe(screen.getByRole("button", { name: "Verify" }));
+    await user.unhover(badge);
+    // Still open during the grace period so the pointer can travel into the card
+    expect(screen.getByText("Permit records")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Permit records")).toBeNull(), {
+      timeout: BADGE_HOVER_CLOSE_DELAY_MS * 5,
+    });
+  });
+
+  it("stays open while the pointer is inside the popover so Verify / Clear can be reached from a hover", async () => {
+    const user = userEvent.setup();
+    renderBadge(ENTRY);
+    const badge = screen.getByRole("button", { name: /prefilled from permit records/i });
+    await user.hover(badge);
+    const verify = await screen.findByRole("button", { name: "Verify" });
+    await user.unhover(badge);
+    await user.hover(verify);
+    // Longer than the close delay: the card must not have gone away
+    await new Promise((r) => setTimeout(r, BADGE_HOVER_CLOSE_DELAY_MS * 2));
+    expect(screen.getByRole("button", { name: "Verify" })).toBeInTheDocument();
+    await user.click(verify);
+    expect(
+      screen.getByRole("button", { name: "Verified. Prefilled from Permit records, 92% confidence" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Permit records")).toBeNull();
+  });
+
+  it("a click after a hover pins the popover open; a second click closes it", async () => {
+    const user = userEvent.setup();
+    renderBadge(ENTRY);
+    const badge = screen.getByRole("button", { name: /prefilled from permit records/i });
+    await user.hover(badge);
+    expect(await screen.findByText("Permit records")).toBeInTheDocument();
+    await user.click(badge);
+    expect(screen.getByText("Permit records")).toBeInTheDocument();
+    await user.unhover(badge);
+    await new Promise((r) => setTimeout(r, BADGE_HOVER_CLOSE_DELAY_MS * 2));
+    expect(screen.getByText("Permit records")).toBeInTheDocument();
+    await user.click(badge);
+    expect(screen.queryByText("Permit records")).toBeNull();
+  });
+
+  it("opens on keyboard focus and closes when focus moves on", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness initial={{ [FIELD]: ENTRY }}>
+        <ProvenanceBadge fieldPath={FIELD} />
+        <button type="button">next</button>
+      </Harness>,
+    );
+    await user.tab();
+    const badge = screen.getByRole("button", { name: /prefilled from permit records/i });
+    expect(badge).toHaveFocus();
+    expect(await screen.findByText("Permit records")).toBeInTheDocument();
+    // Focus stays on the badge: a peek must not hijack keyboard navigation
+    expect(badge).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "next" })).toHaveFocus();
+    await waitFor(() => expect(screen.queryByText("Permit records")).toBeNull(), {
+      timeout: BADGE_HOVER_CLOSE_DELAY_MS * 5,
+    });
+  });
+
+  it("Enter on a focused badge moves focus into the popover so Verify / Clear are keyboard-reachable", async () => {
+    const user = userEvent.setup();
+    renderBadge(ENTRY);
+    await user.tab();
+    const badge = screen.getByRole("button", { name: /prefilled from permit records/i });
+    expect(badge).toHaveFocus();
+    await user.keyboard("{Enter}");
+    const verify = await screen.findByRole("button", { name: "Verify" });
+    const card = verify.closest("[data-slot=popover-content]") as HTMLElement;
+    // Focus moved into the card (its first tabbable, like Radix's own auto-focus)
+    await waitFor(() => expect(card).toContainElement(document.activeElement as HTMLElement));
+    expect(badge).not.toHaveFocus();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByText("Permit records")).toBeNull());
+    expect(badge).toHaveFocus();
   });
 
   it("hides Verify and Clear when read-only but still shows the details", async () => {

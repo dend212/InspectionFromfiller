@@ -30,13 +30,70 @@ interface ProvenanceBadgeProps {
   fieldPath: string;
 }
 
+/** Grace period after the pointer/focus leaves a hover-opened popover before it closes */
+export const BADGE_HOVER_CLOSE_DELAY_MS = 200;
+
+/** First tabbable control inside the popover card, for keyboard users who pin it open */
+function focusFirstTabbable(root: HTMLElement | null): void {
+  root
+    ?.querySelector<HTMLElement>(
+      'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+    )
+    ?.focus();
+}
+
 /**
  * Small dot + text badge rendered by FormLabel next to every prefilled field.
- * Tap opens the explanation popover (no hover needed — works on phones).
+ *
+ * Opening model (spec §2.3 / §9: "opens on tap and hover"):
+ *  - hover or keyboard focus *peeks* the popover: it shows without taking focus and closes
+ *    shortly after the pointer/focus leaves (the pointer may travel into the card);
+ *  - tap / click / Enter *pins* it: it stays until the badge is clicked again, Escape,
+ *    an outside click, or Verify / Clear. A keyboard pin moves focus into the card so
+ *    Verify / Clear stay reachable.
  */
 export function ProvenanceBadge({ fieldPath }: ProvenanceBadgeProps) {
   const { entry, verify, clear, readOnly } = useProvenance(fieldPath);
   const [open, setOpen] = React.useState(false);
+  const pinnedRef = React.useRef(false);
+  /** Set while Radix hands focus back to the badge on close — that focus must not re-open it */
+  const returningFocusRef = React.useRef(false);
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelClose = React.useCallback(() => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  }, []);
+  const close = React.useCallback(() => {
+    cancelClose();
+    pinnedRef.current = false;
+    setOpen(false);
+  }, [cancelClose]);
+  /** Close after the grace period unless pinned (or the pointer/focus came back) */
+  const scheduleClose = React.useCallback(() => {
+    if (pinnedRef.current) return;
+    cancelClose();
+    closeTimer.current = setTimeout(() => {
+      closeTimer.current = null;
+      if (!pinnedRef.current) setOpen(false);
+    }, BADGE_HOVER_CLOSE_DELAY_MS);
+  }, [cancelClose]);
+  const peek = React.useCallback(() => {
+    cancelClose();
+    setOpen(true);
+  }, [cancelClose]);
+  const handleTriggerFocus = React.useCallback(() => {
+    if (returningFocusRef.current) {
+      returningFocusRef.current = false;
+      return;
+    }
+    peek();
+  }, [peek]);
+
+  React.useEffect(() => cancelClose, [cancelClose]);
 
   if (!entry || entry.kind !== "fill" || entry.state === "suggested") return null;
 
@@ -48,14 +105,42 @@ export function ProvenanceBadge({ fieldPath }: ProvenanceBadgeProps) {
         ? EDITED_DOT_CLASS
         : meta.dotClass;
 
+  const handleTriggerClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    // Handled here instead of Radix's toggle: a click on a hover-opened popover must pin it,
+    // not close it. preventDefault skips the composed Radix onClick.
+    event.preventDefault();
+    cancelClose();
+    if (open && pinnedRef.current) {
+      close();
+      return;
+    }
+    pinnedRef.current = true;
+    setOpen(true);
+    // detail === 0: keyboard activation (Enter / Space) — hand focus to the card when it
+    // is already showing from the focus peek (a fresh open autofocuses via Radix instead)
+    if (event.detail === 0 && open) focusFirstTabbable(contentRef.current);
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        // Radix dismissals (Escape, outside click, focus outside) land here
+        if (next) setOpen(true);
+        else close();
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
           aria-label={badgeAriaLabel(entry)}
           data-slot="provenance-badge"
           data-provenance-state={entry.state}
+          onClick={handleTriggerClick}
+          onMouseEnter={peek}
+          onMouseLeave={scheduleClose}
+          onFocus={handleTriggerFocus}
+          onBlur={scheduleClose}
           className={cn(
             "inline-flex shrink-0 items-center gap-1 rounded-full border bg-background px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground",
             "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -67,7 +152,31 @@ export function ProvenanceBadge({ fieldPath }: ProvenanceBadgeProps) {
           {badgeText(entry)}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 space-y-3 text-sm">
+      <PopoverContent
+        ref={contentRef}
+        align="start"
+        className="w-80 space-y-3 text-sm"
+        onMouseEnter={cancelClose}
+        onMouseLeave={scheduleClose}
+        onFocusCapture={() => {
+          // Focus moved into the card (Tab or a click on Verify / Clear): keep it open
+          cancelClose();
+          pinnedRef.current = true;
+        }}
+        onOpenAutoFocus={(event) => {
+          // A peek must not steal focus from the field the user is on
+          if (!pinnedRef.current) event.preventDefault();
+        }}
+        onCloseAutoFocus={() => {
+          // Focus is about to return to the badge (Escape, Verify, Clear): swallow that one
+          // focus event so the popover does not peek straight back open. Cleared on the next
+          // tick in case focus goes elsewhere (it was never on the badge to begin with).
+          returningFocusRef.current = true;
+          setTimeout(() => {
+            returningFocusRef.current = false;
+          }, 0);
+        }}
+      >
         <div>
           <p className="font-medium">{meta.label}</p>
           <p className="text-muted-foreground">{entry.explanation}</p>
@@ -106,7 +215,7 @@ export function ProvenanceBadge({ fieldPath }: ProvenanceBadgeProps) {
               disabled={entry.state === "verified"}
               onClick={() => {
                 verify(fieldPath);
-                setOpen(false);
+                close();
               }}
             >
               Verify
@@ -117,7 +226,7 @@ export function ProvenanceBadge({ fieldPath }: ProvenanceBadgeProps) {
               variant="outline"
               onClick={() => {
                 clear(fieldPath);
-                setOpen(false);
+                close();
               }}
             >
               Clear

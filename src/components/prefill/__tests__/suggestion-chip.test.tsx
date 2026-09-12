@@ -223,6 +223,19 @@ describe("SuggestionChip", () => {
     expect(accept.compareDocumentPosition(dismiss) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("hugs its content inside the grid item instead of stretching into a full-width bar", () => {
+    render(
+      <Harness initial={{ [FIELD]: SUGGESTION }}>
+        <SuggestionChip fieldPath={FIELD} />
+      </Harness>,
+    );
+    const chip = document.querySelector("[data-slot=suggestion-chip]");
+    // A grid item stretches to its column by default; start-align + fit-content width hug the
+    // text, while max-w-full / min-w-0 keep it wrapping within the column.
+    expect(chip).toHaveClass("w-fit", "justify-self-start", "max-w-full", "min-w-0");
+    expect(chip).not.toHaveClass("w-full", "justify-self-stretch");
+  });
+
   it("wraps a warning too", () => {
     render(
       <Harness initial={{ "facilityInfo.wastewaterSource": WARNING }}>
