@@ -88,6 +88,29 @@ function lastPatch(): RunPatch {
   return all[all.length - 1];
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+/** True when `p` resolves within `ms`, false otherwise — never throws, never hangs. */
+function settledWithin(p: Promise<unknown>, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), ms);
+    p.then(() => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
+
+function errorStage(error: string): PrefillStage {
+  return { ...doneStage(error), status: "error", error };
+}
+
 function makeRun(overrides: Record<string, unknown> = {}) {
   return {
     id: RUN_ID,
@@ -138,23 +161,39 @@ describe("runPrefill — listing stage wiring", () => {
     expect(typeof ctx.progress).toBe("function");
   });
 
-  it("starts the listing stage before the permits stage finishes (parallel, not sequential)", async () => {
-    let listingStarted = false;
+  it("runs the listing and permits stages concurrently (parallel, not sequential)", async () => {
+    // Handshake: listing cannot finish until permits has been ENTERED, and permits
+    // cannot finish until listing has been entered. Only a concurrent orchestrator
+    // enters both before awaiting either; a sequential one (in either order) leaves
+    // the first stage waiting on a stage that is never started. The bounded wait
+    // turns that into an error stage instead of a hung test, and the assertions
+    // below check the persisted stage statuses and proposals — not just run.status,
+    // which the orchestrator writes as "done" even when a stage errors or rejects.
+    const listingEntered = deferred();
+    const permitsEntered = deferred();
+
     mockRunListingStage.mockImplementation(async () => {
-      listingStarted = true;
+      listingEntered.resolve();
+      if (!(await settledWithin(permitsEntered.promise, 1_000))) {
+        return { stage: errorStage("permits stage was never entered while listing ran"), proposals: [] };
+      }
       return { stage: doneStage("Water: Private Well"), proposals: [LISTING_PROPOSAL] };
     });
     mockRunPermitsStage.mockImplementation(async () => {
-      // Give the event loop a few turns; if the orchestrator awaited permits
-      // before starting listing, `listingStarted` is still false here.
-      for (let i = 0; i < 5 && !listingStarted; i += 1) await Promise.resolve();
-      if (!listingStarted) throw new Error("listing stage was not started concurrently with permits");
+      permitsEntered.resolve();
+      if (!(await settledWithin(listingEntered.promise, 1_000))) {
+        return { stage: errorStage("listing stage was never entered while permits ran"), proposals: [] };
+      }
       return { stage: doneStage("1 permit found"), proposals: [PERMIT_PROPOSAL] };
     });
 
     await runPrefill(RUN_ID);
 
-    expect(lastPatch()).toMatchObject({ status: "done" });
+    const final = lastPatch();
+    expect(final.status).toBe("done");
+    expect(final.stages?.listing).toMatchObject({ status: "done", summary: "Water: Private Well" });
+    expect(final.stages?.permits).toMatchObject({ status: "done", summary: "1 permit found" });
+    expect(final.proposals).toEqual(expect.arrayContaining([LISTING_PROPOSAL, PERMIT_PROPOSAL]));
   });
 
   it("persists the listing stage (with its link) and merges listing proposals into the run", async () => {
