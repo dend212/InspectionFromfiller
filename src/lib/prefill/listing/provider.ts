@@ -11,6 +11,8 @@ export interface ListingFacts {
   bathrooms?: number;
   yearBuilt?: number;
   lotSqft?: number;
+  /** Raw Zillow home type token (e.g. "SINGLE_FAMILY", "TOWNHOUSE"), as served — never normalised here. */
+  homeType?: string;
   raw: Record<string, unknown>;
 }
 

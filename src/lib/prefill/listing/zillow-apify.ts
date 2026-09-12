@@ -194,6 +194,31 @@ export function findListingFact(item: Record<string, unknown>, candidates: strin
   return undefined;
 }
 
+/**
+ * Raw Zillow home-type token, own data only: the item's top-level `homeType`
+ * (e.g. "SINGLE_FAMILY"), else `resoFacts.homeType` (e.g. "SingleFamily" —
+ * a differently-cased duplicate on the same record, not a neighbour's), else
+ * the first entry of `resoFacts.propertySubType` (e.g. "Single Family
+ * Residence"). Returned as-is, uninterpreted — `mapListingFacts` does the rule
+ * lookup. Direct property reads only, so this never wanders into
+ * `nearbyHomes`/`comps`/`collections` the way a keyed search would.
+ */
+function findHomeType(item: Record<string, unknown>): string | undefined {
+  if (typeof item.homeType === "string" && item.homeType.trim()) return item.homeType.trim();
+  const reso = item.resoFacts;
+  if (reso && typeof reso === "object") {
+    const resoFacts = reso as Record<string, unknown>;
+    if (typeof resoFacts.homeType === "string" && resoFacts.homeType.trim()) {
+      return resoFacts.homeType.trim();
+    }
+    const subType = Array.isArray(resoFacts.propertySubType)
+      ? resoFacts.propertySubType[0]
+      : resoFacts.propertySubType;
+    if (typeof subType === "string" && subType.trim()) return subType.trim();
+  }
+  return undefined;
+}
+
 /** Absolute Zillow home-details URL from an absolute URL or an `hdpUrl` path. */
 function toZillowUrl(v: unknown): string | undefined {
   if (typeof v !== "string") return undefined;
@@ -232,6 +257,7 @@ export function normaliseListingItem(raw: unknown): ListingFacts | null {
   const bathrooms = toNumber(findListingFact(item, BATHROOM_KEYS));
   const yearBuilt = toInteger(findListingFact(item, YEAR_BUILT_KEYS));
   const lotSqft = findLotSqft(item);
+  const homeType = findHomeType(item);
 
   const hasFacts =
     waterSource !== undefined ||
@@ -251,6 +277,7 @@ export function normaliseListingItem(raw: unknown): ListingFacts | null {
   if (bathrooms !== undefined) facts.bathrooms = bathrooms;
   if (yearBuilt !== undefined) facts.yearBuilt = yearBuilt;
   if (lotSqft !== undefined) facts.lotSqft = lotSqft;
+  if (homeType !== undefined) facts.homeType = homeType;
   return facts;
 }
 

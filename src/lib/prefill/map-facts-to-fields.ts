@@ -283,6 +283,38 @@ export const LISTING_WATER_CONFIDENCE = 0.8;
 export const LISTING_BEDROOMS_CONFIDENCE = 0.85;
 export const LISTING_SEWER_WARNING = 'Listing says "Sewer" — confirm this property is on septic';
 
+/**
+ * Zillow homeType → Wastewater Source + Facility Type (fallback for a parcel the
+ * assessor stage hasn't covered): assessor's property use code outranks this in
+ * `dedupeProposals` (SOURCE_RANK: assessor 2 > listing 1) whenever both fire.
+ * Compared upper-cased; `LOT`, `HOME_TYPE_UNKNOWN` and anything unmapped propose
+ * nothing.
+ */
+interface HomeTypeRule {
+  wastewaterSource: "residential";
+  wsConfidence: number;
+  facilityType: "single_family" | "multifamily";
+  ftConfidence: number;
+}
+
+const HOME_TYPE_RULES: Record<string, HomeTypeRule> = {
+  SINGLE_FAMILY: { wastewaterSource: "residential", wsConfidence: 0.85, facilityType: "single_family", ftConfidence: 0.85 },
+  MANUFACTURED: { wastewaterSource: "residential", wsConfidence: 0.85, facilityType: "single_family", ftConfidence: 0.85 },
+  TOWNHOUSE: { wastewaterSource: "residential", wsConfidence: 0.85, facilityType: "single_family", ftConfidence: 0.8 },
+  CONDO: { wastewaterSource: "residential", wsConfidence: 0.85, facilityType: "multifamily", ftConfidence: 0.8 },
+  APARTMENT: { wastewaterSource: "residential", wsConfidence: 0.85, facilityType: "multifamily", ftConfidence: 0.8 },
+  MULTI_FAMILY: { wastewaterSource: "residential", wsConfidence: 0.85, facilityType: "multifamily", ftConfidence: 0.8 },
+};
+
+/** Title-cases a `_`-separated enum token: "SINGLE_FAMILY" → "Single Family". */
+function humaniseHomeType(token: string): string {
+  return token
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 /** Original (un-normalised) text of a listing fact, for the popover evidence line. */
 function listingEvidence(raw: Record<string, unknown>, keys: string[]): string | undefined {
   const value = findFact(raw, keys);
@@ -347,6 +379,30 @@ export function mapListingFacts(facts: ListingFacts): ProposedField[] {
         ...sourceUrl,
       },
     });
+  }
+
+  if (facts.homeType) {
+    const rule = HOME_TYPE_RULES[facts.homeType.toUpperCase()];
+    if (rule) {
+      const provenance = {
+        source: "listing" as const,
+        explanation: `Zillow lists the home as ${humaniseHomeType(facts.homeType.toUpperCase())}`,
+        evidence: `homeType: ${facts.homeType}`,
+        ...sourceUrl,
+      };
+      out.push({
+        fieldPath: "facilityInfo.wastewaterSource",
+        value: rule.wastewaterSource,
+        kind: "fill",
+        provenance: { ...provenance, confidence: rule.wsConfidence },
+      });
+      out.push({
+        fieldPath: "facilityInfo.facilityType",
+        value: rule.facilityType,
+        kind: "fill",
+        provenance: { ...provenance, confidence: rule.ftConfidence },
+      });
+    }
   }
 
   return out;

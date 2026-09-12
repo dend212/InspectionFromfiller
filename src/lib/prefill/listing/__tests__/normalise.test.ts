@@ -144,6 +144,7 @@ describe("normaliseListingItem — recorded api-ninja fixtures", () => {
       bathrooms: 2,
       yearBuilt: 1980,
       lotSqft: 47023,
+      homeType: "SINGLE_FAMILY",
     });
     expect(facts?.url.endsWith("/8078782_zpid/")).toBe(true);
     expect(facts?.raw).toBe(venusForSale);
@@ -169,7 +170,40 @@ describe("normaliseListingItem — recorded api-ninja fixtures", () => {
     expect(facts).toMatchObject({
       url: "https://www.zillow.com/homedetails/1234-E-Example-Ln-Cave-Creek-AZ-85331/12345678_zpid/",
       yearBuilt: 1998,
+      homeType: "SINGLE_FAMILY",
     });
+  });
+});
+
+describe("normaliseListingItem — homeType (task 2)", () => {
+  it("reads the top-level homeType before resoFacts.homeType or propertySubType", () => {
+    const facts = normaliseListingItem({
+      zpid: 1,
+      homeType: "TOWNHOUSE",
+      resoFacts: { homeType: "SingleFamily", propertySubType: ["Single Family Residence"] },
+    });
+    expect(facts?.homeType).toBe("TOWNHOUSE");
+  });
+
+  it("falls back to resoFacts.homeType when the item has no top-level homeType", () => {
+    const facts = normaliseListingItem({
+      zpid: 1,
+      resoFacts: { homeType: "Condo", propertySubType: ["Condominium"] },
+    });
+    expect(facts?.homeType).toBe("Condo");
+  });
+
+  it("falls back to the first resoFacts.propertySubType when neither homeType is present", () => {
+    const facts = normaliseListingItem({
+      zpid: 1,
+      resoFacts: { propertySubType: ["Manufactured Home", "Mobile Home"] },
+    });
+    expect(facts?.homeType).toBe("Manufactured Home");
+  });
+
+  it("leaves homeType undefined when none of the three sources has one", () => {
+    const facts = normaliseListingItem({ zpid: 1, bedrooms: 2 });
+    expect(facts?.homeType).toBeUndefined();
   });
 });
 

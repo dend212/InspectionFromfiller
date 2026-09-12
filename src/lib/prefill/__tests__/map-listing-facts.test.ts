@@ -98,6 +98,89 @@ describe("mapListingFacts", () => {
   });
 });
 
+describe("mapListingFacts — homeType → wastewaterSource + facilityType (task 2)", () => {
+  it("SINGLE_FAMILY proposes residential @ 0.85 and single_family @ 0.85", () => {
+    const out = mapListingFacts(facts({ homeType: "SINGLE_FAMILY" }));
+    expect(out).toEqual([
+      {
+        fieldPath: "facilityInfo.wastewaterSource",
+        value: "residential",
+        kind: "fill",
+        provenance: {
+          source: "listing",
+          confidence: 0.85,
+          explanation: "Zillow lists the home as Single Family",
+          evidence: "homeType: SINGLE_FAMILY",
+          sourceUrl: URL,
+        },
+      },
+      {
+        fieldPath: "facilityInfo.facilityType",
+        value: "single_family",
+        kind: "fill",
+        provenance: {
+          source: "listing",
+          confidence: 0.85,
+          explanation: "Zillow lists the home as Single Family",
+          evidence: "homeType: SINGLE_FAMILY",
+          sourceUrl: URL,
+        },
+      },
+    ]);
+  });
+
+  it("TOWNHOUSE proposes residential @ 0.85 and single_family @ 0.8", () => {
+    const out = mapListingFacts(facts({ homeType: "TOWNHOUSE" }));
+    expect(out).toEqual([
+      expect.objectContaining({
+        fieldPath: "facilityInfo.wastewaterSource",
+        value: "residential",
+        provenance: expect.objectContaining({ confidence: 0.85, explanation: "Zillow lists the home as Townhouse" }),
+      }),
+      expect.objectContaining({
+        fieldPath: "facilityInfo.facilityType",
+        value: "single_family",
+        provenance: expect.objectContaining({ confidence: 0.8, explanation: "Zillow lists the home as Townhouse" }),
+      }),
+    ]);
+  });
+
+  it("CONDO proposes residential @ 0.85 and multifamily @ 0.8", () => {
+    const out = mapListingFacts(facts({ homeType: "CONDO" }));
+    expect(out).toEqual([
+      expect.objectContaining({
+        fieldPath: "facilityInfo.wastewaterSource",
+        value: "residential",
+        provenance: expect.objectContaining({ confidence: 0.85, explanation: "Zillow lists the home as Condo" }),
+      }),
+      expect.objectContaining({
+        fieldPath: "facilityInfo.facilityType",
+        value: "multifamily",
+        provenance: expect.objectContaining({ confidence: 0.8, explanation: "Zillow lists the home as Condo" }),
+      }),
+    ]);
+  });
+
+  it("proposes nothing for LOT or a missing homeType", () => {
+    expect(mapListingFacts(facts({ homeType: "LOT" }))).toEqual([]);
+    expect(mapListingFacts(facts({}))).toEqual([]);
+  });
+});
+
+describe("dedupeProposals — assessor property-use code beats the listing homeType fallback (existing SOURCE_RANK rule)", () => {
+  it("keeps the assessor residential proposal over the listing's", () => {
+    const assessorResidential: ProposedField = {
+      fieldPath: "facilityInfo.wastewaterSource",
+      value: "residential",
+      kind: "fill",
+      provenance: { source: "assessor", confidence: 0.95, explanation: "Maricopa County Assessor · property use code 0141 (single family residence)" },
+    };
+    const [listingResidential] = mapListingFacts(facts({ homeType: "SINGLE_FAMILY" }));
+    const out = dedupeProposals([assessorResidential, listingResidential]);
+    expect(out).toEqual([assessorResidential]);
+  });
+});
+
 describe("dedupeProposals with listing proposals (spec §7: permit wins over listing)", () => {
   const permitWater: ProposedField = {
     fieldPath: "facilityInfo.waterSource",
