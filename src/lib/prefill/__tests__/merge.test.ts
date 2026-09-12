@@ -198,6 +198,24 @@ describe("mergeProposals", () => {
     }
   });
 
+  it("leaves a verified or edited field alone when the proposal matches what it already holds", () => {
+    const f = form((d) => {
+      d.designFlow.numberOfBedrooms = " 3 ";
+    });
+    for (const state of ["verified", "edited"] as const) {
+      const before = entry({ state });
+      const existing: FieldProvenance = { "designFlow.numberOfBedrooms": before };
+      const { fills, provenance } = mergeProposals(
+        f,
+        existing,
+        [proposal("designFlow.numberOfBedrooms", "3", 0.99)],
+        OPTS,
+      );
+      expect(fills).toEqual([]);
+      expect(provenance["designFlow.numberOfBedrooms"]).toBe(before);
+    }
+  });
+
   it("replaces a prefilled entry with a higher-confidence proposal while the value is still ours", () => {
     const f = form((d) => {
       d.designFlow.numberOfBedrooms = "3";

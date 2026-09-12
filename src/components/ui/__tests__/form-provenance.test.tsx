@@ -101,6 +101,12 @@ describe("FormLabel / FormItem provenance integration", () => {
     expect(document.querySelector("[data-slot=suggestion-chip]")).toBeNull();
   });
 
+  it("gives the item min-w-0 so a chip can never widen a grid column", () => {
+    render(<NameField />);
+    const item = document.querySelector("[data-slot=form-item]");
+    expect(item).toHaveClass("grid", "gap-2", "min-w-0");
+  });
+
   it("appends the suggestion chip inside the item for a suggested field", () => {
     render(
       <WithProvenance

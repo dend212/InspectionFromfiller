@@ -47,7 +47,8 @@ export function valuesEqual(a: unknown, b: unknown): boolean {
  *  - kind "warning" → provenance entry state "suggested", no fill
  *  - confidence ≥ PREFILL_FILL_THRESHOLD and current value empty/default → fill + "prefilled"
  *  - otherwise → "suggested"
- *  - existing "verified"/"edited" entry → new proposal becomes "suggested"
+ *  - existing "verified"/"edited" entry → new proposal becomes "suggested", unless the field
+ *    already holds the proposed value (then the user's entry is left untouched, no suggestion)
  *  - existing "prefilled" entry is replaced only if the current value still equals its proposed value and the new confidence is higher
  *  - a field that already holds the proposed value gets a "prefilled" entry without a fill (nothing is overwritten)
  */
@@ -86,7 +87,7 @@ export function mergeProposals(
       continue;
     }
     if (existing?.state === "verified" || existing?.state === "edited") {
-      suggest();
+      if (!valuesEqual(current, proposal.value)) suggest();
       continue;
     }
     if (proposal.provenance.confidence < PREFILL_FILL_THRESHOLD) {

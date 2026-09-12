@@ -83,7 +83,9 @@ function FormItem({ className, children, ...props }: React.ComponentProps<"div">
       <div
         data-slot="form-item"
         data-field-path={fieldName}
-        className={cn("grid gap-2", className)}
+        // min-w-0: a grid item defaults to min-width:auto, so a long suggestion chip would
+        // otherwise widen the parent's column track and overflow the card.
+        className={cn("grid min-w-0 gap-2", className)}
         {...props}
       >
         {children}
