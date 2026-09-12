@@ -53,6 +53,7 @@ vi.mock("@/lib/prefill/run-prefill", () => ({
   continuePrefillAfterSelection: mockContinue,
 }));
 
+import { MAX_CANDIDATES } from "@/lib/prefill/permits/search";
 import { maxDuration, POST } from "../route";
 
 function fakeAccessToken(payload: Record<string, unknown>): string {
@@ -91,11 +92,23 @@ describe("POST /api/inspections/[id]/prefill/[runId]/select", () => {
     expect((await POST(makeRequest({ candidateKeys: KEYS }), makeParams("insp-1", "run-1"))).status).toBe(401);
   });
 
-  it("returns 400 for a bad body (no keys, more than 3, non-strings)", async () => {
-    for (const body of [{}, { candidateKeys: [] }, { candidateKeys: ["a", "b", "c", "d"] }, { candidateKeys: [1] }]) {
+  it("returns 400 for a bad body (no keys, more than MAX_CANDIDATES, non-strings)", async () => {
+    const tooMany = Array.from({ length: MAX_CANDIDATES + 1 }, (_, i) => `k${i}`);
+    for (const body of [{}, { candidateKeys: [] }, { candidateKeys: tooMany }, { candidateKeys: [1] }]) {
       const res = await POST(makeRequest(body), makeParams("insp-1", "run-1"));
       expect(res.status).toBe(400);
     }
+  });
+
+  it("accepts a whole picker group (up to MAX_CANDIDATES keys), not just the 3 extraction slots", async () => {
+    // Regression: the picker sends every document in the chosen property so a 4th-ranked
+    // ABANDONMENT is stored (skipped) like the auto-select path does, not silently dropped.
+    const eightKeys = Array.from({ length: MAX_CANDIDATES }, (_, i) => `edms_env:P${i}:PERMIT:2020-01-0${i + 1}`);
+    mockLoadRunRow.mockResolvedValueOnce({ id: "run-1", inspectionId: "insp-1", status: "awaiting_selection" });
+    const res = await POST(makeRequest({ candidateKeys: eightKeys }), makeParams("insp-1", "run-1"));
+    expect(res.status).toBe(200);
+    await mockAfter.mock.calls[0][0]();
+    expect(mockContinue).toHaveBeenCalledWith("run-1", eightKeys);
   });
 
   it("returns 404 when the run belongs to another inspection", async () => {

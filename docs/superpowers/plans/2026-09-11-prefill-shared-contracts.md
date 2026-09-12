@@ -359,7 +359,7 @@ CREATE POLICY "Inspection records readable by authenticated"
 | `prefill/route.ts` | POST | may PATCH the inspection | `{ apn?: string; address?: PrefillAddress }` — both optional, defaults derived from `formData.facilityInfo` (`taxParcelNumber`, `facilityAddress`, `facilityCity`, `facilityZip`) | `201 { runId }`; `400` invalid APN; `409 { error: "A prefill run is already in progress" }`; `429 { error: "Prefill limit reached (3 per hour)" }` |
 | `prefill/latest/route.ts` | GET | may view the inspection | — | `PrefillRunDTO \| null` (most recent run) |
 | `prefill/[runId]/route.ts` | GET | may view the inspection | — | `PrefillRunDTO`; 404 if run not for this inspection |
-| `prefill/[runId]/select/route.ts` | POST | may PATCH | `{ candidateKeys: string[] }` (1–3 keys) | `{ ok: true }`; run → `running` and extraction continues via `after()`; 409 if run not `awaiting_selection` |
+| `prefill/[runId]/select/route.ts` | POST | may PATCH | `{ candidateKeys: string[] }` (1–MAX_CANDIDATES = 8 keys; storeHits keeps the 3-doc extraction cap) | `{ ok: true }`; run → `running` and extraction continues via `after()`; 409 if run not `awaiting_selection` |
 | `prefill/[runId]/applied/route.ts` | POST | may PATCH | — | `{ ok: true }` sets `applied_at` |
 | `records/[recordId]/route.ts` | GET | may view the inspection | — | `302` to a 600-second signed URL; 404 if not found |
 

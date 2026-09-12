@@ -277,7 +277,9 @@ describe("PermitRecordsList — candidate picker", () => {
     expect(onSelect).toHaveBeenCalledWith([distinctCandidates[1].key]);
   });
 
-  it("caps a large group at MAX_DOCUMENTS_PER_RUN keys in extraction rank order", async () => {
+  it("sends every key in the chosen group in extraction rank order (storeHits caps extraction, not the picker)", async () => {
+    // Regression: a 4th-ranked doc (e.g. an ABANDONMENT or PLAN REVIEW) used to be sliced off
+    // client-side, so it was never stored and never listed / summarised for the inspector.
     const user = userEvent.setup();
     const onSelect = vi.fn();
     const big = [
@@ -298,6 +300,7 @@ describe("PermitRecordsList — candidate picker", () => {
       "edms_env:P4:FINAL DA:2025-01-01",
       "edms_env:P3:PERMIT:2015-01-01",
       "edms_env:P2:NOTICE OF TRANSFER:2022-01-01",
+      "edms_env:P1:PLAN REVIEW:2024-01-01",
     ]);
   });
 

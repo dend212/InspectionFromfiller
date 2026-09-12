@@ -1,5 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
+import { MAX_CANDIDATES } from "@/lib/prefill/permits/search";
 import { requireInspectionAccess } from "@/lib/prefill/route-access";
 import { continuePrefillAfterSelection } from "@/lib/prefill/run-prefill";
 import { loadRunRow, updateRun } from "@/lib/prefill/run-store";
@@ -7,14 +8,17 @@ import { loadRunRow, updateRun } from "@/lib/prefill/run-store";
 // Extraction continues in after() once the 200 is sent
 export const maxDuration = 300;
 
+// The picker sends every document of the chosen property (a candidate group is at most
+// MAX_CANDIDATES rows); storeHits keeps the MAX_DOCUMENTS_PER_RUN extraction cap and marks
+// the rest skipped, exactly like the auto-select path.
 const selectBodySchema = z.object({
-  candidateKeys: z.array(z.string().min(1).max(200)).min(1).max(3),
+  candidateKeys: z.array(z.string().min(1).max(200)).min(1).max(MAX_CANDIDATES),
 });
 
 /**
  * POST /api/inspections/[id]/prefill/[runId]/select
- * Body: { candidateKeys: string[] } (1–3). Only valid while the run is awaiting_selection;
- * phase 1 never produces candidates, so this always 409s until phase 2.
+ * Body: { candidateKeys: string[] } (1–MAX_CANDIDATES). Only valid while the run is
+ * awaiting_selection.
  */
 export async function POST(
   request: Request,
@@ -28,7 +32,10 @@ export async function POST(
   const parsed = selectBodySchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "candidateKeys must be 1–3 strings", details: parsed.error.flatten() },
+      {
+        error: `candidateKeys must be 1–${MAX_CANDIDATES} strings`,
+        details: parsed.error.flatten(),
+      },
       { status: 400 },
     );
   }

@@ -6,12 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { rankForExtraction } from "@/lib/prefill/permits/doc-types";
 import { groupByProperty } from "@/lib/prefill/permits/search";
-import {
-  type InspectionRecordDTO,
-  MAX_DOCUMENTS_PER_RUN,
-  type PermitCandidate,
-  type PrefillRunDTO,
-} from "@/lib/prefill/types";
+import type { InspectionRecordDTO, PermitCandidate, PrefillRunDTO } from "@/lib/prefill/types";
 
 export interface PermitRecordsListProps {
   run: PrefillRunDTO;
@@ -115,9 +110,9 @@ export function PermitRecordsList({ run, onSelectCandidates, disabled }: PermitR
   const handleUseSelected = async () => {
     const group = groups.find((g) => g.key === chosenGroup);
     if (!group) return;
-    const keys = rankForExtraction(group.candidates)
-      .slice(0, MAX_DOCUMENTS_PER_RUN)
-      .map((c) => c.key);
+    // Send the whole property so every document is stored and listed (an ABANDONMENT ranked
+    // 4th must still surface); storeHits applies the MAX_DOCUMENTS_PER_RUN extraction cap.
+    const keys = rankForExtraction(group.candidates).map((c) => c.key);
     await onSelectCandidates(keys);
   };
 
