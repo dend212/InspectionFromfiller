@@ -2,6 +2,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { describe, expect, it } from "vitest";
 import {
   EscalationAnswerSchema,
+  MAX_EVIDENCE_CHARS,
   PermitFactsSchema,
   emptyPermitFacts,
 } from "@/lib/ai/permit-extraction-schema";
@@ -192,5 +193,21 @@ describe("EscalationAnswerSchema", () => {
         handwritten: false,
       }).found,
     ).toBe(false);
+  });
+
+  it("accepts an evidence quote over the persisted cap on the wire — the API cannot enforce string lengths", () => {
+    // Reply-only schema: a 301-char quote must not throw in zodOutputFormat().parse, or the paid
+    // Opus answer (and every remaining escalation) is dropped; the caller clamps to MAX_EVIDENCE_CHARS.
+    expect(MAX_EVIDENCE_CHARS).toBe(300);
+    const parsed = zodOutputFormat(EscalationAnswerSchema).parse(
+      JSON.stringify({
+        found: true,
+        value: "1200",
+        confidence: 0.82,
+        evidence: "e".repeat(MAX_EVIDENCE_CHARS + 1),
+        handwritten: true,
+      }),
+    );
+    expect(parsed.evidence).toHaveLength(MAX_EVIDENCE_CHARS + 1);
   });
 });

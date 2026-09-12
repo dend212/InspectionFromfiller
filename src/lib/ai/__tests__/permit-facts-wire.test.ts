@@ -1,6 +1,6 @@
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { describe, expect, it } from "vitest";
-import { PermitFactsSchema, emptyPermitFacts } from "@/lib/ai/permit-extraction-schema";
+import { MAX_EVIDENCE_CHARS, PermitFactsSchema, emptyPermitFacts } from "@/lib/ai/permit-extraction-schema";
 import {
   MAX_NOTES_CHARS,
   MAX_UNION_PARAMETERS,
@@ -93,6 +93,16 @@ describe("PermitFactsWireSchema", () => {
     const format = zodOutputFormat(PermitFactsWireSchema);
     const parsed = format.parse(JSON.stringify(wire([], { notes: "n".repeat(635) })));
     expect(parsed.notes).toHaveLength(635);
+  });
+
+  it("accepts a fact row whose evidence quote exceeds the persisted cap — same defect class as notes", () => {
+    // The SDK strips maxLength from the grammar (it becomes a description hint) and re-checks
+    // client-side, so a 301-char quote would otherwise throw and fail the whole pass.
+    const format = zodOutputFormat(PermitFactsWireSchema);
+    const parsed = format.parse(
+      JSON.stringify(wire([row("tanks.0.capacityGal", 1250, { evidence: "e".repeat(MAX_EVIDENCE_CHARS + 1) })])),
+    );
+    expect(parsed.facts[0].evidence).toHaveLength(MAX_EVIDENCE_CHARS + 1);
   });
 });
 
@@ -205,6 +215,19 @@ describe("permitFactsFromWire", () => {
     expect(facts.notes.endsWith("…")).toBe(true);
     expect(PermitFactsSchema.safeParse(facts).success).toBe(true);
     expect(permitFactsFromWire(wire([], { notes: "As-built table used." })).notes).toBe("As-built table used.");
+  });
+
+  it("clamps an over-long evidence quote to the persisted cap so the result still satisfies PermitFactsSchema", () => {
+    const facts = permitFactsFromWire(
+      wire([row("tanks.0.capacityGal", 1250, { evidence: "e".repeat(MAX_EVIDENCE_CHARS + 1) })]),
+    );
+    expect(facts.tanks[0].capacityGal?.evidence).toHaveLength(MAX_EVIDENCE_CHARS);
+    expect(facts.tanks[0].capacityGal?.evidence.endsWith("…")).toBe(true);
+    expect(PermitFactsSchema.safeParse(facts).success).toBe(true);
+    const exact = permitFactsFromWire(
+      wire([row("tanks.0.capacityGal", 1250, { evidence: "e".repeat(MAX_EVIDENCE_CHARS) })]),
+    );
+    expect(exact.tanks[0].capacityGal?.evidence).toBe("e".repeat(MAX_EVIDENCE_CHARS));
   });
 
   it("keeps page, evidence and handwritten from the row", () => {

@@ -11,7 +11,13 @@
  * `permitFactsFromWire` folds the rows back into PermitFacts.
  */
 import { z } from "zod";
-import { type Fact, type PermitFacts, PermitFactsSchema, emptyPermitFacts } from "./permit-extraction-schema";
+import {
+  type Fact,
+  MAX_EVIDENCE_CHARS,
+  type PermitFacts,
+  PermitFactsSchema,
+  emptyPermitFacts,
+} from "./permit-extraction-schema";
 import {
   FACT_SPECS,
   type FactKind,
@@ -32,6 +38,15 @@ export const MAX_WIRE_TANKS = 3;
 /** The persisted cap on notes (PermitFactsSchema); the wire trims to it rather than rejecting the pass */
 export const MAX_NOTES_CHARS: number = PermitFactsSchema.shape.notes.maxLength ?? 500;
 
+/**
+ * Trims `text` to at most `max` chars, ending in "…" when anything was cut. The API cannot enforce
+ * string lengths (structured outputs drop minLength/maxLength from the grammar), so the persisted
+ * caps are applied here instead of failing the pass on an otherwise-valid reply.
+ */
+export function clampText(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
 export const WIRE_FACT_SPECS: readonly FactSpec[] = [
   ...FACT_SPECS,
   ...Array.from({ length: MAX_WIRE_TANKS }, (_, i) => tankFactSpecs(i)).flat(),
@@ -50,7 +65,8 @@ export const PermitFactRowSchema = z.object({
   value: z.union([z.string(), z.number(), z.boolean()]),
   confidence: z.number().min(0).max(1),
   page: z.number().int().positive(),
-  evidence: z.string().max(300),
+  /** No length cap on the wire (same reason as `notes` below); permitFactsFromWire clamps to MAX_EVIDENCE_CHARS */
+  evidence: z.string(),
   handwritten: z.boolean(),
 });
 
@@ -100,8 +116,7 @@ export function permitFactsFromWire(wire: PermitFactsWire): PermitFacts {
   const facts = emptyPermitFacts();
   facts.documentKind = wire.documentKind;
   facts.isAbandonment = wire.isAbandonment;
-  facts.notes =
-    wire.notes.length > MAX_NOTES_CHARS ? `${wire.notes.slice(0, MAX_NOTES_CHARS - 1)}…` : wire.notes;
+  facts.notes = clampText(wire.notes, MAX_NOTES_CHARS);
 
   for (const row of wire.facts) {
     const spec = SPEC_BY_PATH.get(row.path.trim());
@@ -115,7 +130,7 @@ export function permitFactsFromWire(wire: PermitFactsWire): PermitFacts {
       value,
       confidence: row.confidence,
       page: row.page,
-      evidence: row.evidence,
+      evidence: clampText(row.evidence, MAX_EVIDENCE_CHARS),
       handwritten: row.handwritten,
     };
     setFactAt(facts, spec.path, fact);

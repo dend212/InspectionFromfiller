@@ -35,6 +35,7 @@ import {
   EscalationAnswerSchema,
   type EscalationAnswer,
   type Fact,
+  MAX_EVIDENCE_CHARS,
   type PermitFacts,
 } from "./permit-extraction-schema";
 import {
@@ -49,7 +50,7 @@ import {
   type FactSpec,
   type FactValue,
 } from "./permit-facts-utils";
-import { PermitFactsWireSchema, permitFactsFromWire } from "./permit-facts-wire";
+import { PermitFactsWireSchema, clampText, permitFactsFromWire } from "./permit-facts-wire";
 import type { PDFDocument } from "pdf-lib";
 
 // Built lazily: constructing the SDK client at import time throws under vitest's jsdom
@@ -313,7 +314,7 @@ async function escalateWeakHandwriting(
       value,
       confidence: answer.confidence,
       page: fact.page,
-      evidence: answer.evidence,
+      evidence: clampText(answer.evidence, MAX_EVIDENCE_CHARS),
       handwritten: answer.handwritten,
     });
   }

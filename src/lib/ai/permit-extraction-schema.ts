@@ -5,12 +5,20 @@
  */
 import { z } from "zod";
 
+/**
+ * Persisted cap on a fact's evidence quote. Enforced here (the stored contract) and by clamping in
+ * the wire layers — never as `.max()` on a schema handed to zodOutputFormat: structured outputs do not
+ * support minLength/maxLength, so the SDK strips them from the grammar and only re-checks client-side,
+ * where a 301-char quote would throw and fail the whole pass / drop the escalation answer.
+ */
+export const MAX_EVIDENCE_CHARS = 300;
+
 const fact = <T extends z.ZodTypeAny>(v: T) =>
   z.object({
     value: v,
     confidence: z.number().min(0).max(1),
     page: z.number().int().positive(),
-    evidence: z.string().max(300),
+    evidence: z.string().max(MAX_EVIDENCE_CHARS),
     handwritten: z.boolean(),
   });
 
@@ -59,12 +67,14 @@ export type PermitDocumentKind = PermitFacts["documentKind"];
  * Reply shape for a single-field escalation question on the stronger model.
  * `value` is always a string as written on the page; the caller coerces it
  * to the field's type (see permit-facts-utils.ts → coerceFactValue).
+ * Reply-only (zodOutputFormat), so `evidence` carries no length cap — see
+ * MAX_EVIDENCE_CHARS; the caller clamps before persisting.
  */
 export const EscalationAnswerSchema = z.object({
   found: z.boolean(),
   value: z.string(),
   confidence: z.number().min(0).max(1),
-  evidence: z.string().max(300),
+  evidence: z.string(),
   handwritten: z.boolean(),
 });
 

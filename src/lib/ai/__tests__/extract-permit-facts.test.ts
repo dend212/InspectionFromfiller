@@ -16,7 +16,7 @@ import {
   estimateCostUsd,
   extractPermitFactsFromPdf,
 } from "@/lib/ai/extract-permit-facts";
-import { emptyPermitFacts, type PermitFacts } from "@/lib/ai/permit-extraction-schema";
+import { MAX_EVIDENCE_CHARS, emptyPermitFacts, type PermitFacts } from "@/lib/ai/permit-extraction-schema";
 import { allFactSpecs, getFactAt } from "@/lib/ai/permit-facts-utils";
 import type { PermitFactsWire } from "@/lib/ai/permit-facts-wire";
 
@@ -409,6 +409,18 @@ describe("extractPermitFactsFromPdf — Opus escalation", () => {
     expect(questions[0]).toContain("design flow");
     expect(questions[1]).toContain("approval / issue date");
     expect(questions[2]).toContain("installing contractor");
+  });
+
+  it("applies an Opus answer whose evidence quote exceeds the persisted cap, clamped rather than dropped", async () => {
+    const verbose = { ...found("1250", 0.8), evidence: "e".repeat(MAX_EVIDENCE_CHARS + 1) };
+    const { client, parse } = fakeClient(reply(weakCapacity()), opusReply(verbose));
+    const result = await extractPermitFactsFromPdf(await makePdf(7), meta, { client });
+    expect(parse).toHaveBeenCalledTimes(2);
+    expect(result.escalations).toBe(1);
+    expect(result.facts.tanks[0].capacityGal?.value).toBe(1250);
+    expect(result.facts.tanks[0].capacityGal?.confidence).toBe(0.8);
+    expect(result.facts.tanks[0].capacityGal?.evidence).toHaveLength(MAX_EVIDENCE_CHARS);
+    expect(result.facts.tanks[0].capacityGal?.evidence.endsWith("…")).toBe(true);
   });
 
   it("escalate: false skips Opus entirely", async () => {
