@@ -1,8 +1,8 @@
 import type { AssessorSummary } from "./assessor-fields";
 import { assessorParcelUrl, assessorProposals } from "./assessor-fields";
-import { isValidApn, normalizeStreetName } from "./input";
+import { formatFullAddress, isValidApn, normalizeStreetName, parseStreetAddress } from "./input";
 import type { StageContext, StageResult } from "./stage";
-import type { PrefillInput } from "./types";
+import type { PrefillAddress, PrefillInput } from "./types";
 
 export const ARCGIS_PARCELS_URL =
   "https://gis.mcassessor.maricopa.gov/arcgis/rest/services/Parcels/MapServer/0/query";
@@ -38,6 +38,24 @@ export interface ParcelAttributes {
   LOT_NUM?: string | null;
   BLOCK?: string | null;
   STR?: string | null;
+}
+
+/**
+ * What the assessor learned about the parcel, for the orchestrator to hand to
+ * the listing and permits stages when the run started from an APN alone (D2).
+ */
+export interface ResolvedParcel {
+  /** Dashed APN as the assessor reports it (`APN_DASH`) */
+  apn?: string;
+  /** Situs address parsed from `PHYSICAL_ADDRESS` + city/zip; absent when unparseable */
+  address?: PrefillAddress;
+  subdivision?: string;
+  lot?: string;
+}
+
+export interface AssessorStageResult extends StageResult {
+  /** Present only when a parcel was found */
+  resolved?: ResolvedParcel;
 }
 
 export class AssessorUnavailableError extends Error {
@@ -145,11 +163,34 @@ export function mapParcelToAssessor(feature: ParcelAttributes): AssessorSummary 
   };
 }
 
+function resolveParcel(
+  feature: ParcelAttributes,
+  summary: AssessorSummary,
+  apn: string,
+): ResolvedParcel {
+  const parsed = parseStreetAddress(summary.physicalAddress);
+  let address: PrefillAddress | undefined;
+  if (parsed) {
+    address = {
+      ...parsed,
+      ...(summary.city ? { city: summary.city } : {}),
+      ...(summary.zip ? { zip: summary.zip } : {}),
+    };
+    address.full = formatFullAddress(address);
+  }
+  return {
+    ...(apn ? { apn } : {}),
+    ...(address ? { address } : {}),
+    ...(feature.SUBNAME ? { subdivision: feature.SUBNAME } : {}),
+    ...(feature.LOT_NUM ? { lot: feature.LOT_NUM } : {}),
+  };
+}
+
 /** Assessor stage: APN first, street-address fallback. Never throws. */
 export async function runAssessorStage(
   input: PrefillInput,
   ctx: StageContext,
-): Promise<StageResult> {
+): Promise<AssessorStageResult> {
   const startedAt = new Date().toISOString();
   await ctx.progress({ status: "running", startedAt });
   const searched: string[] = [];
@@ -194,6 +235,7 @@ export async function runAssessorStage(
         links: apn ? [{ label: "Assessor parcel page", url: assessorParcelUrl(apn) }] : [],
       },
       proposals: assessorProposals(summary, apn),
+      resolved: resolveParcel(feature, summary, apn),
     };
   } catch (err) {
     console.error("[prefill:assessor]", err);

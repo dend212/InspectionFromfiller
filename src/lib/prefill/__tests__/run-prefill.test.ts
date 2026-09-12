@@ -9,6 +9,7 @@ const { mockLoadRunRow, mockUpdateRun, mockRunAssessorStage } = vi.hoisted(() =>
 vi.mock("@/lib/prefill/run-store", () => ({
   loadRunRow: mockLoadRunRow,
   updateRun: mockUpdateRun,
+  setInspectionApnIfNull: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/prefill/assessor", () => ({

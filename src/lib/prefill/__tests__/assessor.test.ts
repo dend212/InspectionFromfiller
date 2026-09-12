@@ -158,6 +158,33 @@ describe("runAssessorStage", () => {
     expect(result.stage.status).toBe("not_found");
     expect(result.stage.summary).toBe("No parcel found (searched APN 999-99-999 and 1 Nowhere Ln)");
     expect(result.proposals).toEqual([]);
+    expect(result.resolved).toBeUndefined();
+  });
+
+  it("exposes the resolved parcel (dashed APN, parsed situs address, subdivision, lot) for the orchestrator", async () => {
+    const result = await runAssessorStage({ apn: "219-11-121" }, makeCtx());
+    expect(result.resolved).toEqual({
+      apn: "219-11-121",
+      address: {
+        streetNumber: "8911",
+        streetDir: "E",
+        streetName: "CAVE CREEK RD",
+        city: "CAREFREE",
+        zip: "85377",
+        full: "8911 E CAVE CREEK RD, CAREFREE, AZ 85377",
+      },
+      subdivision: "CAVE CREEK ESTATES",
+      lot: "4",
+    });
+  });
+
+  it("omits the resolved address when the parcel has no parseable situs address", async () => {
+    mockFetch.mockResolvedValue(
+      arcgis([{ ...FEATURE, PHYSICAL_ADDRESS: "", PHYSICAL_CITY: "", PHYSICAL_ZIP: "", SUBNAME: "", LOT_NUM: "" }]),
+    );
+    const result = await runAssessorStage({ apn: "219-11-121" }, makeCtx());
+    expect(result.stage.status).toBe("done");
+    expect(result.resolved).toEqual({ apn: "219-11-121" });
   });
 
   it("returns an error stage (never throws) when the service is down", async () => {

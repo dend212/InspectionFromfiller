@@ -19,6 +19,7 @@ const {
 vi.mock("@/lib/prefill/run-store", () => ({
   loadRunRow: mockLoadRunRow,
   updateRun: mockUpdateRun,
+  setInspectionApnIfNull: vi.fn(async () => undefined),
 }));
 vi.mock("@/lib/prefill/assessor", () => ({ runAssessorStage: mockRunAssessorStage }));
 vi.mock("@/lib/prefill/listing", () => ({ runListingStage: mockRunListingStage }));

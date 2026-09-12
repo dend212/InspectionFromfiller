@@ -1,6 +1,6 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { inspectionPrefillRuns, inspectionRecords } from "@/lib/db/schema";
+import { inspectionPrefillRuns, inspectionRecords, inspections } from "@/lib/db/schema";
 import type {
   PermitCandidate,
   PrefillInput,
@@ -89,6 +89,8 @@ export async function loadLatestRunRow(inspectionId: string): Promise<PrefillRun
 
 export interface RunPatch {
   status?: PrefillRunStatus;
+  /** Echo of the input the stages actually searched with (assessor-enriched on APN-only runs) */
+  input?: PrefillInput;
   stages?: PrefillStages;
   proposals?: ProposedField[];
   candidates?: PermitCandidate[];
@@ -103,6 +105,14 @@ export async function updateRun(runId: string, patch: RunPatch): Promise<void> {
 
 export async function markRunApplied(runId: string): Promise<void> {
   await updateRun(runId, { appliedAt: new Date() });
+}
+
+/** Records the dashed APN a prefill run was given/resolved on the inspection — only while the column is still empty */
+export async function setInspectionApnIfNull(inspectionId: string, apn: string): Promise<void> {
+  await db
+    .update(inspections)
+    .set({ apn })
+    .where(and(eq(inspections.id, inspectionId), isNull(inspections.apn)));
 }
 
 /** Capped at 200 rows — a run stores at most a handful of documents */

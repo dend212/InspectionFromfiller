@@ -52,6 +52,7 @@ import {
   loadLatestRunRow,
   loadRunRow,
   markRunApplied,
+  setInspectionApnIfNull,
   updateRun,
 } from "@/lib/prefill/run-store";
 
@@ -120,6 +121,13 @@ describe("run-store", () => {
     expect(mockSet).toHaveBeenCalledWith({ status: "done", error: null });
     await markRunApplied("run-1");
     expect(mockSet).toHaveBeenLastCalledWith({ appliedAt: expect.any(Date) });
+  });
+
+  it("setInspectionApnIfNull writes only the apn column through set()", async () => {
+    await setInspectionApnIfNull("insp-1", "219-11-121");
+    expect(mockSet).toHaveBeenCalledTimes(1);
+    expect(mockSet).toHaveBeenCalledWith({ apn: "219-11-121" });
+    expect(mockUpdateWhere).toHaveBeenCalledTimes(1);
   });
 
   it("listRecordRows returns the rows", async () => {

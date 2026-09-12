@@ -1,10 +1,12 @@
+import { formatApn } from "./apn";
+import type { AssessorStageResult, ResolvedParcel } from "./assessor";
 import { runAssessorStage } from "./assessor";
 import { runListingStage } from "./listing";
 import { dedupeProposals } from "./map-facts-to-fields";
 import type { PermitsStageResult } from "./permits";
 import { runPermitsSelection, runPermitsStage } from "./permits";
 import type { PrefillRunRow } from "./run-store";
-import { loadRunRow, updateRun } from "./run-store";
+import { loadRunRow, setInspectionApnIfNull, updateRun } from "./run-store";
 import type { StageContext, StageResult } from "./stage";
 import type { PermitCandidate, PrefillInput, PrefillStages, ProposedField } from "./types";
 import { emptyStages } from "./types";
@@ -64,12 +66,52 @@ async function failRun(runId: string, stages: PrefillStages, err: unknown): Prom
   }
 }
 
+/** The listing lookup and the permits street fallback both need a street address the input lacks */
+function needsAssessorAddress(input: PrefillInput): boolean {
+  return Boolean(input.apn) && !input.address;
+}
+
+/** The input the listing/permits stages search with once the assessor has resolved the parcel */
+function enrichInput(input: PrefillInput, resolved: ResolvedParcel): PrefillInput {
+  return {
+    ...input,
+    ...(resolved.address ? { address: resolved.address } : {}),
+    ...(resolved.subdivision && !input.subdivision ? { subdivision: resolved.subdivision } : {}),
+    ...(resolved.lot && !input.lot ? { lot: resolved.lot } : {}),
+  };
+}
+
+/**
+ * D10: `inspections.apn` used to be written only by the legacy APN Lookup. Fill it from the
+ * run when it is still empty; a failure here is logged and never fails the run.
+ */
+async function recordInspectionApn(
+  run: PrefillRunRow,
+  runId: string,
+  input: PrefillInput,
+  resolved: ResolvedParcel | undefined,
+): Promise<void> {
+  const apn = formatApn(resolved?.apn ?? input.apn);
+  if (!apn) return;
+  try {
+    await setInspectionApnIfNull(run.inspectionId, apn);
+  } catch (err) {
+    console.error("[prefill] could not record inspection apn", runId, err);
+  }
+}
+
 /**
  * Runs all stages for a run row that is `queued`, persisting progress after each stage.
  * Safe to call from `after()`. Never throws; on unexpected error marks the run `failed`.
  * When the permits stage returns candidates the run parks in `awaiting_selection`
  * (assessor/listing proposals are persisted so the client can apply them meanwhile)
  * and resumes through `continuePrefillAfterSelection`.
+ *
+ * Stage order (D2): with a street address in the input all three stages fan out at once.
+ * With an APN alone the assessor runs first and the situs address it resolves is handed to
+ * the listing and permits stages, which then run in parallel — otherwise the listing stage
+ * would skip ("No address to search") and the permits street fallback would have nothing
+ * to search. One AbortController covers the whole 240 s budget either way.
  */
 export async function runPrefill(runId: string): Promise<void> {
   let run: PrefillRunRow | null;
@@ -91,10 +133,27 @@ export async function runPrefill(runId: string): Promise<void> {
   try {
     await updateRun(runId, { status: "running", stages: { ...stages } });
 
+    const assessor = runAssessorStage(input, ctx("assessor"));
+    let stageInput = input;
+    let resolved: ResolvedParcel | undefined;
+    if (needsAssessorAddress(input)) {
+      // allSettled (not await) so a rejection is handled once, in the loop below
+      const [first] = await Promise.allSettled([assessor]);
+      if (first.status === "fulfilled") {
+        resolved = first.value.resolved;
+        if (resolved?.address) {
+          stageInput = enrichInput(input, resolved);
+          stages.assessor = first.value.stage;
+          // Echo what the other stages will search with, so the tile can show it
+          await updateRun(runId, { input: stageInput, stages: { ...stages } });
+        }
+      }
+    }
+
     const settled = await Promise.allSettled<StageResult | PermitsStageResult>([
-      runAssessorStage(input, ctx("assessor")),
-      runListingStage(input, ctx("listing")),
-      runPermitsStage(input, ctx("permits")),
+      assessor,
+      runListingStage(stageInput, ctx("listing")),
+      runPermitsStage(stageInput, ctx("permits")),
     ]);
 
     const proposals: ProposedField[] = [];
@@ -104,7 +163,9 @@ export async function runPrefill(runId: string): Promise<void> {
       if (result.status === "fulfilled") {
         stages[name] = result.value.stage;
         proposals.push(...result.value.proposals);
-        if (name === "permits") {
+        if (name === "assessor") {
+          resolved = (result.value as AssessorStageResult).resolved;
+        } else if (name === "permits") {
           candidates = (result.value as PermitsStageResult).candidates ?? [];
         }
       } else {
@@ -120,6 +181,8 @@ export async function runPrefill(runId: string): Promise<void> {
         };
       }
     });
+
+    await recordInspectionApn(run, runId, input, resolved);
 
     const awaiting = candidates.length > 0;
     await updateRun(runId, {
