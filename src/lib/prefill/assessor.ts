@@ -22,6 +22,7 @@ const OUT_FIELDS = [
   "LOT_NUM",
   "BLOCK",
   "STR",
+  "PUC",
 ].join(",");
 
 /** Attributes of one feature on the Maricopa Assessor Parcels layer */
@@ -38,6 +39,8 @@ export interface ParcelAttributes {
   LOT_NUM?: string | null;
   BLOCK?: string | null;
   STR?: string | null;
+  /** Arizona DOR 4-digit Property Use Code (e.g. "0141" single family residence); no domain on the layer */
+  PUC?: string | null;
 }
 
 /**
@@ -138,6 +141,7 @@ export function cleanPhysicalAddress(raw: string | null | undefined): string {
 }
 
 export function mapParcelToAssessor(feature: ParcelAttributes): AssessorSummary {
+  const propertyUseCode = (feature.PUC ?? "").trim();
   const legalParts = [
     feature.SUBNAME || "",
     feature.LOT_NUM ? `Lot ${feature.LOT_NUM}` : "",
@@ -160,6 +164,7 @@ export function mapParcelToAssessor(feature: ParcelAttributes): AssessorSummary 
     legalDescription: legalParts.join(", "),
     lotSize: String(feature.LAND_SIZE || ""),
     yearBuilt: String(feature.CONST_YEAR || ""),
+    ...(propertyUseCode ? { propertyUseCode } : {}),
   };
 }
 

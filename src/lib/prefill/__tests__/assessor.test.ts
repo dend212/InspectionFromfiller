@@ -62,6 +62,13 @@ describe("queryParcelByApn", () => {
     expect(String(mockFetch.mock.calls[0][0])).toContain("gis.mcassessor.maricopa.gov");
   });
 
+  it("requests the property use code (PUC) alongside the situs/owner fields", async () => {
+    await queryParcelByApn("219-11-121");
+    const outFields = new URL(String(mockFetch.mock.calls[0][0])).searchParams.get("outFields") ?? "";
+    expect(outFields.split(",")).toContain("PUC");
+    expect(outFields.split(",")).toContain("APN_DASH");
+  });
+
   it("returns null when there are no features", async () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
     expect(await queryParcelByApn("999-99-999")).toBeNull();
@@ -118,6 +125,18 @@ describe("cleanPhysicalAddress / mapParcelToAssessor", () => {
       yearBuilt: "1998",
     });
   });
+
+  it("carries the property use code through as propertyUseCode, trimmed", () => {
+    expect(mapParcelToAssessor({ ...FEATURE, PUC: "0141" }).propertyUseCode).toBe("0141");
+    expect(mapParcelToAssessor({ ...FEATURE, PUC: " 1511 " }).propertyUseCode).toBe("1511");
+  });
+
+  it("leaves propertyUseCode undefined when the layer has no PUC", () => {
+    expect(mapParcelToAssessor(FEATURE).propertyUseCode).toBeUndefined();
+    expect(mapParcelToAssessor({ ...FEATURE, PUC: null }).propertyUseCode).toBeUndefined();
+    expect(mapParcelToAssessor({ ...FEATURE, PUC: "" }).propertyUseCode).toBeUndefined();
+    expect(mapParcelToAssessor({ ...FEATURE, PUC: "   " }).propertyUseCode).toBeUndefined();
+  });
 });
 
 describe("runAssessorStage", () => {
@@ -133,6 +152,16 @@ describe("runAssessorStage", () => {
     expect(result.proposals.map((p) => p.fieldPath)).toContain("facilityInfo.taxParcelNumber");
     expect(result.stage.startedAt).toBeTruthy();
     expect(result.stage.finishedAt).toBeTruthy();
+  });
+
+  it("proposes wastewater source and facility type when the parcel carries a PUC", async () => {
+    mockFetch.mockResolvedValue(arcgis([{ ...FEATURE, PUC: "0141" }]));
+    const result = await runAssessorStage({ apn: "219-11-121" }, makeCtx());
+    expect(result.stage.status).toBe("done");
+    const byPath = Object.fromEntries(result.proposals.map((p) => [p.fieldPath, p]));
+    expect(byPath["facilityInfo.wastewaterSource"]?.value).toBe("residential");
+    expect(byPath["facilityInfo.facilityType"]?.value).toBe("single_family");
+    expect(byPath["facilityInfo.facilityType"]?.provenance.evidence).toBe("PUC: 0141");
   });
 
   it("falls back to the address when the APN finds nothing", async () => {
