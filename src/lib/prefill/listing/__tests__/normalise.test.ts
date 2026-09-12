@@ -149,18 +149,138 @@ describe("normaliseListingItem — recorded api-ninja fixtures", () => {
     expect(facts?.raw).toBe(venusForSale);
   });
 
-  it("maps an off-market item: null resoFacts utilities → no water/sewer facts, never a throw", () => {
+  it("maps an off-market item: null own facts → no water/sewer/bed/bath/lot facts, never a throw", () => {
+    // Guard the trap: the fixture carries a neighbour (nearbyHomes[0]) and a "similar home"
+    // (collections.modules[0].propertyDetails[0]) with real-looking values while the parcel's
+    // own bedrooms/bathrooms/lot are null — exactly the off-market shape A10 describes.
+    expect(offMarket.bedrooms).toBeNull();
+    expect(offMarket.resoFacts.bedrooms).toBeNull();
+    expect(offMarket.nearbyHomes[0]).toMatchObject({ zpid: 1, bedrooms: 5, bathrooms: 3, lotAreaValue: 2 });
+    expect(offMarket.collections.modules[0].propertyDetails[0]).toMatchObject({ zpid: 2, bedrooms: 6 });
+
     const facts = normaliseListingItem(offMarket);
     expect(facts).not.toBeNull();
     expect(facts?.waterSource).toBeUndefined();
     expect(facts?.sewer).toBeUndefined();
+    // Review round 1: a null own value must NOT fall through to another property's value.
+    expect(facts?.bedrooms).toBeUndefined();
+    expect(facts?.bathrooms).toBeUndefined();
+    expect(facts?.lotSqft).toBeUndefined();
     expect(facts).toMatchObject({
       url: "https://www.zillow.com/homedetails/1234-E-Example-Ln-Cave-Creek-AZ-85331/12345678_zpid/",
+      yearBuilt: 1998,
+    });
+  });
+});
+
+describe("normaliseListingItem — reads only the parcel's own data (review round 1)", () => {
+  const OWN_URL = "https://www.zillow.com/homedetails/77_zpid/";
+
+  it("ignores nearbyHomes[] even when every own value is null", () => {
+    const facts = normaliseListingItem({
+      zpid: 77,
+      bedrooms: null,
+      bathrooms: null,
+      yearBuilt: 1998,
+      lotSize: null,
+      lotAreaValue: null,
+      lotAreaUnits: null,
+      resoFacts: { waterSource: null, sewer: null, bedrooms: null, bathrooms: null, lotSize: null },
+      nearbyHomes: [
+        {
+          zpid: 1,
+          hdpUrl: "/homedetails/1_zpid/",
+          bedrooms: 5,
+          bathrooms: 3.33,
+          yearBuilt: 2015,
+          lotSize: 47025,
+          lotAreaValue: 1.0795,
+          lotAreaUnits: "Acres",
+          waterSource: ["City Water"],
+          sewer: ["Septic Tank"],
+          resoFacts: { waterSource: ["City Water"], sewer: ["Septic Tank"], bedrooms: 5 },
+        },
+      ],
+    });
+    expect(facts).toEqual({ provider: "zillow", url: OWN_URL, raw: expect.any(Object), yearBuilt: 1998 });
+  });
+
+  it("ignores collections.modules[].propertyDetails[] (similar homes)", () => {
+    const facts = normaliseListingItem({
+      zpid: 77,
+      yearBuilt: 1998,
+      resoFacts: { bedrooms: null, lotSize: null },
+      collections: {
+        modules: [
+          {
+            name: "Similar homes",
+            propertyDetails: [{ zpid: 2, bedrooms: 6, bathrooms: 4, lotSize: 17185, lotAreaValue: 0.39, lotAreaUnits: "Acres" }],
+          },
+        ],
+      },
+    });
+    expect(facts).toEqual({ provider: "zillow", url: OWN_URL, raw: expect.any(Object), yearBuilt: 1998 });
+  });
+
+  it("ignores comps[] and schools[]", () => {
+    const facts = normaliseListingItem({
+      zpid: 77,
+      yearBuilt: 1998,
+      comps: [{ zpid: 3, bedrooms: 4, bathrooms: 2, lotAreaValue: 1, lotAreaUnits: "Acres", sewer: ["Public Sewer"] }],
+      schools: [{ name: "Example Elementary", link: "https://www.zillow.com/homedetails/9_zpid/", waterSource: ["Well"] }],
+    });
+    expect(facts).toEqual({ provider: "zillow", url: OWN_URL, raw: expect.any(Object), yearBuilt: 1998 });
+  });
+
+  it("never borrows a neighbour's hdpUrl or zpid when the item has neither", () => {
+    const facts = normaliseListingItem({
+      hdpUrl: null,
+      zpid: null,
+      yearBuilt: 1998,
+      nearbyHomes: [{ zpid: 8078781, hdpUrl: "/homedetails/8942-E-Venus-Dr-Carefree-AZ-85377/8078781_zpid/" }],
+      collections: { modules: [{ propertyDetails: [{ zpid: 2, hdpUrl: "https://www.zillow.com/homedetails/2_zpid/" }] }] },
+    });
+    expect(facts).toEqual({ provider: "zillow", url: "", raw: expect.any(Object), yearBuilt: 1998 });
+  });
+
+  it("still reads the item's own top-level keys when resoFacts lacks the fact", () => {
+    const facts = normaliseListingItem({
+      zpid: 77,
       bedrooms: 3,
       bathrooms: 2.5,
       yearBuilt: 1998,
-      lotSqft: 40075, // 0.92 acres × 43 560 (top-level lotSize is null)
+      lotAreaValue: 0.92,
+      lotAreaUnits: "Acres",
+      waterSource: ["Pvt Water Company"],
+      sewer: ["Septic Tank"],
+      resoFacts: { waterSource: null, sewer: null, bedrooms: null, bathrooms: null, yearBuilt: null, lotSize: null },
+      nearbyHomes: [{ zpid: 1, bedrooms: 5, bathrooms: 3, lotAreaValue: 2, lotAreaUnits: "Acres" }],
     });
+    expect(facts).toMatchObject({
+      url: OWN_URL,
+      waterSource: "private_company",
+      sewer: "septic",
+      bedrooms: 3,
+      bathrooms: 2.5,
+      yearBuilt: 1998,
+      lotSqft: 40075,
+    });
+  });
+
+  it("still reads resoFacts.atAGlanceFacts label/value pairs", () => {
+    const facts = normaliseListingItem({
+      zpid: 77,
+      resoFacts: {
+        yearBuilt: null,
+        sewer: null,
+        atAGlanceFacts: [
+          { factLabel: "Year Built", factValue: "1980" },
+          { factLabel: "Sewer", factValue: "Septic Tank" },
+        ],
+      },
+      nearbyHomes: [{ zpid: 1, yearBuilt: 2015, sewer: ["Public Sewer"] }],
+    });
+    expect(facts).toMatchObject({ url: OWN_URL, yearBuilt: 1980, sewer: "septic" });
   });
 });
 

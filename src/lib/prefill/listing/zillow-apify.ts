@@ -9,8 +9,11 @@ import type { ListingFacts, ListingProvider, ListingWaterSource } from "./provid
  * (`resoFacts.waterSource: ["City Water"]`, `resoFacts.sewer: ["Septic Tank"]`)
  * and are only present for active/recent listings — an off-market parcel
  * returns `null` for both. Everything below stays defensive: facts are located
- * by a case-insensitive deep key search (`findFact`, `resoFacts` first) and any
- * unmapped shape yields `null` facts, never an error. Run
+ * by a case-insensitive key search over the parcel's OWN data only — the
+ * `resoFacts` subtree (deep) and the item's top-level keys — and any unmapped
+ * shape yields `null` facts, never an error. The item also embeds other
+ * parcels (`nearbyHomes`, `collections.modules[].propertyDetails`, comps,
+ * schools …); those are never read (see `findListingFact`). Run
  * `scripts/listing-shape-check.mts` to see the real keys for one address.
  */
 
@@ -171,13 +174,24 @@ function findLotSqft(item: Record<string, unknown>): number | undefined {
 }
 
 /**
- * Looks in the MLS-sourced `resoFacts` block first (where the actor puts
- * water/sewer), then anywhere in the item. Single-element arrays are unwrapped.
+ * Reads a fact from the parcel's OWN data only: the MLS-sourced `resoFacts`
+ * subtree first (searched deep — that is where water/sewer live and where the
+ * `atAGlanceFacts` label/value pairs sit), then the item's own top-level keys.
+ * It never descends into any other subtree: `nearbyHomes`, `collections`,
+ * `comps`, `schools` … describe OTHER properties, and a whole-item search
+ * would hand an off-market parcel (own value `null`, A10) a neighbour's
+ * bedrooms/bathrooms/lot at fill confidence. Single-element arrays are
+ * unwrapped.
  */
 export function findListingFact(item: Record<string, unknown>, candidates: string[]): unknown {
   const reso = item.resoFacts;
   const fromReso = reso && typeof reso === "object" ? findFact(reso, candidates) : undefined;
-  return unwrapSingle(fromReso !== undefined ? fromReso : findFact(item, candidates));
+  if (fromReso !== undefined) return unwrapSingle(fromReso);
+  const wanted = new Set(candidates.map(normKey));
+  for (const [key, v] of Object.entries(item)) {
+    if (wanted.has(normKey(key)) && isPresent(v)) return unwrapSingle(v);
+  }
+  return undefined;
 }
 
 /** Absolute Zillow home-details URL from an absolute URL or an `hdpUrl` path. */
@@ -189,12 +203,13 @@ function toZillowUrl(v: unknown): string | undefined {
   return undefined;
 }
 
-function findListingUrl(raw: unknown): string | undefined {
+/** Same own-data scope as `findListingFact`: a neighbour's `hdpUrl`/`zpid` is never borrowed. */
+function findListingUrl(item: Record<string, unknown>): string | undefined {
   for (const key of URL_KEYS) {
-    const url = toZillowUrl(findFact(raw, [key]));
+    const url = toZillowUrl(findListingFact(item, [key]));
     if (url) return url;
   }
-  const zpid = unwrapSingle(findFact(raw, ZPID_KEYS));
+  const zpid = findListingFact(item, ZPID_KEYS);
   if (typeof zpid === "number" || (typeof zpid === "string" && /^\d+$/.test(zpid))) {
     return `${ZILLOW_ORIGIN}/homedetails/${zpid}_zpid/`;
   }
