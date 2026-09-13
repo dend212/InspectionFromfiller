@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assessorParcelUrl,
   assessorProposals,
+  propertyUseNote,
   propertyUseProposals,
 } from "@/lib/prefill/assessor-fields";
 
@@ -123,12 +124,26 @@ describe("propertyUseProposals (assessor PUC → wastewater source + facility ty
   });
 
   it.each([
-    ["0336", "residential", 0.9, "multifamily", 0.9, "multiple residential"],
+    ["0100", "residential", 0.95, "single_family", 0.95, "single family residence"],
+    ["0171", "residential", 0.95, "single_family", 0.95, "single family residence"],
+    ["0181", "residential", 0.95, "single_family", 0.7, "single family residence"],
+    ["0336", "residential", 0.9, "multifamily", 0.7, "multiple residential"],
+    ["0401", "commercial", 0.9, "commercial", 0.9, "hotel / motel / resort"],
+    ["0501", "commercial", 0.9, "commercial", 0.9, "hotel / motel / resort"],
+    ["0610", "commercial", 0.9, "commercial", 0.9, "hotel / motel / resort"],
     ["0712", "residential", 0.9, "multifamily", 0.7, "condominium / townhouse"],
-    ["0801", "residential", 0.9, "single_family", 0.85, "manufactured home"],
+    ["0812", "residential", 0.9, "single_family", 0.85, "manufactured home"],
+    ["0831", "residential", 0.9, "single_family", 0.85, "manufactured home"],
+    ["8712", "residential", 0.95, "single_family", 0.9, "residential, over 5 acres"],
+    ["8730", "residential", 0.95, "single_family", 0.9, "residential, over 5 acres"],
+    ["8741", "residential", 0.95, "single_family", 0.9, "residential, over 5 acres"],
+    ["8755", "residential", 0.95, "single_family", 0.9, "residential, over 5 acres"],
+    ["8721", "residential", 0.9, "single_family", 0.7, "residential, over 5 acres"],
+    ["8770", "residential", 0.9, "single_family", 0.7, "residential, over 5 acres"],
+    ["1000", "commercial", 0.9, "commercial", 0.9, "commercial / industrial"],
     ["1511", "commercial", 0.9, "commercial", 0.9, "commercial / industrial"],
     ["2100", "commercial", 0.9, "commercial", 0.9, "commercial / industrial"],
-    ["3712", "commercial", 0.9, "commercial", 0.9, "commercial / industrial"],
+    ["3999", "commercial", 0.9, "commercial", 0.9, "commercial / industrial"],
   ])("maps PUC %s → %s @ %s / %s @ %s", (code, wsValue, wsConf, ftValue, ftConf, label) => {
     const { proposals, ws, ft } = pair(code);
     expect(proposals).toHaveLength(2);
@@ -147,8 +162,27 @@ describe("propertyUseProposals (assessor PUC → wastewater source + facility ty
     }
   });
 
-  it.each([["0012"], ["4101"], ["8712"], [""], ["01"], ["  "], [undefined]])(
-    "proposes nothing for %j (vacant, agricultural, other, blank or short)",
+  it("084x–089x (MH/RV park) proposes only wastewaterSource residential at 0.7 — never a facility type", () => {
+    for (const code of ["0845", "0840", "0899"]) {
+      const { proposals, ws, ft } = pair(code);
+      expect(proposals, code).toHaveLength(1);
+      expect(ws, code).toMatchObject({
+        value: "residential",
+        kind: "fill",
+        provenance: {
+          source: "assessor",
+          confidence: 0.7,
+          explanation: `Maricopa County Assessor · property use code ${code} (manufactured home)`,
+          evidence: `PUC: ${code}`,
+          sourceUrl: URL,
+        },
+      });
+      expect(ft, code).toBeUndefined();
+    }
+  });
+
+  it.each([["0012"], ["0197"], ["0190"], ["0801"], ["4101"], ["8550"], ["8700"], ["8760"], [""], ["01"], ["  "], [undefined]])(
+    "proposes nothing for %j (vacant, misc residential improvement, agricultural, unlisted, blank or short)",
     (code) => {
       expect(propertyUseProposals(code as string | undefined, APN)).toEqual([]);
     },
@@ -160,4 +194,30 @@ describe("propertyUseProposals (assessor PUC → wastewater source + facility ty
     expect(ft?.value).toBe("single_family");
     expect(ws?.provenance.evidence).toBe("PUC: 0141");
   });
+});
+
+describe("propertyUseNote (assessor tile note for codes that need a closer look)", () => {
+  it.each([
+    ["0181", "PUC 018x — second residence on parcel; check for a second or shared system"],
+    ["0197", "PUC 019x — no dwelling coded on this parcel; confirm the structure served"],
+    ["0712", "PUC 07xx — condo/townhouse; confirm the system is not shared"],
+    [
+      "0845",
+      "PUC 08xx — MH/RV park: shared or large-flow system likely (250 gpd per space); confirm facility type and number of systems",
+    ],
+    ["0899", "PUC 08xx — MH/RV park: shared or large-flow system likely (250 gpd per space); confirm facility type and number of systems"],
+    ["8721", "PUC 87xx — two residences on parcel; check for a second or shared system"],
+    ["8770", "PUC 87xx — two residences on parcel; check for a second or shared system"],
+    ["0012", "Assessor codes this parcel vacant (PUC 00xx) — confirm the structure served"],
+    [" 0012 ", "Assessor codes this parcel vacant (PUC 00xx) — confirm the structure served"],
+  ])("notes %s", (code, note) => {
+    expect(propertyUseNote(code)).toBe(note);
+  });
+
+  it.each([["0141"], ["0336"], ["0501"], ["0812"], ["8712"], ["1511"], ["4101"], ["0801"], [""], ["01"], [undefined]])(
+    "has no note for %j",
+    (code) => {
+      expect(propertyUseNote(code as string | undefined)).toBeNull();
+    },
+  );
 });

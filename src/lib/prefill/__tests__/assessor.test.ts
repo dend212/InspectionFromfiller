@@ -164,6 +164,24 @@ describe("runAssessorStage", () => {
     expect(byPath["facilityInfo.facilityType"]?.provenance.evidence).toBe("PUC: 0141");
   });
 
+  it("appends the property-use note to the stage summary for a code that needs a closer look", async () => {
+    mockFetch.mockResolvedValue(arcgis([{ ...FEATURE, PUC: "0197" }]));
+    const result = await runAssessorStage({ apn: "219-11-121" }, makeCtx());
+    expect(result.stage.summary).toBe(
+      "Parcel 219-11-121 · 8911 E CAVE CREEK RD · PUC 019x — no dwelling coded on this parcel; confirm the structure served",
+    );
+    // 019x codes no dwelling: nothing is proposed for the two property-use fields
+    const paths = result.proposals.map((p) => p.fieldPath);
+    expect(paths).not.toContain("facilityInfo.wastewaterSource");
+    expect(paths).not.toContain("facilityInfo.facilityType");
+  });
+
+  it("keeps the plain summary for a code with no note", async () => {
+    mockFetch.mockResolvedValue(arcgis([{ ...FEATURE, PUC: "0141" }]));
+    const result = await runAssessorStage({ apn: "219-11-121" }, makeCtx());
+    expect(result.stage.summary).toBe("Parcel 219-11-121 · 8911 E CAVE CREEK RD");
+  });
+
   it("falls back to the address when the APN finds nothing", async () => {
     mockFetch.mockResolvedValueOnce(arcgis([])).mockResolvedValueOnce(arcgis([FEATURE]));
     const result = await runAssessorStage(

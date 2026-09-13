@@ -1,5 +1,5 @@
 import type { AssessorSummary } from "./assessor-fields";
-import { assessorParcelUrl, assessorProposals } from "./assessor-fields";
+import { assessorParcelUrl, assessorProposals, propertyUseNote } from "./assessor-fields";
 import { formatFullAddress, isValidApn, normalizeStreetName, parseStreetAddress } from "./input";
 import type { StageContext, StageResult } from "./stage";
 import type { PrefillAddress, PrefillInput } from "./types";
@@ -236,7 +236,9 @@ export async function runAssessorStage(
         status: "done",
         startedAt,
         finishedAt,
-        summary: [`Parcel ${apn}`, summary.physicalAddress].filter(Boolean).join(" · "),
+        summary: [`Parcel ${apn}`, summary.physicalAddress, propertyUseNote(summary.propertyUseCode)]
+          .filter(Boolean)
+          .join(" · "),
         links: apn ? [{ label: "Assessor parcel page", url: assessorParcelUrl(apn) }] : [],
       },
       proposals: assessorProposals(summary, apn),
