@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyPermitFacts, type PermitFacts } from "@/lib/ai/permit-extraction-schema";
-import { dedupeProposals, mapPermitFacts } from "@/lib/prefill/map-facts-to-fields";
+import { SYSTEM_TYPE_MAX_CONFIDENCE, dedupeProposals, mapPermitFacts } from "@/lib/prefill/map-facts-to-fields";
 import type { ProposedField } from "@/lib/prefill/types";
 
 const f = <T>(value: T, confidence = 0.9, page = 1, evidence = `ev:${String(value)}`) => ({
@@ -130,6 +130,7 @@ describe("mapPermitFacts — spec §7 table", () => {
     expect(p.provenance.sourceUrl).toBe("/api/inspections/insp-1/records/rec-1#page=1");
     expect(p.authority).toEqual({ docRank: 0 });
     expect(props["generalTreatment.alternativeSystem"]).toBeUndefined();
+    expect(props["includeAlternativePages"]).toBeUndefined();
   });
 
   it("caps cesspool and system type at 0.7 even when the model is sure (suggestion only)", () => {
@@ -319,16 +320,36 @@ describe("mapPermitFacts — GP 4.02 system-type boxes", () => {
     const props = byPath(mapPermitFacts(facts, record));
     expect(props["generalTreatment.systemTypes"].value).toEqual(["gp402_septic_tank", "gp402_disposal_trench"]);
     expect(props["generalTreatment.systemTypes"].provenance.confidence).toBe(0.9);
-    const alt = props["generalTreatment.alternativeSystem"];
-    expect(alt.kind).toBe("fill");
-    expect(alt.value).toBe(true);
-    expect(alt.provenance.confidence).toBe(0.85);
-    expect(alt.provenance.page).toBe(2);
-    expect(alt.provenance.evidence).toBe("Aerobic Treatment Unit");
-    expect(alt.provenance.explanation).toBe("Permit OW-17-00474 · Discharge Authorization p.2");
-    expect(alt.authority).toEqual({ docRank: 0 });
+    // Both toggles change which report pages exist, so like facilitySystemTypes they are
+    // capped at SYSTEM_TYPE_MAX_CONFIDENCE — chips, never fills (audit batch 0 §3, decision 2)
+    for (const path of ["generalTreatment.alternativeSystem", "includeAlternativePages"]) {
+      const p = props[path];
+      expect(p, path).toBeDefined();
+      expect(p.kind).toBe("fill");
+      expect(p.value).toBe(true);
+      expect(p.provenance.confidence).toBe(SYSTEM_TYPE_MAX_CONFIDENCE);
+      expect(p.provenance.page).toBe(2);
+      expect(p.provenance.evidence).toBe("Aerobic Treatment Unit");
+      expect(p.provenance.explanation).toBe("Permit OW-17-00474 · Discharge Authorization p.2");
+      expect(p.authority).toEqual({ docRank: 0 });
+    }
     // the Summary "System Type" suggestion is untouched
     expect(props["facilityInfo.facilitySystemTypes"].value).toEqual(["alternative"]);
+  });
+
+  it("keeps a less-sure alternative verdict's own confidence on both toggles", () => {
+    const props = byPath(
+      mapPermitFacts({ ...emptyPermitFacts(), systemType: f("alternative" as const, 0.55, 3) }, record),
+    );
+    expect(props["generalTreatment.alternativeSystem"].provenance.confidence).toBe(0.55);
+    expect(props["includeAlternativePages"].provenance.confidence).toBe(0.55);
+    expect(props["generalTreatment.systemTypes"]).toBeUndefined();
+  });
+
+  it("proposes neither toggle for a conventional system", () => {
+    const props = byPath(mapPermitFacts(daFacts(), record, { now: NOW }));
+    expect(props["generalTreatment.alternativeSystem"]).toBeUndefined();
+    expect(props["includeAlternativePages"]).toBeUndefined();
   });
 
   it("takes the minimum confidence and falls back to the tank fact for provenance without a disposal", () => {
@@ -349,6 +370,76 @@ describe("mapPermitFacts — GP 4.02 system-type boxes", () => {
     expect(only.value).toEqual(["gp402_conventional"]);
     expect(only.provenance.page).toBe(3);
     expect(only.provenance.confidence).toBe(0.8);
+  });
+});
+
+describe("mapPermitFacts — tanks that are not septic tanks (audit batch 0 §3b / A17)", () => {
+  const tankOf = (capacity: number, model: string | null, confidence = 0.9, page = 1) => ({
+    capacityGal: f(capacity, confidence, page, `${capacity} gal`),
+    material: null,
+    model: model ? f(model, confidence, page, model) : null,
+    dimensions: null,
+  });
+  const pit = {
+    type: f("seepage_pit" as const, 0.97, 1, "4.02 Seepage Pit"),
+    count: null,
+    dimensions: null,
+    absorptionAreaSqft: null,
+  };
+
+  it("an ATU row does not tick the septic-tank box and is not counted as a septic tank", () => {
+    // OW-24-00070 DA: a 1500-gal "BIOMICROBICS MICROFAST 0.9" (GP 4.15) beside a 1000-gal septic tank
+    const facts: PermitFacts = {
+      ...emptyPermitFacts(),
+      documentKind: "discharge_authorization",
+      tanks: [tankOf(1500, "BIOMICROBICS MICROFAST 0.9", 0.97, 1), tankOf(1000, null, 0.9, 1)],
+      disposal: pit,
+    };
+    const props = byPath(mapPermitFacts(facts, record));
+    expect(props["generalTreatment.systemTypes"].value).toEqual(["gp402_septic_tank", "gp402_seepage_pit"]);
+    // the box's confidence/evidence come from the septic tank, not the ATU
+    expect(props["generalTreatment.systemTypes"].provenance.confidence).toBe(0.9);
+    const n = props["septicTank.numberOfTanks"];
+    expect(n.value).toBe("1");
+    expect(n.provenance.confidence).toBeLessThanOrEqual(0.7);
+    expect(n.provenance.explanation).toBe("Permit OW-17-00474 · Discharge Authorization lists 1 tank (p.1)");
+  });
+
+  it.each([
+    ["dosing tank"],
+    ["Pump Tank"],
+    ["lift station"],
+    ["sump"],
+    ["Aerobic Treatment Unit"],
+    ["ATU"],
+    ["Infiltrator IM1530 treatment"],
+  ])("a lone %j contributes no septic-tank box and no tank count", (model) => {
+    const facts: PermitFacts = { ...emptyPermitFacts(), tanks: [tankOf(500, model)] };
+    const props = byPath(mapPermitFacts(facts, record));
+    expect(props["generalTreatment.systemTypes"]).toBeUndefined();
+    expect(props["septicTank.numberOfTanks"]).toBeUndefined();
+    // the per-tank fields still describe what the permit lists
+    expect(props["septicTank.tanks.0.tankCapacity"].value).toBe("500");
+  });
+
+  it("a lone dosing tank beside a disposal field still ticks only the disposal box", () => {
+    const facts: PermitFacts = { ...emptyPermitFacts(), tanks: [tankOf(500, "dosing tank")], disposal: pit };
+    expect(byPath(mapPermitFacts(facts, record))["generalTreatment.systemTypes"].value).toEqual(["gp402_seepage_pit"]);
+  });
+
+  it("caps the tank count at 0.7 whenever a non-septic tank was listed, and not otherwise", () => {
+    const withDosing: PermitFacts = {
+      ...emptyPermitFacts(),
+      tanks: [tankOf(1250, null, 0.97), tankOf(1000, null, 0.95), tankOf(500, "dosing tank", 0.99)],
+    };
+    const capped = byPath(mapPermitFacts(withDosing, record))["septicTank.numberOfTanks"];
+    expect(capped.value).toBe("2");
+    expect(capped.provenance.confidence).toBe(0.7);
+    expect(capped.provenance.explanation).toContain("lists 2 tanks");
+    const plain: PermitFacts = { ...emptyPermitFacts(), tanks: [tankOf(1250, null, 0.97), tankOf(1000, "Septic Tank", 0.95)] };
+    const uncapped = byPath(mapPermitFacts(plain, record))["septicTank.numberOfTanks"];
+    expect(uncapped.value).toBe("2");
+    expect(uncapped.provenance.confidence).toBe(0.97);
   });
 });
 

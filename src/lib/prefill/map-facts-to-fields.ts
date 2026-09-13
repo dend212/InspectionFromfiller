@@ -36,9 +36,10 @@ const DOC_KIND_LABEL: Record<Exclude<PermitDocumentKind, "other">, string> = {
 type Provenance = ProposedField["provenance"];
 
 type DisposalType = NonNullable<PermitFacts["disposal"]["type"]>["value"];
+type Gp402Token = (typeof GP402_SYSTEM_TYPES)[number]["value"];
 
 /** Extracted disposal type → GP 4.02 checkbox; `other` has no box of its own */
-const DISPOSAL_TO_GP402: Record<Exclude<DisposalType, "other">, string> = {
+const DISPOSAL_TO_GP402: Record<Exclude<DisposalType, "other">, Gp402Token> = {
   trench: "gp402_disposal_trench",
   bed: "gp402_disposal_bed",
   chamber: "gp402_chamber",
@@ -46,34 +47,71 @@ const DISPOSAL_TO_GP402: Record<Exclude<DisposalType, "other">, string> = {
 };
 
 /** Caption text per GP 4.02 token; the conventional option's own label repeats the "GP 4.02" prefix */
-const GP402_CAPTION: Record<string, string> = {
+const GP402_CAPTION: Partial<Record<Gp402Token, string>> = {
   gp402_conventional: "Conventional",
 };
 
-function gp402Label(token: string): string {
+function gp402Label(token: Gp402Token): string {
   return GP402_CAPTION[token] ?? GP402_SYSTEM_TYPES.find((t) => t.value === token)?.label ?? token;
 }
 
 /**
- * GP 4.02 "General Treatment & Disposal Type" boxes a record's facts support, in
- * `GP402_SYSTEM_TYPES` order with the fact behind each: conventional from the system
- * type verdict, septic tank from any tank capacity, and the disposal box from the
- * disposal type. An `alternative` verdict adds no box (no fact names a GP 4.03+ technology).
+ * A tank the permit lists that is not a septic tank (audit batch 0 §3b / A17): dosing,
+ * pump, lift and sump tanks, and treatment units (ATU, MicroFAST, …). The prompt forces
+ * `model = "dosing tank"` for dosing/pump tanks; an ATU is a separate row with a free-text
+ * model. Such a tank never ticks the GP 4.02 septic-tank box and is not counted in
+ * septicTank.numberOfTanks.
  */
-function gp402Tokens(facts: PermitFacts): Array<{ token: string; fact: Fact<unknown> }> {
-  const byToken = new Map<string, Fact<unknown>>();
-  if (facts.systemType?.value === "conventional") byToken.set("gp402_conventional", facts.systemType);
-  const capacity = facts.tanks
+export const NON_SEPTIC_TANK = /dosing|pump|lift|sump|aerobic|ATU|microfast|treatment/i;
+
+type ExtractedTank = PermitFacts["tanks"][number];
+
+function isSepticTank(tank: ExtractedTank): boolean {
+  return !(tank.model && NON_SEPTIC_TANK.test(tank.model.value));
+}
+
+/** The most confident capacity fact among the septic (non-excluded) tanks */
+function bestSepticCapacity(facts: PermitFacts): Fact<number> | undefined {
+  return facts.tanks
+    .filter(isSepticTank)
     .map((t) => t.capacityGal)
     .filter((x): x is NonNullable<typeof x> => x != null)
     .sort((a, b) => b.confidence - a.confidence)[0];
-  if (capacity) byToken.set("gp402_septic_tank", capacity);
-  const disposal = facts.disposal.type;
-  if (disposal && disposal.value !== "other") byToken.set(DISPOSAL_TO_GP402[disposal.value], disposal);
-  return GP402_SYSTEM_TYPES.flatMap(({ value }) => {
+}
+
+/** A disposal fact with a GP 4.02 box of its own (`other` has none) */
+function hasDisposalBox(fact: Fact<DisposalType> | null): fact is Fact<Exclude<DisposalType, "other">> {
+  return fact != null && fact.value !== "other";
+}
+
+interface Gp402Boxes {
+  /** In `GP402_SYSTEM_TYPES` order, each with the fact behind it */
+  boxes: Array<{ token: Gp402Token; fact: Fact<unknown> }>;
+  /** Carries page/evidence for the proposal: the disposal fact, else the best septic tank, else systemType */
+  primary: Fact<unknown>;
+}
+
+/**
+ * GP 4.02 "General Treatment & Disposal Type" boxes a record's facts support: conventional
+ * from the system type verdict, septic tank from a septic tank's capacity (see
+ * NON_SEPTIC_TANK), and the disposal box from the disposal type. An `alternative` verdict
+ * adds no box (no fact names a GP 4.03+ technology). Null when nothing supports a box.
+ */
+function gp402Tokens(facts: PermitFacts): Gp402Boxes | null {
+  const byToken = new Map<Gp402Token, Fact<unknown>>();
+  const systemType = facts.systemType?.value === "conventional" ? facts.systemType : undefined;
+  if (systemType) byToken.set("gp402_conventional", systemType);
+  const bestTank = bestSepticCapacity(facts);
+  if (bestTank) byToken.set("gp402_septic_tank", bestTank);
+  const disposal = hasDisposalBox(facts.disposal.type) ? facts.disposal.type : undefined;
+  if (disposal) byToken.set(DISPOSAL_TO_GP402[disposal.value], disposal);
+  const primary = disposal ?? bestTank ?? systemType;
+  if (!primary) return null;
+  const boxes = GP402_SYSTEM_TYPES.flatMap(({ value }) => {
     const fact = byToken.get(value);
     return fact ? [{ token: value, fact }] : [];
   });
+  return { boxes, primary };
 }
 
 const AUTHORITATIVE_KINDS: ReadonlySet<PermitDocumentKind> = new Set([
@@ -215,17 +253,22 @@ export function mapPermitFacts(
     if (tank.material) fill(`${base}.tankMaterial`, tank.material.value, prov(tank.material));
     if (tank.dimensions) fill(`${base}.tankDimensions`, tank.dimensions.value, prov(tank.dimensions));
   });
-  if (facts.tanks.length > 0) {
-    const best = facts.tanks
+  // numberOfTanks counts septic tanks only; a listed dosing/pump/treatment tank means the
+  // count is an inference about which rows are septic tanks, so it is held to a chip (0.7)
+  const septicTanks = facts.tanks.filter(isSepticTank);
+  if (septicTanks.length > 0) {
+    const best = septicTanks
       .flatMap((t) => [t.capacityGal, t.material, t.model, t.dimensions])
       .filter((x): x is NonNullable<typeof x> => x != null)
       .sort((a, b) => b.confidence - a.confidence)[0];
     if (best) {
-      const n = facts.tanks.length;
+      const n = septicTanks.length;
+      const excludedTank = septicTanks.length < facts.tanks.length;
       fill(
         "septicTank.numberOfTanks",
         String(n),
         prov(best, {
+          confidence: excludedTank ? Math.min(best.confidence, SYSTEM_TYPE_MAX_CONFIDENCE) : best.confidence,
           explanation: `${docLabel} · ${transfer ? "" : `${label} `}lists ${n} tank${n === 1 ? "" : "s"} (p.${best.page})${secondary}`,
         }),
       );
@@ -282,11 +325,10 @@ export function mapPermitFacts(
 
   // GP 4.02 "General Treatment & Disposal Type" boxes: the DA's "General Permits Authorized"
   // table is a read fact, so no 0.7 cap — confidence is the least sure contributing fact.
-  // Provenance (page / evidence) comes from the disposal fact, else the best tank, else systemType —
-  // i.e. the last box, since the tokens come out in GP402_SYSTEM_TYPES order.
-  const boxes = gp402Tokens(facts);
-  if (boxes.length > 0) {
-    const primary = boxes[boxes.length - 1].fact;
+  // Provenance (page / evidence) comes from the disposal fact, else the best septic tank, else systemType.
+  const gp402 = gp402Tokens(facts);
+  if (gp402) {
+    const { boxes, primary } = gp402;
     const labels = boxes.map((b) => gp402Label(b.token)).join(", ");
     fill(
       "generalTreatment.systemTypes",
@@ -297,8 +339,14 @@ export function mapPermitFacts(
       }),
     );
   }
+  // Both toggles decide which report pages exist, so — like facilitySystemTypes — they are
+  // chips, never fills (SYSTEM_TYPE_MAX_CONFIDENCE; audit batch 0 §3, decision 2)
   if (facts.systemType?.value === "alternative") {
-    fill("generalTreatment.alternativeSystem", true, prov(facts.systemType));
+    const toggle = prov(facts.systemType, {
+      confidence: Math.min(facts.systemType.confidence, SYSTEM_TYPE_MAX_CONFIDENCE),
+    });
+    fill("generalTreatment.alternativeSystem", true, toggle);
+    fill("includeAlternativePages", true, toggle);
   }
 
   // §7 row: isAbandonment → tile banner only, no proposal
