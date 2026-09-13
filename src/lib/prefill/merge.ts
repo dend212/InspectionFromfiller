@@ -69,7 +69,10 @@ export function valuesEqual(a: unknown, b: unknown): boolean {
  *  - confidence ≥ PREFILL_FILL_THRESHOLD and current value empty/default → fill + "prefilled"
  *  - otherwise → "suggested"
  *  - existing "prefilled" entry is replaced only if the current value still equals its proposed
- *    value and the new confidence is higher; the same value with no better confidence is a no-op
+ *    value and the new confidence is higher; the same value with no better confidence is a no-op —
+ *    except that a `warning` an earlier run attached is dropped when this merge no longer raises
+ *    one for the path (the listing stopped saying "sewer", say), so the amber line does not outlive
+ *    the fact that caused it
  *  - a field that already holds the proposed value gets a "prefilled" entry without a fill (nothing is overwritten)
  */
 export function mergeProposals(
@@ -85,6 +88,7 @@ export function mergeProposals(
   // Warnings are resolved after every fill so the outcome does not depend on stage order
   const fillProposals = proposals.filter((p) => p.kind !== "warning");
   const warningProposals = proposals.filter((p) => p.kind === "warning");
+  const warnedPaths = new Set(warningProposals.map((p) => normalizeFieldPath(p.fieldPath)));
 
   for (const proposal of fillProposals) {
     const fieldPath = normalizeFieldPath(proposal.fieldPath);
@@ -130,7 +134,12 @@ export function mergeProposals(
         continue;
       }
       if (valuesEqual(proposal.value, current)) {
-        continue; // same value, no better confidence — keep the existing entry
+        // same value, no better confidence — keep the existing entry, minus a stale warning
+        if (existing.warning !== undefined && !warnedPaths.has(fieldPath)) {
+          const { warning: _stale, ...rest } = existing;
+          next[fieldPath] = rest;
+        }
+        continue;
       }
       suggest();
       continue;

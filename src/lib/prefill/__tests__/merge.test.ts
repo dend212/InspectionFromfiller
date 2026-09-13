@@ -325,6 +325,69 @@ describe("mergeProposals", () => {
       expect(provenance["facilityInfo.wastewaterSource"]).toEqual({ ...before, warning: LISTING_SEWER_WARNING });
     });
 
+    describe("a warning an earlier run attached goes stale when the next run does not raise it (e2e follow-up)", () => {
+      const RUN2 = { runId: "run-2", now: "2026-09-12T10:00:00.000Z" };
+
+      function afterRun1() {
+        const f = form();
+        const run1 = mergeProposals(f, {}, [PUC, SEWER], OPTS);
+        for (const fill of run1.fills) f.facilityInfo.wastewaterSource = fill.value as string;
+        expect(run1.provenance["facilityInfo.wastewaterSource"]).toMatchObject({
+          state: "prefilled",
+          warning: LISTING_SEWER_WARNING,
+        });
+        return { f, provenance: run1.provenance };
+      }
+
+      it("run 2 re-proposes the same fill without the warning → the carried-over entry loses `warning`", () => {
+        const { f, provenance } = afterRun1();
+        const run2 = mergeProposals(f, provenance, [PUC], RUN2);
+        expect(run2.fills).toEqual([]);
+        const entry = run2.provenance["facilityInfo.wastewaterSource"];
+        expect(entry).not.toHaveProperty("warning");
+        // otherwise the no-op path: run 1's entry stands (same value, no better confidence)
+        expect(entry).toEqual({
+          source: "assessor",
+          state: "prefilled",
+          kind: "fill",
+          value: "residential",
+          confidence: 0.95,
+          explanation: "Maricopa County Assessor · property use code 0141 (single family residence)",
+          runId: "run-1",
+          at: NOW,
+        });
+      });
+
+      it("run 2 re-proposes the same fill AND the warning → the warning stays (either order)", () => {
+        for (const proposals of [[PUC, SEWER], [SEWER, PUC]]) {
+          const { f, provenance } = afterRun1();
+          const run2 = mergeProposals(f, provenance, proposals, RUN2);
+          expect(run2.provenance["facilityInfo.wastewaterSource"]).toMatchObject({
+            state: "prefilled",
+            runId: "run-1",
+            warning: LISTING_SEWER_WARNING,
+          });
+        }
+      });
+
+      it("run 2 with a higher-confidence fill and no warning → the new entry has no warning either", () => {
+        const { f, provenance } = afterRun1();
+        const better = { ...PUC, provenance: { ...PUC.provenance, confidence: 0.99 } };
+        const run2 = mergeProposals(f, provenance, [better], RUN2);
+        expect(run2.provenance["facilityInfo.wastewaterSource"]).toMatchObject({ runId: "run-2", confidence: 0.99 });
+        expect(run2.provenance["facilityInfo.wastewaterSource"]).not.toHaveProperty("warning");
+      });
+
+      it("a prefilled entry with no warning is returned as-is on the no-op path (no spurious copy)", () => {
+        const f = form((d) => {
+          d.facilityInfo.wastewaterSource = "residential";
+        });
+        const before = entry({ source: "assessor", value: "residential", confidence: 0.95, runId: "run-0" });
+        const run2 = mergeProposals(f, { "facilityInfo.wastewaterSource": before }, [PUC], RUN2);
+        expect(run2.provenance["facilityInfo.wastewaterSource"]).toBe(before);
+      });
+    });
+
     it("a warning alone is still a warning-only suggested entry (unchanged)", () => {
       const { fills, provenance } = mergeProposals(form(), {}, [SEWER], OPTS);
       expect(fills).toEqual([]);
