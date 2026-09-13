@@ -8,6 +8,14 @@ describe("formatFieldValue", () => {
     );
   });
 
+  it("uses the short 'GP 4.02 Conventional' label for the conventional box so the chip stays readable", () => {
+    expect(
+      formatFieldValue("generalTreatment.systemTypes", ["gp402_conventional", "gp402_septic_tank", "gp402_seepage_pit"]),
+    ).toBe("GP 4.02 Conventional, Septic Tank, Disposal by Seepage Pit");
+    // every other token keeps the constant's own label
+    expect(formatFieldValue("generalTreatment.systemTypes", ["gp415_aerobic"])).toBe("GP 4.15 Aerobic System");
+  });
+
   it("labels a wastewaterSource enum", () => {
     expect(formatFieldValue("facilityInfo.wastewaterSource", "residential")).toBe("Residential");
   });

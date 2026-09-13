@@ -96,6 +96,12 @@ describe("suggestionText", () => {
     expect(
       suggestionText({ ...SUGGESTION, value: "residential" }, "facilityInfo.wastewaterSource"),
     ).toBe("Suggested: Residential · 61% · Permit OW-17-00474 p.2");
+    expect(
+      suggestionText(
+        { ...SUGGESTION, value: ["gp402_conventional", "gp402_septic_tank", "gp402_seepage_pit"], confidence: 0.9 },
+        "generalTreatment.systemTypes",
+      ),
+    ).toBe("Suggested: GP 4.02 Conventional, Septic Tank, Disposal by Seepage Pit · 90% · Permit OW-17-00474 p.2");
   });
 
   it("drops the explanation when it merely repeats the value (trimmed, case-insensitive)", () => {

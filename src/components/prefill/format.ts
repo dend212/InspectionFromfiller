@@ -28,6 +28,15 @@ interface LabelOption {
 }
 
 /**
+ * GP 4.02 option list with a chip-length label for the conventional box: the constant's own
+ * "GP 4.02 Conventional Septic Tank/Disposal System" would repeat "Septic Tank" beside the
+ * separate septic-tank box, so the chip reads "GP 4.02 Conventional, Septic Tank, …".
+ */
+const GP402_CHIP_LABELS: readonly LabelOption[] = GP402_SYSTEM_TYPES.map((option) =>
+  option.value === "gp402_conventional" ? { value: option.value, label: "GP 4.02 Conventional" } : option,
+);
+
+/**
  * Enum/checkbox-array prefill fields, keyed by the exact react-hook-form dotted path (numeric
  * array-index segments normalised to `*` — see `normaliseFieldPath`), mapped to the option list
  * (from src/lib/constants/inspection.ts) that supplies their human labels.
@@ -38,7 +47,7 @@ const FIELD_VALUE_LABELS: Record<string, readonly LabelOption[]> = {
   "facilityInfo.waterSource": WATER_SOURCES,
   "facilityInfo.occupancyType": OCCUPANCY_TYPES,
   "facilityInfo.facilitySystemTypes": FACILITY_SYSTEM_TYPES,
-  "generalTreatment.systemTypes": GP402_SYSTEM_TYPES,
+  "generalTreatment.systemTypes": GP402_CHIP_LABELS,
   "disposalWorks.disposalType": DISPOSAL_TYPES,
   "designFlow.designFlowBasis": DESIGN_FLOW_BASIS,
   "septicTank.tanks.*.tankMaterial": TANK_MATERIALS,
