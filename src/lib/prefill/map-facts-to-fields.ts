@@ -60,9 +60,10 @@ function gp402Label(token: Gp402Token): string {
  * pump, lift and sump tanks, and treatment units (ATU, MicroFAST, …). The prompt forces
  * `model = "dosing tank"` for dosing/pump tanks; an ATU is a separate row with a free-text
  * model. Such a tank never ticks the GP 4.02 septic-tank box and is not counted in
- * septicTank.numberOfTanks.
+ * septicTank.numberOfTanks. `pump`, `lift`, `sump` and `ATU` match whole words only — a
+ * "Saturn 1000" or an "Uplift" tank is a septic tank (e2e follow-up).
  */
-export const NON_SEPTIC_TANK = /dosing|pump|lift|sump|aerobic|ATU|microfast|treatment/i;
+export const NON_SEPTIC_TANK = /dosing|\bpump\b|pump tank|\blift\b|\bsump\b|aerobic|\bATU\b|microfast|treatment/i;
 
 type ExtractedTank = PermitFacts["tanks"][number];
 

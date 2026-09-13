@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { emptyPermitFacts, type PermitFacts } from "@/lib/ai/permit-extraction-schema";
-import { SYSTEM_TYPE_MAX_CONFIDENCE, dedupeProposals, mapPermitFacts } from "@/lib/prefill/map-facts-to-fields";
+import {
+  NON_SEPTIC_TANK,
+  SYSTEM_TYPE_MAX_CONFIDENCE,
+  dedupeProposals,
+  mapPermitFacts,
+} from "@/lib/prefill/map-facts-to-fields";
 import type { ProposedField } from "@/lib/prefill/types";
 
 const f = <T>(value: T, confidence = 0.9, page = 1, evidence = `ev:${String(value)}`) => ({
@@ -425,6 +430,31 @@ describe("mapPermitFacts — tanks that are not septic tanks (audit batch 0 §3b
     expect(props["septicTank.numberOfTanks"]).toBeUndefined();
     // the form's septicTank.tanks[] holds septic tanks only — a dosing tank gets no slot
     expect(Object.keys(props).filter((k) => k.startsWith("septicTank.tanks."))).toEqual([]);
+  });
+
+  it.each([["Saturn 1000"], ["Uplift"], ["Septic Tank"], ["Infiltrator IM-1060"]])(
+    "%j is a septic tank — whole-word matching, so 'sATUrn' and 'upLIFT' do not trip the exclusion",
+    (model) => {
+      expect(NON_SEPTIC_TANK.test(model)).toBe(false);
+      const facts: PermitFacts = { ...emptyPermitFacts(), tanks: [tankOf(1000, model)] };
+      const props = byPath(mapPermitFacts(facts, record));
+      expect(props["generalTreatment.systemTypes"].value).toEqual(["gp402_septic_tank"]);
+      expect(props["septicTank.numberOfTanks"].value).toBe("1");
+      expect(props["septicTank.tanks.0.tankCapacity"].value).toBe("1000");
+    },
+  );
+
+  it.each([
+    ["dosing tank"],
+    ["PUMP TANK"],
+    ["pump"],
+    ["ATU"],
+    ["MicroFAST 0.9"],
+    ["aerobic treatment unit"],
+    ["lift station"],
+    ["sump"],
+  ])("%j is excluded by NON_SEPTIC_TANK", (model) => {
+    expect(NON_SEPTIC_TANK.test(model)).toBe(true);
   });
 
   it("a lone dosing tank beside a disposal field still ticks only the disposal box", () => {
