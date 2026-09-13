@@ -1,6 +1,6 @@
 import { WATER_SOURCES } from "@/lib/constants/inspection";
 import type { StageContext, StageResult } from "@/lib/prefill/stage";
-import { listingParcelMismatch, mapListingFacts } from "../map-facts-to-fields";
+import { listingParcelMismatch, listingParcelMismatchSummary, mapListingFacts } from "../map-facts-to-fields";
 import type { PrefillInput, PrefillStage, StageLink } from "../types";
 import type { ListingFacts, ListingProvider } from "./provider";
 import { fullAddress, zillowApifyProvider } from "./zillow-apify";
@@ -41,6 +41,15 @@ function finished(stage: Omit<PrefillStage, "finishedAt">): PrefillStage {
   return { ...stage, finishedAt: new Date().toISOString() };
 }
 
+export interface ListingStageResult extends StageResult {
+  /**
+   * The parcel number the listing names, when it has one. The stage itself guards it against
+   * `input.apn`; the orchestrator compares it again with the APN the assessor resolves, which
+   * an address-only run does not have until the fan-out has settled (e2e D2).
+   */
+  parcelId?: string;
+}
+
 /**
  * Listing stage (spec §5.3). Never throws — every outcome is a StageResult.
  * `provider` is injectable for tests; production uses the Apify Zillow actor.
@@ -49,7 +58,7 @@ export async function runListingStage(
   input: PrefillInput,
   ctx: StageContext,
   provider: ListingProvider = zillowApifyProvider,
-): Promise<StageResult> {
+): Promise<ListingStageResult> {
   const startedAt = new Date().toISOString();
   const address = input.address;
   const full = address ? fullAddress(address) : null;
@@ -81,12 +90,15 @@ export async function runListingStage(
     const links: StageLink[] = facts.url ? [{ label: "Open on Zillow", url: facts.url }] : [];
     // Parcel guard: the mapper caps every proposal; the tile says why in one line
     const apn = input.apn;
-    const summary = listingParcelMismatch(facts.parcelId, apn)
-      ? `${summariseListing(facts)} · Listing parcel ${facts.parcelId} does not match APN ${apn}`
-      : summariseListing(facts);
+    const parcelId = facts.parcelId?.trim() || undefined;
+    const summary =
+      parcelId && apn && listingParcelMismatch(parcelId, apn)
+        ? `${summariseListing(facts)} · ${listingParcelMismatchSummary(parcelId, apn)}`
+        : summariseListing(facts);
     return {
       stage: finished({ status: "done", startedAt, summary, links }),
       proposals: mapListingFacts(facts, apn ? { apn } : {}),
+      ...(parcelId ? { parcelId } : {}),
     };
   } catch (err) {
     return {

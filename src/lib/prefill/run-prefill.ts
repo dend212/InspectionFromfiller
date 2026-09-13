@@ -1,8 +1,14 @@
 import { formatApn } from "./apn";
 import type { AssessorStageResult, ResolvedParcel } from "./assessor";
 import { runAssessorStage } from "./assessor";
+import type { ListingStageResult } from "./listing";
 import { runListingStage } from "./listing";
-import { dedupeProposals } from "./map-facts-to-fields";
+import {
+  capListingProposals,
+  dedupeProposals,
+  listingParcelMismatch,
+  listingParcelMismatchSummary,
+} from "./map-facts-to-fields";
 import type { PermitsStageResult } from "./permits";
 import { runPermitsSelection, runPermitsStage } from "./permits";
 import type { PrefillRunRow } from "./run-store";
@@ -82,6 +88,34 @@ function enrichInput(input: PrefillInput, resolved: ResolvedParcel): PrefillInpu
 }
 
 /**
+ * Cross-stage parcel guard (e2e D2). The listing stage compares the listing's parcel number
+ * with the APN it was handed, so on an address-only run — no typed APN — a wrong-house listing
+ * went through unflagged. Once the fan-out has settled the assessor's APN is known: when the
+ * listing named a different parcel, its proposals are held under the fill gate with the same
+ * note `mapListingFacts` writes and the tile says so — unless the stage already compared against
+ * this very APN (typed-APN path), so the note is never appended twice. Mutates `stages.listing`.
+ */
+function applyListingParcelGuard(
+  stages: PrefillStages,
+  proposals: ProposedField[],
+  listing: ListingStageResult | undefined,
+  stageApn: string | undefined,
+  resolvedApn: string | null,
+): ProposedField[] {
+  const parcelId = listing?.parcelId;
+  if (!parcelId || !resolvedApn) return proposals;
+  if (formatApn(stageApn) === resolvedApn) return proposals;
+  if (!listingParcelMismatch(parcelId, resolvedApn)) return proposals;
+  stages.listing = {
+    ...stages.listing,
+    summary: [stages.listing.summary, listingParcelMismatchSummary(parcelId, resolvedApn)]
+      .filter(Boolean)
+      .join(" · "),
+  };
+  return capListingProposals(proposals, parcelId, resolvedApn);
+}
+
+/**
  * D10: `inspections.apn` used to be written only by the legacy APN Lookup. Fill it from the
  * run when it is still empty; a failure here is logged and never fails the run.
  */
@@ -156,8 +190,9 @@ export async function runPrefill(runId: string): Promise<void> {
       runPermitsStage(stageInput, ctx("permits")),
     ]);
 
-    const proposals: ProposedField[] = [];
+    let proposals: ProposedField[] = [];
     let candidates: PermitCandidate[] = [];
+    let listing: ListingStageResult | undefined;
     settled.forEach((result, i) => {
       const name = STAGE_NAMES[i];
       if (result.status === "fulfilled") {
@@ -165,6 +200,8 @@ export async function runPrefill(runId: string): Promise<void> {
         proposals.push(...result.value.proposals);
         if (name === "assessor") {
           resolved = (result.value as AssessorStageResult).resolved;
+        } else if (name === "listing") {
+          listing = result.value as ListingStageResult;
         } else if (name === "permits") {
           candidates = (result.value as PermitsStageResult).candidates ?? [];
         }
@@ -182,6 +219,13 @@ export async function runPrefill(runId: string): Promise<void> {
       }
     });
 
+    proposals = applyListingParcelGuard(
+      stages,
+      proposals,
+      listing,
+      stageInput.apn,
+      formatApn(resolved?.apn ?? input.apn),
+    );
     await recordInspectionApn(run, runId, input, resolved);
 
     const awaiting = candidates.length > 0;

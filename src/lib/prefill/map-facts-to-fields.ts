@@ -464,6 +464,33 @@ export function listingParcelMismatch(parcelId: string | undefined, apn: string 
   return Boolean(a && b && a !== b);
 }
 
+/** The one-line tile note for a mismatch — the listing stage and the orchestrator write the same text */
+export function listingParcelMismatchSummary(parcelId: string, apn: string): string {
+  return `Listing parcel ${parcelId} does not match APN ${apn}`;
+}
+
+/**
+ * Holds every `listing` proposal under the fill gate and says why. Used by `mapListingFacts`
+ * on the typed-APN path and again by the orchestrator once the assessor has resolved the
+ * parcel of an address-only run (e2e D2) — the text is identical either way. Proposals from
+ * other sources pass through untouched.
+ */
+export function capListingProposals(proposals: ProposedField[], parcelId: string, apn: string): ProposedField[] {
+  const note = ` · listing parcel ${parcelId} ≠ APN ${apn} — confirm this is the right property`;
+  return proposals.map((p) =>
+    p.provenance.source === "listing"
+      ? {
+          ...p,
+          provenance: {
+            ...p.provenance,
+            confidence: Math.min(p.provenance.confidence, LISTING_PARCEL_MISMATCH_CONFIDENCE),
+            explanation: `${p.provenance.explanation}${note}`,
+          },
+        }
+      : p,
+  );
+}
+
 export interface MapListingFactsOptions {
   /** The run's APN, when it has one — compared against `facts.parcelId` */
   apn?: string;
@@ -564,16 +591,8 @@ export function mapListingFacts(facts: ListingFacts, opts: MapListingFactsOption
     }
   }
 
-  if (listingParcelMismatch(facts.parcelId, opts.apn)) {
-    const note = ` · listing parcel ${facts.parcelId} ≠ APN ${opts.apn} — confirm this is the right property`;
-    return out.map((p) => ({
-      ...p,
-      provenance: {
-        ...p.provenance,
-        confidence: Math.min(p.provenance.confidence, LISTING_PARCEL_MISMATCH_CONFIDENCE),
-        explanation: `${p.provenance.explanation}${note}`,
-      },
-    }));
+  if (facts.parcelId && opts.apn && listingParcelMismatch(facts.parcelId, opts.apn)) {
+    return capListingProposals(out, facts.parcelId, opts.apn);
   }
   return out;
 }

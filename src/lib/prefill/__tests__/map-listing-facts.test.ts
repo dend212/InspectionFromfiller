@@ -4,7 +4,9 @@ import {
   LISTING_BEDROOMS_CONFIDENCE,
   LISTING_SEWER_WARNING,
   LISTING_WATER_CONFIDENCE,
+  capListingProposals,
   dedupeProposals,
+  listingParcelMismatchSummary,
   mapListingFacts,
 } from "@/lib/prefill/map-facts-to-fields";
 import type { ProposedField } from "@/lib/prefill/types";
@@ -276,6 +278,38 @@ describe("mapListingFacts — parcel guard (listing parcel vs the run's APN)", (
     );
     expect(mapListingFacts(facts({ parcelId: "  ", bedrooms: 3 }), { apn: "211-74-047" })[0].provenance.confidence).toBe(
       LISTING_BEDROOMS_CONFIDENCE,
+    );
+  });
+});
+
+describe("capListingProposals / listingParcelMismatchSummary — the guard the orchestrator re-applies (e2e D2)", () => {
+  const permit: ProposedField = {
+    fieldPath: "septicTank.tankCapacity",
+    value: "1250",
+    kind: "fill",
+    provenance: { source: "permit", confidence: 0.9, explanation: "Permit OW-17-00474 p.1" },
+  };
+
+  it("produces exactly the proposals mapListingFacts produces for the same mismatch", () => {
+    const f = facts({ parcelId: "17028066F", waterSource: "municipal", bedrooms: 4, sewer: "sewer", homeType: "SINGLE_FAMILY" });
+    const viaMapper = mapListingFacts(f, { apn: "154-22-029" });
+    const viaHelper = capListingProposals(mapListingFacts(f), "17028066F", "154-22-029");
+    expect(viaHelper).toEqual(viaMapper);
+    expect(viaHelper[0].provenance.explanation).toBe(
+      "Zillow listing · Water source: Municipal System · listing parcel 17028066F ≠ APN 154-22-029 — confirm this is the right property",
+    );
+  });
+
+  it("touches only listing proposals and leaves the rest as they are", () => {
+    const listing = mapListingFacts(facts({ bedrooms: 4 }));
+    const out = capListingProposals([permit, ...listing], "17028066F", "154-22-029");
+    expect(out[0]).toBe(permit);
+    expect(out[1].provenance.confidence).toBe(0.6);
+  });
+
+  it("the tile line matches the one the listing stage writes on the typed-APN path", () => {
+    expect(listingParcelMismatchSummary("17028066F", "154-22-029")).toBe(
+      "Listing parcel 17028066F does not match APN 154-22-029",
     );
   });
 });

@@ -123,11 +123,19 @@ describe("runListingStage", () => {
     expect(result.proposals[0].provenance.confidence).toBe(0.85);
   });
 
-  it("does not guard an address-only run (no APN to compare against)", async () => {
+  it("does not guard an address-only run (no APN to compare against) but exposes the listing parcel", async () => {
     const facts: ListingFacts = { provider: "zillow", url: URL, bedrooms: 3, parcelId: "21174047P", raw: {} };
     const result = await runListingStage({ address: INPUT.address }, makeCtx(), providerReturning(facts));
     expect(result.stage.summary).toBe("3 bed");
     expect(result.proposals[0].provenance.confidence).toBe(0.85);
+    // e2e D2: the orchestrator compares this against the APN the assessor resolves
+    expect(result.parcelId).toBe("21174047P");
+  });
+
+  it("carries no parcelId when the listing has none, or when nothing was found", async () => {
+    const facts: ListingFacts = { provider: "zillow", url: URL, bedrooms: 3, raw: {} };
+    expect((await runListingStage(INPUT, makeCtx(), providerReturning(facts))).parcelId).toBeUndefined();
+    expect((await runListingStage(INPUT, makeCtx(), providerReturning(null))).parcelId).toBeUndefined();
   });
 
   it("returns done with no link when the listing has no URL", async () => {

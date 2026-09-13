@@ -254,6 +254,176 @@ describe("runPrefill — listing stage wiring", () => {
   });
 });
 
+describe("runPrefill — cross-stage parcel guard (e2e D2: address-only run, wrong-house listing)", () => {
+  const ADDRESS_ONLY: PrefillInput = {
+    address: { streetNumber: "3402", streetDir: "E", streetName: "Sells Dr", city: "Phoenix", zip: "85018" },
+  };
+  const MISMATCH_NOTE = "confirm this is the right property";
+  const BEDROOMS: ProposedField = {
+    fieldPath: "designFlow.numberOfBedrooms",
+    value: "4",
+    kind: "fill",
+    provenance: { source: "listing", confidence: 0.85, explanation: "Zillow listing · 4 bedrooms", sourceUrl: ZILLOW_LINK.url },
+  };
+  const SEWER_WARNING: ProposedField = {
+    fieldPath: "facilityInfo.wastewaterSource",
+    value: "",
+    kind: "warning",
+    provenance: { source: "listing", confidence: 0.8, explanation: 'Listing says "Sewer" — confirm this property is on septic' },
+  };
+
+  function occurrences(text: string, needle: string): number {
+    return text.split(needle).length - 1;
+  }
+
+  function listingSource(proposals: ProposedField[] | undefined): ProposedField[] {
+    return (proposals ?? []).filter((p) => p.provenance.source === "listing");
+  }
+
+  it("caps and annotates the listing proposals once the assessor resolves a different parcel", async () => {
+    mockLoadRunRow.mockResolvedValue(makeRun({ input: ADDRESS_ONLY }));
+    mockRunAssessorStage.mockResolvedValue({
+      stage: doneStage("Parcel 154-22-029 · 3402 W SELLS DR"),
+      proposals: [],
+      resolved: { apn: "154-22-029" },
+    });
+    mockRunListingStage.mockResolvedValue({
+      stage: doneStage("Water: Municipal System · 4 bed · Sewer: sewer", [ZILLOW_LINK]),
+      proposals: [LISTING_PROPOSAL, BEDROOMS, SEWER_WARNING],
+      parcelId: "17028066F",
+    });
+
+    await runPrefill(RUN_ID);
+
+    const final = lastPatch();
+    expect(final.status).toBe("done");
+    expect(final.stages?.listing).toMatchObject({
+      status: "done",
+      summary:
+        "Water: Municipal System · 4 bed · Sewer: sewer · Listing parcel 17028066F does not match APN 154-22-029",
+      links: [ZILLOW_LINK],
+    });
+    const listing = listingSource(final.proposals);
+    expect(listing).toHaveLength(3);
+    for (const p of listing) {
+      expect(p.provenance.confidence, p.fieldPath).toBeLessThanOrEqual(0.6);
+      expect(occurrences(p.provenance.explanation, MISMATCH_NOTE), p.fieldPath).toBe(1);
+      expect(p.provenance.explanation, p.fieldPath).toMatch(
+        / · listing parcel 17028066F ≠ APN 154-22-029 — confirm this is the right property$/,
+      );
+    }
+    // the identical helper mapListingFacts uses: the note follows the original text verbatim
+    expect(listing.find((p) => p.fieldPath === "designFlow.numberOfBedrooms")?.provenance).toEqual({
+      source: "listing",
+      confidence: 0.6,
+      explanation:
+        "Zillow listing · 4 bedrooms · listing parcel 17028066F ≠ APN 154-22-029 — confirm this is the right property",
+      sourceUrl: ZILLOW_LINK.url,
+    });
+    // permit proposals are not listing proposals: untouched
+    expect(final.proposals).toEqual(expect.arrayContaining([PERMIT_PROPOSAL]));
+  });
+
+  it("leaves everything alone when the listing parcel is the resolved parcel", async () => {
+    mockLoadRunRow.mockResolvedValue(makeRun({ input: ADDRESS_ONLY }));
+    mockRunAssessorStage.mockResolvedValue({
+      stage: doneStage("Parcel 170-28-066F · 3402 E SELLS DR"),
+      proposals: [],
+      resolved: { apn: "170-28-066F" },
+    });
+    mockRunListingStage.mockResolvedValue({
+      stage: doneStage("4 bed", [ZILLOW_LINK]),
+      proposals: [BEDROOMS],
+      parcelId: "17028066F",
+    });
+
+    await runPrefill(RUN_ID);
+
+    const final = lastPatch();
+    expect(final.stages?.listing?.summary).toBe("4 bed");
+    expect(listingSource(final.proposals)).toEqual([BEDROOMS]);
+  });
+
+  it("does nothing when the assessor found no parcel and the run has no APN", async () => {
+    mockLoadRunRow.mockResolvedValue(makeRun({ input: ADDRESS_ONLY }));
+    mockRunAssessorStage.mockResolvedValue({
+      stage: { ...doneStage("No parcel found (searched 3402 Sells Dr)"), status: "not_found" },
+      proposals: [],
+    });
+    mockRunListingStage.mockResolvedValue({ stage: doneStage("4 bed"), proposals: [BEDROOMS], parcelId: "17028066F" });
+
+    await runPrefill(RUN_ID);
+
+    const final = lastPatch();
+    expect(final.stages?.listing?.summary).toBe("4 bed");
+    expect(listingSource(final.proposals)).toEqual([BEDROOMS]);
+  });
+
+  it("typed-APN path: the stage already guarded against that APN — no second cap, no double note", async () => {
+    // INPUT carries apn 219-11-121; the listing stage compared against it and produced this
+    const guardedByStage: ProposedField = {
+      ...BEDROOMS,
+      provenance: {
+        ...BEDROOMS.provenance,
+        confidence: 0.6,
+        explanation:
+          "Zillow listing · 4 bedrooms · listing parcel 21174047P ≠ APN 219-11-121 — confirm this is the right property",
+      },
+    };
+    mockRunAssessorStage.mockResolvedValue({
+      stage: doneStage("Parcel 219-11-121"),
+      proposals: [],
+      resolved: { apn: "219-11-121" },
+    });
+    mockRunListingStage.mockResolvedValue({
+      stage: doneStage("4 bed · Listing parcel 21174047P does not match APN 219-11-121", [ZILLOW_LINK]),
+      proposals: [guardedByStage],
+      parcelId: "21174047P",
+    });
+
+    await runPrefill(RUN_ID);
+
+    const final = lastPatch();
+    expect(final.stages?.listing?.summary).toBe("4 bed · Listing parcel 21174047P does not match APN 219-11-121");
+    const [p] = listingSource(final.proposals);
+    expect(p).toEqual(guardedByStage);
+    expect(occurrences(p.provenance.explanation, MISMATCH_NOTE)).toBe(1);
+  });
+
+  it("typed APN that the assessor could not find but resolved by address to another parcel: guards against the resolved APN", async () => {
+    mockLoadRunRow.mockResolvedValue(makeRun({ input: { ...INPUT, apn: "999-99-999" } }));
+    mockRunAssessorStage.mockResolvedValue({
+      stage: doneStage("Parcel 154-22-029"),
+      proposals: [],
+      resolved: { apn: "154-22-029" },
+    });
+    // the stage compared 15422029 against 999-99-999 → mismatch, guarded against the typed APN
+    mockRunListingStage.mockResolvedValue({
+      stage: doneStage("4 bed · Listing parcel 15422029 does not match APN 999-99-999"),
+      proposals: [
+        {
+          ...BEDROOMS,
+          provenance: {
+            ...BEDROOMS.provenance,
+            confidence: 0.6,
+            explanation:
+              "Zillow listing · 4 bedrooms · listing parcel 15422029 ≠ APN 999-99-999 — confirm this is the right property",
+          },
+        },
+      ],
+      parcelId: "15422029",
+    });
+
+    await runPrefill(RUN_ID);
+
+    // the listing parcel IS the resolved parcel: the orchestrator adds nothing (the stage's note about
+    // the typed APN stands — it is accurate, the typed APN was wrong)
+    const final = lastPatch();
+    expect(final.stages?.listing?.summary).toBe("4 bed · Listing parcel 15422029 does not match APN 999-99-999");
+    expect(listingSource(final.proposals)[0].provenance.confidence).toBe(0.6);
+  });
+});
+
 describe("continuePrefillAfterSelection — keeps listing proposals", () => {
   const CANDIDATE_KEY = "edms_env:000972:PERMIT:2015-09-11";
 
