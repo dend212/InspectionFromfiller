@@ -104,7 +104,7 @@ function FormItem({ className, children, ...props }: React.ComponentProps<"div">
         {...props}
       >
         {children}
-        {fieldName && !inGroup && entry?.state === "suggested" ? (
+        {fieldName && !inGroup && (entry?.state === "suggested" || entry?.warning) ? (
           <SuggestionChip fieldPath={fieldName} />
         ) : null}
       </div>
@@ -154,7 +154,8 @@ interface FormFieldGroupProps extends Omit<React.ComponentProps<"div">, "childre
 /**
  * A group of controls that all edit ONE field path (checkbox groups). FormItem/FormLabel
  * rendered inside it for that path render neither chip nor badge; the group renders both
- * exactly once — the badge beside the group label, the suggestion chip after the last option.
+ * exactly once — the badge beside the group label, the suggestion chip / warning line after
+ * the last option.
  */
 function FormFieldGroup({
   name,
@@ -192,7 +193,7 @@ function FormFieldGroup({
         </div>
         {description}
         {children}
-        {entry?.state === "suggested" ? <SuggestionChip fieldPath={name} /> : null}
+        {entry?.state === "suggested" || entry?.warning ? <SuggestionChip fieldPath={name} /> : null}
       </div>
     </FormFieldGroupContext.Provider>
   );

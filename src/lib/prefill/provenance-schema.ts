@@ -28,6 +28,7 @@ const provenanceEntryBaseSchema = z.object({
   value: provenanceValueSchema,
   confidence: z.number().min(0).max(1),
   explanation: z.string().max(500),
+  warning: z.string().max(500).optional(),
   evidence: z.string().max(1000).optional(),
   sourceUrl: sourceUrlSchema.optional(),
   recordId: z.string().max(64).optional(),

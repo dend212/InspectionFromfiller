@@ -48,6 +48,15 @@ describe("provenanceEntrySchema", () => {
     expect(parsed.success && parsed.data.prior).toEqual(prior);
   });
 
+  it("accepts a warning line on a prefilled entry (audit 5.1) and bounds it like the explanation", () => {
+    const warning = 'Listing says "Sewer" — confirm this property is on septic';
+    const parsed = provenanceEntrySchema.safeParse({ ...VALID, warning });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.warning).toBe(warning);
+    expect(provenanceEntrySchema.safeParse({ ...VALID, warning: "w".repeat(501) }).success).toBe(false);
+    expect(provenanceEntrySchema.safeParse({ ...VALID, warning: 42 }).success).toBe(false);
+  });
+
   it("rejects a prior entry that is itself invalid", () => {
     const bad = { ...VALID, state: "suggested", prior: { ...VALID, state: "maybe" } };
     expect(provenanceEntrySchema.safeParse(bad).success).toBe(false);

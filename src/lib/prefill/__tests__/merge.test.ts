@@ -254,7 +254,7 @@ describe("mergeProposals", () => {
     });
   });
 
-  it("a warning on an edited field is suggested but remembers the edited entry", () => {
+  it("a warning on an edited field attaches to the edited entry instead of parking it behind a chip", () => {
     const f = form((d) => {
       d.facilityInfo.wastewaterSource = "septic";
     });
@@ -263,11 +263,128 @@ describe("mergeProposals", () => {
     const warning = proposal("facilityInfo.wastewaterSource", "", 0.8, { kind: "warning" });
     const { fills, provenance } = mergeProposals(f, existing, [warning], OPTS);
     expect(fills).toEqual([]);
-    expect(provenance["facilityInfo.wastewaterSource"]).toMatchObject({
-      state: "suggested",
+    expect(provenance["facilityInfo.wastewaterSource"]).toEqual({
+      ...before,
+      warning: "Permit OW-17-00474 p.1",
+    });
+  });
+
+  describe("warning on a prefilled field (audit 5.1 — one provenance slot per path)", () => {
+    const SEWER = proposal("facilityInfo.wastewaterSource", "", 0.8, {
       kind: "warning",
-      value: "",
-      prior: before,
+      provenance: { source: "listing", confidence: 0.8, explanation: LISTING_SEWER_WARNING },
+    });
+    const PUC = proposal("facilityInfo.wastewaterSource", "residential", 0.95, {
+      provenance: {
+        source: "assessor",
+        confidence: 0.95,
+        explanation: "Maricopa County Assessor · property use code 0141 (single family residence)",
+      },
+    });
+
+    it.each([
+      ["fill then warning", [PUC, SEWER]],
+      ["warning then fill", [SEWER, PUC]],
+    ])("%s → one prefilled entry that carries the warning", (_order, proposals) => {
+      const { fills, provenance } = mergeProposals(form(), {}, proposals, OPTS);
+      expect(fills).toEqual([{ fieldPath: "facilityInfo.wastewaterSource", value: "residential" }]);
+      expect(provenance["facilityInfo.wastewaterSource"]).toEqual({
+        source: "assessor",
+        state: "prefilled",
+        kind: "fill",
+        value: "residential",
+        confidence: 0.95,
+        explanation: "Maricopa County Assessor · property use code 0141 (single family residence)",
+        runId: "run-1",
+        at: NOW,
+        warning: LISTING_SEWER_WARNING,
+      });
+    });
+
+    it("attaches to a below-threshold suggestion from the same merge as well", () => {
+      const chip = proposal("facilityInfo.wastewaterSource", "residential", 0.7, {
+        provenance: { source: "listing", confidence: 0.7, explanation: "Zillow lists the home as Townhouse" },
+      });
+      const { fills, provenance } = mergeProposals(form(), {}, [SEWER, chip], OPTS);
+      expect(fills).toEqual([]);
+      expect(provenance["facilityInfo.wastewaterSource"]).toMatchObject({
+        state: "suggested",
+        kind: "fill",
+        value: "residential",
+        warning: LISTING_SEWER_WARNING,
+      });
+    });
+
+    it("attaches to a prefilled entry from an earlier run", () => {
+      const f = form((d) => {
+        d.facilityInfo.wastewaterSource = "residential";
+      });
+      const before = entry({ source: "assessor", value: "residential", confidence: 0.95, runId: "run-0" });
+      const { fills, provenance } = mergeProposals(f, { "facilityInfo.wastewaterSource": before }, [SEWER], OPTS);
+      expect(fills).toEqual([]);
+      expect(provenance["facilityInfo.wastewaterSource"]).toEqual({ ...before, warning: LISTING_SEWER_WARNING });
+    });
+
+    it("a warning alone is still a warning-only suggested entry (unchanged)", () => {
+      const { fills, provenance } = mergeProposals(form(), {}, [SEWER], OPTS);
+      expect(fills).toEqual([]);
+      expect(provenance["facilityInfo.wastewaterSource"]).toMatchObject({
+        state: "suggested",
+        kind: "warning",
+        value: "",
+        explanation: LISTING_SEWER_WARNING,
+      });
+      expect(provenance["facilityInfo.wastewaterSource"]).not.toHaveProperty("warning");
+    });
+
+    it("a repeated warning-only entry is replaced, not stacked", () => {
+      const before = entry({
+        source: "listing",
+        state: "suggested",
+        kind: "warning",
+        value: "",
+        explanation: LISTING_SEWER_WARNING,
+        runId: "run-0",
+      });
+      const { provenance } = mergeProposals(form(), { "facilityInfo.wastewaterSource": before }, [SEWER], OPTS);
+      expect(provenance["facilityInfo.wastewaterSource"]).toMatchObject({ kind: "warning", runId: "run-1" });
+      expect(provenance["facilityInfo.wastewaterSource"]).not.toHaveProperty("warning");
+    });
+
+    it("a verified entry still drops the warning, in either order with a fill", () => {
+      const f = form((d) => {
+        d.facilityInfo.wastewaterSource = "residential";
+      });
+      const before = entry({ state: "verified", value: "residential" });
+      for (const proposals of [[PUC, SEWER], [SEWER, PUC]]) {
+        const { fills, provenance } = mergeProposals(f, { "facilityInfo.wastewaterSource": before }, proposals, OPTS);
+        expect(fills).toEqual([]);
+        expect(provenance["facilityInfo.wastewaterSource"]).toBe(before);
+      }
+    });
+
+    it("the real listing + assessor proposals for a sewer listing land as Residential with the sewer warning", () => {
+      const listingProposals = mapListingFacts({
+        provider: "zillow",
+        url: "https://www.zillow.com/homedetails/8911-E-Cave-Creek-Rd/7921650_zpid/",
+        raw: {},
+        sewer: "sewer",
+        homeType: "SINGLE_FAMILY",
+      });
+      const { fills, provenance } = mergeProposals(form(), {}, [...listingProposals, PUC], OPTS);
+      expect(fills).toEqual(
+        expect.arrayContaining([
+          { fieldPath: "facilityInfo.wastewaterSource", value: "residential" },
+          { fieldPath: "facilityInfo.facilityType", value: "single_family" },
+        ]),
+      );
+      expect(provenance["facilityInfo.wastewaterSource"]).toMatchObject({
+        state: "prefilled",
+        kind: "fill",
+        source: "assessor",
+        value: "residential",
+        warning: LISTING_SEWER_WARNING,
+      });
     });
   });
 

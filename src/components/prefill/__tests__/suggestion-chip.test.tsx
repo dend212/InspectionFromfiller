@@ -336,6 +336,77 @@ describe("SuggestionChip", () => {
     expect(screen.getByText(WARNING.explanation)).toBeInTheDocument();
   });
 
+  describe("warning line on a prefilled field (audit 5.1)", () => {
+    const WARNED: ProvenanceEntry = {
+      source: "assessor",
+      state: "prefilled",
+      kind: "fill",
+      value: "residential",
+      confidence: 0.95,
+      explanation: "Maricopa County Assessor · property use code 0141 (single family residence)",
+      at: "2026-09-11T10:00:00.000Z",
+      warning: WARNING.explanation,
+    };
+    const PATH = "facilityInfo.wastewaterSource";
+
+    it("renders an amber warning line (no accept, no suggestion chip) for a prefilled entry that carries one", () => {
+      render(
+        <Harness initial={{ [PATH]: WARNED }}>
+          <SuggestionChip fieldPath={PATH} />
+        </Harness>,
+      );
+      const line = document.querySelector("[data-slot=provenance-warning]");
+      expect(line).not.toBeNull();
+      expect(line).toHaveClass("border-amber-300");
+      expect(screen.getByText(WARNING.explanation)).toHaveAttribute("title", WARNING.explanation);
+      expect(screen.queryByRole("button", { name: /accept suggestion/i })).toBeNull();
+      expect(document.querySelector("[data-slot=suggestion-chip]")).toBeNull();
+      expect(screen.getByRole("button", { name: "Dismiss warning" })).toBeInTheDocument();
+    });
+
+    it("dismissing the warning removes only the line — the prefilled entry and the form value stay", async () => {
+      const user = userEvent.setup();
+      render(
+        <Harness
+          initial={{ [PATH]: WARNED }}
+          values={(f) => {
+            f.facilityInfo.wastewaterSource = "residential";
+          }}
+          withFormProvider
+        >
+          <SuggestionChip fieldPath={PATH} />
+        </Harness>,
+      );
+      await user.click(screen.getByRole("button", { name: "Dismiss warning" }));
+      expect(document.querySelector("[data-slot=provenance-warning]")).toBeNull();
+      expect(formRef.current?.getValues("facilityInfo.wastewaterSource")).toBe("residential");
+    });
+
+    it("renders the suggestion chip AND the warning line when a suggested entry carries a warning", () => {
+      const suggested: ProvenanceEntry = { ...WARNED, state: "suggested", confidence: 0.7, source: "listing" };
+      render(
+        <Harness initial={{ [PATH]: suggested }}>
+          <SuggestionChip fieldPath={PATH} />
+        </Harness>,
+      );
+      expect(screen.getByRole("button", { name: "Accept suggestion from Listing: Residential" })).toBeInTheDocument();
+      expect(document.querySelector("[data-slot=suggestion-chip]")).not.toBeNull();
+      expect(document.querySelector("[data-slot=provenance-warning]")).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Dismiss suggestion" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Dismiss warning" })).toBeInTheDocument();
+    });
+
+    it("shows the warning line read-only without a dismiss control", () => {
+      render(
+        <Harness initial={{ [PATH]: WARNED }} readOnly>
+          <SuggestionChip fieldPath={PATH} />
+        </Harness>,
+      );
+      expect(screen.getByText(WARNING.explanation)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Dismiss warning" })).toBeNull();
+    });
+  });
+
   it("is inert when read-only", () => {
     render(
       <Harness initial={{ [FIELD]: SUGGESTION }} readOnly>

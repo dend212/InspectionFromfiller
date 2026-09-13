@@ -29,6 +29,13 @@ export interface ProvenanceEntry {
   /** ISO timestamp of when the entry was written/updated */
   at: string;
   /**
+   * A caution attached to a filled/suggested/edited entry by a `warning` proposal for the same
+   * path (e.g. the listing says "Sewer" while the assessor filled Residential). One provenance
+   * slot per path, so the warning rides on the entry instead of replacing it; the amber line
+   * under the field is dismissed on its own (`dismissWarning`).
+   */
+  warning?: string;
+  /**
    * Only on a "suggested" entry that replaced an "edited" one: the user's entry as it was
    * before a later run proposed a different value. Dismissing the chip restores it
    * verbatim; accepting drops it. Never nested.
@@ -49,7 +56,8 @@ export interface ProposedField {
   fieldPath: string;
   value: ProvenanceValue;
   kind: ProposalKind;
-  provenance: Omit<ProvenanceEntry, "state" | "value" | "at" | "kind">;
+  /** `warning` is never proposed directly — a `kind: "warning"` proposal becomes one in merge */
+  provenance: Omit<ProvenanceEntry, "state" | "value" | "at" | "kind" | "warning">;
   /** Permit-stage record proposals only; absent elsewhere (dedupe treats absent as rank 0) */
   authority?: ProposalAuthority;
 }

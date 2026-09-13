@@ -62,7 +62,10 @@ export function valuesEqual(a: unknown, b: unknown): boolean {
  *    otherwise the proposal becomes "suggested" with the edited entry kept in `prior` so
  *    dismissing the chip restores it. A later run replaces such a suggestion but carries
  *    the same `prior` forward (never nested) and treats it as the edited entry it stands for.
- *  - kind "warning" → provenance entry state "suggested", no fill
+ *  - kind "warning" → handled after every fill of the same merge (order-independent): when the
+ *    path already carries a fill entry (prefilled / suggested / edited — from this merge or an
+ *    earlier one) the warning text is attached to it as `warning`; otherwise a warning-only
+ *    provenance entry, state "suggested", no fill (audit 5.1: one provenance slot per path)
  *  - confidence ≥ PREFILL_FILL_THRESHOLD and current value empty/default → fill + "prefilled"
  *  - otherwise → "suggested"
  *  - existing "prefilled" entry is replaced only if the current value still equals its proposed
@@ -79,7 +82,11 @@ export function mergeProposals(
   const next: FieldProvenance = { ...provenance };
   const fills: MergeResult["fills"] = [];
 
-  for (const proposal of proposals) {
+  // Warnings are resolved after every fill so the outcome does not depend on stage order
+  const fillProposals = proposals.filter((p) => p.kind !== "warning");
+  const warningProposals = proposals.filter((p) => p.kind === "warning");
+
+  for (const proposal of fillProposals) {
     const fieldPath = normalizeFieldPath(proposal.fieldPath);
     const existing = next[fieldPath];
     const current = getPath(formData, fieldPath);
@@ -104,17 +111,8 @@ export function mergeProposals(
       continue;
     }
     if (userEntry?.state === "edited") {
-      if (proposal.kind !== "warning" && valuesEqual(current, proposal.value)) continue;
-      next[fieldPath] = {
-        ...base,
-        state: "suggested",
-        value: proposal.kind === "warning" ? "" : proposal.value,
-        prior: userEntry,
-      };
-      continue;
-    }
-    if (proposal.kind === "warning") {
-      next[fieldPath] = { ...base, state: "suggested", value: "" };
+      if (valuesEqual(current, proposal.value)) continue;
+      next[fieldPath] = { ...base, state: "suggested", value: proposal.value, prior: userEntry };
       continue;
     }
     if (proposal.provenance.confidence < PREFILL_FILL_THRESHOLD) {
@@ -142,6 +140,27 @@ export function mergeProposals(
       continue;
     }
     suggest();
+  }
+
+  for (const proposal of warningProposals) {
+    const fieldPath = normalizeFieldPath(proposal.fieldPath);
+    const existing = next[fieldPath];
+    if (userEntryOf(existing)?.state === "verified") {
+      continue;
+    }
+    // A fill entry already owns the slot (from this merge or an earlier one): ride on it
+    if (existing && existing.kind === "fill") {
+      next[fieldPath] = { ...existing, warning: proposal.provenance.explanation };
+      continue;
+    }
+    next[fieldPath] = {
+      ...proposal.provenance,
+      kind: "warning",
+      state: "suggested",
+      value: "",
+      runId: opts.runId,
+      at: now,
+    };
   }
 
   return { fills, provenance: next };

@@ -18,6 +18,8 @@ export interface ProvenanceContextValue {
   acceptSuggestion(fieldPath: string): void;
   /** Removes the chip; a suggestion that replaced an edited entry restores that entry instead */
   dismissSuggestion(fieldPath: string): void;
+  /** Removes only the warning line attached to an entry (audit 5.1); the entry itself stays */
+  dismissWarning(fieldPath: string): void;
   /** Merge entries in — used by the prefill hook, the APN lookup and the scan flow */
   setMany(entries: FieldProvenance): void;
 }
@@ -33,6 +35,7 @@ export const NOOP_PROVENANCE: ProvenanceContextValue = {
   clear: noop,
   acceptSuggestion: noop,
   dismissSuggestion: noop,
+  dismissWarning: noop,
   setMany: noop,
 };
 
@@ -215,6 +218,21 @@ export function ProvenanceProvider({
     [update],
   );
 
+  const dismissWarning = React.useCallback(
+    (fieldPath: string) => {
+      const key = normalizeFieldPath(fieldPath);
+      // Nothing to drop → don't mark the map dirty
+      if (provenanceRef.current[key]?.warning === undefined) return;
+      update((prev) => {
+        const current = prev[key];
+        if (!current || current.warning === undefined) return prev;
+        const { warning: _warning, ...rest } = current;
+        return { ...prev, [key]: rest };
+      });
+    },
+    [update],
+  );
+
   const setMany = React.useCallback(
     (entries: FieldProvenance) => {
       update((prev) => {
@@ -262,9 +280,10 @@ export function ProvenanceProvider({
       clear,
       acceptSuggestion,
       dismissSuggestion,
+      dismissWarning,
       setMany,
     }),
-    [provenance, readOnly, get, verify, clear, acceptSuggestion, dismissSuggestion, setMany],
+    [provenance, readOnly, get, verify, clear, acceptSuggestion, dismissSuggestion, dismissWarning, setMany],
   );
 
   return <ProvenanceContext.Provider value={value}>{children}</ProvenanceContext.Provider>;

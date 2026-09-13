@@ -186,6 +186,39 @@ describe("ProvenanceProvider", () => {
     expect(result.current.provenance).toEqual({});
   });
 
+  it("dismissWarning drops only the warning line and leaves the entry (and its state) in place", () => {
+    const formRef: FormRef = { current: null };
+    const warned = entry({ value: "residential", warning: 'Listing says "Sewer" — confirm this property is on septic' });
+    const { result } = renderHook(() => useProvenance(), {
+      wrapper: makeWrapper({ formRef, initial: { "facilityInfo.wastewaterSource": warned } }),
+    });
+    act(() => result.current.dismissWarning("facilityInfo.wastewaterSource"));
+    const { warning: _warning, ...rest } = warned;
+    expect(result.current.provenance["facilityInfo.wastewaterSource"]).toEqual(rest);
+    expect(result.current.provenance["facilityInfo.wastewaterSource"]).not.toHaveProperty("warning");
+    // persisted like every other mutation
+    act(() => {
+      vi.advanceTimersByTime(PROVENANCE_SAVE_DEBOUNCE_MS);
+    });
+    expect(lastPatchBody().fieldProvenance["facilityInfo.wastewaterSource"]).toEqual(rest);
+  });
+
+  it("dismissWarning is a no-op for a missing entry or one without a warning", () => {
+    const formRef: FormRef = { current: null };
+    const plain = entry();
+    const { result } = renderHook(() => useProvenance(), {
+      wrapper: makeWrapper({ formRef, initial: { "facilityInfo.facilityName": plain } }),
+    });
+    const before = result.current.provenance;
+    act(() => result.current.dismissWarning("facilityInfo.facilityName"));
+    act(() => result.current.dismissWarning("facilityInfo.facilityCity"));
+    expect(result.current.provenance).toBe(before);
+    act(() => {
+      vi.advanceTimersByTime(PROVENANCE_SAVE_DEBOUNCE_MS);
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("dismissSuggestion restores the remembered edited entry instead of clearing it", () => {
     const formRef: FormRef = { current: null };
     const edited = entry({ state: "edited", value: "JOHN DOE", at: "2026-09-10T00:00:00.000Z" });

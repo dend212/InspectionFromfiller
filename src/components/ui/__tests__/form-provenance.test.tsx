@@ -138,6 +138,27 @@ describe("FormLabel / FormItem provenance integration", () => {
   });
 });
 
+describe("FormItem — prefilled field carrying a warning (audit 5.1)", () => {
+  const SEWER = 'Listing says "Sewer" — confirm this property is on septic';
+
+  it("keeps the Prefilled badge and renders the amber warning line under the field", async () => {
+    const user = userEvent.setup();
+    render(<WithProvenance initial={{ "facilityInfo.facilityName": { ...ENTRY, warning: SEWER } }} />);
+    expect(screen.getByRole("button", { name: "Prefilled from County Assessor, 100% confidence" })).toBeInTheDocument();
+    const line = document.querySelector("[data-slot=provenance-warning]");
+    expect(line).not.toBeNull();
+    expect(line?.closest("[data-slot=form-item]")).toHaveAttribute("data-field-path", "facilityInfo.facilityName");
+    expect(screen.getByText(SEWER)).toBeInTheDocument();
+    // no suggestion to accept — the field is filled
+    expect(screen.queryByRole("button", { name: /accept suggestion/i })).toBeNull();
+    expect(document.querySelector("[data-slot=suggestion-chip]")).toBeNull();
+    // dismissing the line leaves the badge
+    await user.click(screen.getByRole("button", { name: "Dismiss warning" }));
+    expect(document.querySelector("[data-slot=provenance-warning]")).toBeNull();
+    expect(screen.getByRole("button", { name: "Prefilled from County Assessor, 100% confidence" })).toBeInTheDocument();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Checkbox groups (one field path, many controls) and boolean checkbox rows
 // ---------------------------------------------------------------------------
@@ -233,6 +254,20 @@ describe("FormFieldGroup (checkbox group sharing one field path)", () => {
     expect(label.parentElement).toHaveClass("flex", "items-center");
     // The group is named by its label, not by the badge
     expect(screen.getByRole("group", { name: "System Type" })).toBeInTheDocument();
+  });
+
+  it("renders the warning line once for a prefilled group that carries one", () => {
+    render(
+      <SystemTypeGroup
+        initial={{
+          [GROUP_FIELD]: { ...GROUP_SUGGESTION, state: "prefilled", confidence: 0.9, warning: "Confirm the system is not shared" },
+        }}
+      />,
+    );
+    expect(document.querySelectorAll("[data-slot=provenance-warning]")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-slot=suggestion-chip]")).toHaveLength(0);
+    expect(screen.getByText("Confirm the system is not shared")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Prefilled from Permit records, 90% confidence" })).toHaveLength(1);
   });
 
   it("renders one badge next to the group label for a prefilled group and none inside the rows", () => {

@@ -44,10 +44,11 @@ interface SuggestionChipProps {
 }
 
 /**
- * Rendered by FormItem under a field whose provenance entry is "suggested":
- * below-threshold values and proposals for fields that already had a value.
- * Tap the text to accept; × dismisses. Warnings carry no value — dismiss only.
- * Hidden while the field already holds the suggested value.
+ * Rendered by FormItem under a field whose provenance entry is "suggested" or carries a
+ * `warning`: below-threshold values and proposals for fields that already had a value, plus
+ * the amber caution a warning proposal attached to a filled field (audit 5.1). Tap the chip
+ * text to accept; × dismisses. Warnings carry no value — dismiss only. The suggestion chip is
+ * hidden while the field already holds the suggested value; the warning line is independent.
  */
 export function SuggestionChip({ fieldPath }: SuggestionChipProps) {
   // Outside a react-hook-form provider (tests, stray usages) there is no live value to compare
@@ -61,54 +62,74 @@ function WatchedSuggestionChip({ fieldPath }: SuggestionChipProps) {
   return <SuggestionChipBody fieldPath={fieldPath} currentValue={currentValue} />;
 }
 
+const CHIP_CLASS =
+  // w-fit + justify-self-start: hug the text instead of stretching to the grid column;
+  // max-w-full + min-w-0: still wrap inside that column.
+  "inline-flex w-fit min-w-0 max-w-full justify-self-start items-start gap-1 whitespace-normal break-words rounded-lg border px-2 py-0.5 text-xs";
+
 function SuggestionChipBody({
   fieldPath,
   currentValue,
 }: SuggestionChipProps & { currentValue?: unknown }) {
-  const { entry, acceptSuggestion, dismissSuggestion, readOnly } = useProvenance(fieldPath);
-  if (!entry || entry.state !== "suggested") return null;
+  const { entry, acceptSuggestion, dismissSuggestion, dismissWarning, readOnly } = useProvenance(fieldPath);
+  if (!entry) return null;
 
   const meta = SOURCE_META[entry.source];
   const isWarning = entry.kind === "warning";
   // Nothing to suggest when the field already says exactly this (warnings have no value to compare)
-  if (!isWarning && valuesEqual(currentValue, entry.value)) return null;
+  const showChip = entry.state === "suggested" && (isWarning || !valuesEqual(currentValue, entry.value));
+  const warning = entry.warning;
+  if (!showChip && !warning) return null;
 
   return (
-    <div
-      data-slot="suggestion-chip"
-      className={cn(
-        // w-fit + justify-self-start: hug the text instead of stretching to the grid column;
-        // max-w-full + min-w-0: still wrap inside that column.
-        "inline-flex w-fit min-w-0 max-w-full justify-self-start items-start gap-1 whitespace-normal break-words rounded-lg border px-2 py-0.5 text-xs",
-        isWarning ? WARNING_CLASS : meta.accentClass,
+    <>
+      {showChip && (
+        <div data-slot="suggestion-chip" className={cn(CHIP_CLASS, isWarning ? WARNING_CLASS : meta.accentClass)}>
+          {isWarning ? (
+            <span className="min-w-0 whitespace-normal break-words" title={entry.explanation}>
+              {entry.explanation}
+            </span>
+          ) : (
+            <button
+              type="button"
+              disabled={readOnly}
+              aria-label={`Accept suggestion from ${meta.label}: ${formatFieldValue(fieldPath, entry.value)}`}
+              title={suggestionText(entry, fieldPath)}
+              onClick={() => acceptSuggestion(fieldPath)}
+              className="min-w-0 whitespace-normal break-words text-left underline-offset-2 hover:underline disabled:no-underline"
+            >
+              {suggestionDisplayText(entry, fieldPath)}
+            </button>
+          )}
+          {!readOnly && (
+            <button
+              type="button"
+              aria-label="Dismiss suggestion"
+              onClick={() => dismissSuggestion(fieldPath)}
+              className="ml-1 shrink-0 rounded-full p-0.5 hover:bg-black/5"
+            >
+              <X className="h-3 w-3" aria-hidden="true" />
+            </button>
+          )}
+        </div>
       )}
-    >
-      {isWarning ? (
-        <span className="min-w-0 whitespace-normal break-words" title={entry.explanation}>
-          {entry.explanation}
-        </span>
-      ) : (
-        <button
-          type="button"
-          disabled={readOnly}
-          aria-label={`Accept suggestion from ${meta.label}: ${formatFieldValue(fieldPath, entry.value)}`}
-          title={suggestionText(entry, fieldPath)}
-          onClick={() => acceptSuggestion(fieldPath)}
-          className="min-w-0 whitespace-normal break-words text-left underline-offset-2 hover:underline disabled:no-underline"
-        >
-          {suggestionDisplayText(entry, fieldPath)}
-        </button>
+      {warning && (
+        <div data-slot="provenance-warning" className={cn(CHIP_CLASS, WARNING_CLASS)}>
+          <span className="min-w-0 whitespace-normal break-words" title={warning}>
+            {warning}
+          </span>
+          {!readOnly && (
+            <button
+              type="button"
+              aria-label="Dismiss warning"
+              onClick={() => dismissWarning(fieldPath)}
+              className="ml-1 shrink-0 rounded-full p-0.5 hover:bg-black/5"
+            >
+              <X className="h-3 w-3" aria-hidden="true" />
+            </button>
+          )}
+        </div>
       )}
-      {!readOnly && (
-        <button
-          type="button"
-          aria-label="Dismiss suggestion"
-          onClick={() => dismissSuggestion(fieldPath)}
-          className="ml-1 shrink-0 rounded-full p-0.5 hover:bg-black/5"
-        >
-          <X className="h-3 w-3" aria-hidden="true" />
-        </button>
-      )}
-    </div>
+    </>
   );
 }
