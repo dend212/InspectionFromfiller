@@ -136,8 +136,9 @@ function normaliseDirection(dir: string | undefined): string | undefined {
   return /^(N|S|E|W|NE|NW|SE|SW)$/.test(upper) ? upper : undefined;
 }
 
-function zip5(zip: string | null | undefined): string {
-  const digits = (zip ?? "").replace(/\D/g, "");
+function zip5(zip: string | number | null | undefined): string {
+  // The layer serves PHYSICAL_ZIP as text today; coerce so a numeric field never throws mid-stage
+  const digits = String(zip ?? "").replace(/\D/g, "");
   return digits.length >= 5 ? digits.slice(0, 5) : "";
 }
 
