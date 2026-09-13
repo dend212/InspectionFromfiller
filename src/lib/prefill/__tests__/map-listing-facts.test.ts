@@ -180,17 +180,21 @@ describe("mapListingFacts — homeType → wastewaterSource + facilityType (task
   });
 });
 
-describe("dedupeProposals — assessor property-use code beats the listing homeType fallback (existing SOURCE_RANK rule)", () => {
-  it("keeps the assessor residential proposal over the listing's", () => {
+describe("dedupeProposals — assessor property-use code beats the listing homeType fallback (per-field source order)", () => {
+  it("keeps the assessor residential proposal over the listing's even when the listing is more confident", () => {
     const assessorResidential: ProposedField = {
       fieldPath: "facilityInfo.wastewaterSource",
       value: "residential",
       kind: "fill",
-      provenance: { source: "assessor", confidence: 0.95, explanation: "Maricopa County Assessor · property use code 0141 (single family residence)" },
+      provenance: { source: "assessor", confidence: 0.85, explanation: "Maricopa County Assessor · property use code 0141 (single family residence)" },
     };
-    const [listingResidential] = mapListingFacts(facts({ homeType: "SINGLE_FAMILY" }));
-    const out = dedupeProposals([assessorResidential, listingResidential]);
-    expect(out).toEqual([assessorResidential]);
+    const [mapped] = mapListingFacts(facts({ homeType: "SINGLE_FAMILY" }));
+    const listingResidential: ProposedField = {
+      ...mapped,
+      provenance: { ...mapped.provenance, confidence: 0.95 },
+    };
+    expect(dedupeProposals([assessorResidential, listingResidential])).toEqual([assessorResidential]);
+    expect(dedupeProposals([listingResidential, assessorResidential])).toEqual([assessorResidential]);
   });
 });
 

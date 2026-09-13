@@ -553,6 +553,40 @@ describe("dedupeProposals", () => {
     expect(out).toHaveLength(2);
   });
 
+  describe("per-field source order (audit batch 0 §2.2) — property use is assessor > listing > permit", () => {
+    const assessor = (fieldPath: string, value: string, confidence: number): ProposedField => ({
+      fieldPath,
+      value,
+      kind: "fill",
+      provenance: { source: "assessor", confidence, explanation: "a" },
+    });
+    const rankedPermit = (fieldPath: string, value: string, confidence: number): ProposedField => ({
+      ...permit(fieldPath, value, confidence),
+      authority: { docRank: 0 },
+    });
+
+    it("lets a confident assessor PUC beat a permit-class inference for wastewaterSource", () => {
+      const puc = assessor("facilityInfo.wastewaterSource", "residential", 0.95);
+      const inferred = rankedPermit("facilityInfo.wastewaterSource", "commercial", 0.7);
+      expect(dedupeProposals([inferred, puc])).toEqual([puc]);
+      expect(dedupeProposals([puc, inferred])).toEqual([puc]);
+    });
+
+    it("lets the listing homeType beat a more confident permit for facilityType", () => {
+      const home = listing("facilityInfo.facilityType", "single_family", 0.85);
+      const fromPermit = rankedPermit("facilityInfo.facilityType", "commercial", 0.9);
+      expect(dedupeProposals([fromPermit, home])).toEqual([home]);
+      expect(dedupeProposals([home, fromPermit])).toEqual([home]);
+    });
+
+    it("leaves every other field on the default order — permit still beats the assessor for facilityAge", () => {
+      const fromPermit = rankedPermit("facilityInfo.facilityAge", "26", 0.8);
+      const fromAssessor = assessor("facilityInfo.facilityAge", "28", 0.95);
+      expect(dedupeProposals([fromAssessor, fromPermit])).toEqual([fromPermit]);
+      expect(dedupeProposals([fromPermit, fromAssessor])).toEqual([fromPermit]);
+    });
+  });
+
   describe("document authority", () => {
     const ranked = (fieldPath: string, value: string, confidence: number, docRank: number): ProposedField => ({
       ...permit(fieldPath, value, confidence),

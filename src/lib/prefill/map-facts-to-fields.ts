@@ -307,13 +307,28 @@ export function mapPermitFacts(
 
 const SOURCE_RANK: Record<PrefillSource, number> = { permit: 3, assessor: 2, listing: 1, scan: 0 };
 
+/**
+ * Per-field overrides of SOURCE_RANK (audit batch 0 §2.2). A permit describes the parcel as
+ * it was when the system was built; the assessor's property use code is the current
+ * classification and the listing's home type is fresher than any permit — so for these two
+ * paths only: assessor > listing > permit. Every other path keeps the default order.
+ */
+const FIELD_SOURCE_RANK: Partial<Record<string, Record<PrefillSource, number>>> = {
+  "facilityInfo.wastewaterSource": { assessor: 3, listing: 2, permit: 1, scan: 0 },
+  "facilityInfo.facilityType": { assessor: 3, listing: 2, permit: 1, scan: 0 },
+};
+
+function sourceRankOf(p: ProposedField): number {
+  return (FIELD_SOURCE_RANK[p.fieldPath] ?? SOURCE_RANK)[p.provenance.source];
+}
+
 function docRankOf(p: ProposedField): number {
   return p.authority?.docRank ?? 0;
 }
 
 /** True when `p` should replace `cur` for the same `kind:fieldPath` */
 function beats(p: ProposedField, cur: ProposedField): boolean {
-  const rankDiff = SOURCE_RANK[p.provenance.source] - SOURCE_RANK[cur.provenance.source];
+  const rankDiff = sourceRankOf(p) - sourceRankOf(cur);
   if (rankDiff !== 0) return rankDiff > 0;
   const docDiff = docRankOf(p) - docRankOf(cur);
   if (docDiff !== 0) return docDiff < 0;
@@ -322,7 +337,7 @@ function beats(p: ProposedField, cur: ProposedField): boolean {
 
 /**
  * Combine stage proposals per `kind:fieldPath`: higher SOURCE_RANK wins (permit > assessor >
- * listing > scan); within a source the more authoritative document wins (lower
+ * listing > scan, except the FIELD_SOURCE_RANK paths); within a source the more authoritative document wins (lower
  * `authority.docRank`; no authority = rank 0, i.e. the EDMS index row); then strictly higher
  * confidence; then first-seen. Warnings never collide with fills. Output keeps first-seen order.
  */
