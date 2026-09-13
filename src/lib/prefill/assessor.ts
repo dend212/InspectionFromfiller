@@ -12,6 +12,7 @@ const ARCGIS_TIMEOUT_MS = 10_000;
 const OUT_FIELDS = [
   "OWNER_NAME",
   "PHYSICAL_ADDRESS",
+  "PHYSICAL_STREET_DIR",
   "PHYSICAL_CITY",
   "PHYSICAL_ZIP",
   "JURISDICTION",
@@ -29,6 +30,8 @@ const OUT_FIELDS = [
 export interface ParcelAttributes {
   OWNER_NAME?: string | null;
   PHYSICAL_ADDRESS?: string | null;
+  /** Compass direction of the situs street ("E" in "3402 E SELLS DR"); the address lookup filters on it */
+  PHYSICAL_STREET_DIR?: string | null;
   PHYSICAL_CITY?: string | null;
   PHYSICAL_ZIP?: string | null;
   JURISDICTION?: string | null;
@@ -119,20 +122,51 @@ export async function queryParcelByApn(
   return first ?? null;
 }
 
-/** Parcel by house number + street name (direction/suffix stripped). Null for unusable input, without a request. */
+/** Hints that disambiguate a house number + street name shared by several parcels */
+export interface AddressHints {
+  /** Compass direction as parsed from the input ("E"); anything but N/S/E/W/NE/NW/SE/SW is ignored */
+  streetDir?: string;
+  /** Input ZIP; compared on its first five digits against the layer's `PHYSICAL_ZIP` */
+  zip?: string;
+}
+
+/** "e" → "E"; undefined for anything that is not a compass direction (the only form safe in a `where`) */
+function normaliseDirection(dir: string | undefined): string | undefined {
+  const upper = (dir ?? "").trim().toUpperCase();
+  return /^(N|S|E|W|NE|NW|SE|SW)$/.test(upper) ? upper : undefined;
+}
+
+function zip5(zip: string | null | undefined): string {
+  const digits = (zip ?? "").replace(/\D/g, "");
+  return digits.length >= 5 ? digits.slice(0, 5) : "";
+}
+
+/**
+ * Parcel by house number + street name (direction/suffix stripped from the name). Null for
+ * unusable input, without a request. Phoenix streets repeat on both sides of Central
+ * (3402 E Sells Dr ≠ 3402 W Sells Dr), so when the input carries a direction the layer is
+ * asked for that side first and the undirected query is only the fallback; a ZIP hint then
+ * picks among the rows, else the first row wins as before.
+ */
 export async function findParcelByAddress(
   streetNumber: string,
   streetName: string,
   opts?: QueryOptions,
+  hints: AddressHints = {},
 ): Promise<ParcelAttributes | null> {
   const number = streetNumber.trim();
   const name = normalizeStreetName(streetName);
   if (!/^\d{1,8}$/.test(number) || !name) return null;
-  const [first] = await queryParcels(
-    `PHYSICAL_STREET_NUM='${number}' AND PHYSICAL_STREET_NAME LIKE '${name}%'`,
-    opts,
-  );
-  return first ?? null;
+
+  const undirected = `PHYSICAL_STREET_NUM='${number}' AND PHYSICAL_STREET_NAME LIKE '${name}%'`;
+  const dir = normaliseDirection(hints.streetDir);
+  let rows: ParcelAttributes[] = [];
+  if (dir) rows = await queryParcels(`${undirected} AND PHYSICAL_STREET_DIR='${dir}'`, opts);
+  if (rows.length === 0) rows = await queryParcels(undirected, opts);
+
+  const zip = zip5(hints.zip);
+  const inZip = zip ? rows.find((row) => zip5(row.PHYSICAL_ZIP) === zip) : undefined;
+  return inZip ?? rows[0] ?? null;
 }
 
 /** "8911 E CAVE CREEK RD   CAREFREE  85377" → "8911 E CAVE CREEK RD" (the layer appends city/zip after runs of spaces) */
@@ -208,9 +242,12 @@ export async function runAssessorStage(
     }
     if (!feature && input.address) {
       searched.push(`${input.address.streetNumber} ${input.address.streetName}`.trim());
-      feature = await findParcelByAddress(input.address.streetNumber, input.address.streetName, {
-        signal: ctx.signal,
-      });
+      feature = await findParcelByAddress(
+        input.address.streetNumber,
+        input.address.streetName,
+        { signal: ctx.signal },
+        { streetDir: input.address.streetDir, zip: input.address.zip },
+      );
     }
 
     const finishedAt = new Date().toISOString();

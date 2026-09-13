@@ -103,6 +103,85 @@ describe("findParcelByAddress", () => {
     expect(await findParcelByAddress("12", "'--")).toBeNull();
     expect(mockFetch).not.toHaveBeenCalled();
   });
+
+  describe("street direction + ZIP hints (e2e D1: 3402 E Sells Dr resolved to the W Sells parcel)", () => {
+    const W_SELLS = {
+      ...FEATURE,
+      APN_DASH: "154-22-029",
+      PHYSICAL_ADDRESS: "3402 W SELLS DR   PHOENIX  85017",
+      PHYSICAL_STREET_DIR: "W",
+      PHYSICAL_ZIP: "85017",
+    };
+    const E_SELLS = {
+      ...FEATURE,
+      APN_DASH: "170-28-066F",
+      PHYSICAL_ADDRESS: "3402 E SELLS DR   PHOENIX  85018",
+      PHYSICAL_STREET_DIR: "E",
+      PHYSICAL_ZIP: "85018",
+    };
+    const UNDIRECTED = "PHYSICAL_STREET_NUM='3402' AND PHYSICAL_STREET_NAME LIKE 'SELLS%'";
+    const DIRECTED = `${UNDIRECTED} AND PHYSICAL_STREET_DIR='E'`;
+
+    it("requests PHYSICAL_STREET_DIR from the layer", async () => {
+      await findParcelByAddress("3402", "Sells Dr");
+      const outFields = new URL(String(mockFetch.mock.calls[0][0])).searchParams.get("outFields") ?? "";
+      expect(outFields.split(",")).toContain("PHYSICAL_STREET_DIR");
+    });
+
+    it("queries the direction first and picks the row in the hinted ZIP", async () => {
+      mockFetch.mockResolvedValue(arcgis([W_SELLS, E_SELLS]));
+      const feature = await findParcelByAddress("3402", "Sells Dr", undefined, { streetDir: "E", zip: "85018" });
+      expect(feature?.APN_DASH).toBe("170-28-066F");
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(whereOf(mockFetch.mock.calls[0])).toBe(DIRECTED);
+    });
+
+    it("falls back to the undirected query only when the directed one returns no rows", async () => {
+      mockFetch.mockResolvedValueOnce(arcgis([])).mockResolvedValueOnce(arcgis([W_SELLS, E_SELLS]));
+      const feature = await findParcelByAddress("3402", "Sells Dr", undefined, { streetDir: "E" });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(whereOf(mockFetch.mock.calls[0])).toBe(DIRECTED);
+      expect(whereOf(mockFetch.mock.calls[1])).toBe(UNDIRECTED);
+      // no ZIP hint: the first row is what the layer returned first (today's behaviour)
+      expect(feature?.APN_DASH).toBe("154-22-029");
+    });
+
+    it("with no direction, a ZIP hint alone picks the row in that ZIP from the undirected query", async () => {
+      mockFetch.mockResolvedValue(arcgis([W_SELLS, E_SELLS]));
+      const feature = await findParcelByAddress("3402", "Sells Dr", undefined, { zip: "85018" });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(whereOf(mockFetch.mock.calls[0])).toBe(UNDIRECTED);
+      expect(feature?.APN_DASH).toBe("170-28-066F");
+    });
+
+    it("compares ZIPs on their first five digits and falls back to the first row when none match", async () => {
+      mockFetch.mockResolvedValue(arcgis([W_SELLS, { ...E_SELLS, PHYSICAL_ZIP: "85018-1234" }]));
+      expect((await findParcelByAddress("3402", "Sells Dr", undefined, { zip: "85018-9999" }))?.APN_DASH).toBe(
+        "170-28-066F",
+      );
+      expect((await findParcelByAddress("3402", "Sells Dr", undefined, { zip: "85999" }))?.APN_DASH).toBe(
+        "154-22-029",
+      );
+    });
+
+    it("with neither hint returns the first row (today's behaviour)", async () => {
+      mockFetch.mockResolvedValue(arcgis([W_SELLS, E_SELLS]));
+      const feature = await findParcelByAddress("3402", "Sells Dr", undefined, {});
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(whereOf(mockFetch.mock.calls[0])).toBe(UNDIRECTED);
+      expect(feature?.APN_DASH).toBe("154-22-029");
+    });
+
+    it("upper-cases a direction hint and ignores one that is not a compass direction", async () => {
+      mockFetch.mockResolvedValue(arcgis([E_SELLS]));
+      await findParcelByAddress("3402", "Sells Dr", undefined, { streetDir: "e" });
+      expect(whereOf(mockFetch.mock.calls[0])).toBe(DIRECTED);
+      mockFetch.mockClear();
+      await findParcelByAddress("3402", "Sells Dr", undefined, { streetDir: "X'" });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(whereOf(mockFetch.mock.calls[0])).toBe(UNDIRECTED);
+    });
+  });
 });
 
 describe("cleanPhysicalAddress / mapParcelToAssessor", () => {
@@ -194,6 +273,21 @@ describe("runAssessorStage", () => {
     expect(result.proposals.find((p) => p.fieldPath === "facilityInfo.taxParcelNumber")?.value).toBe(
       "219-11-121",
     );
+  });
+
+  it("hands the input's street direction and ZIP to the address lookup", async () => {
+    mockFetch.mockResolvedValue(
+      arcgis([{ ...FEATURE, APN_DASH: "170-28-066F", PHYSICAL_ADDRESS: "3402 E SELLS DR   PHOENIX  85018", PHYSICAL_ZIP: "85018" }]),
+    );
+    const result = await runAssessorStage(
+      { address: { streetNumber: "3402", streetDir: "E", streetName: "Sells Dr", city: "Phoenix", zip: "85018" } },
+      makeCtx(),
+    );
+    expect(whereOf(mockFetch.mock.calls[0])).toBe(
+      "PHYSICAL_STREET_NUM='3402' AND PHYSICAL_STREET_NAME LIKE 'SELLS%' AND PHYSICAL_STREET_DIR='E'",
+    );
+    expect(result.stage.status).toBe("done");
+    expect(result.resolved?.apn).toBe("170-28-066F");
   });
 
   it("returns not_found naming what was searched", async () => {
