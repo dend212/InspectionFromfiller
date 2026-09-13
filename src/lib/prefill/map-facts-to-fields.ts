@@ -243,8 +243,13 @@ export function mapPermitFacts(
     }
   }
 
-  // §7 rows + amendment A1/A4: every extracted tank → septicTank.tanks.<i>.* (react-hook-form dotted form)
-  facts.tanks.forEach((tank, i) => {
+  // §7 rows + amendment A1/A4: every extracted septic tank → septicTank.tanks.<i>.* (react-hook-form
+  // dotted form). The form's tanks[] holds septic tanks only, so the slots are indexed over the
+  // septic tanks (NON_SEPTIC_TANK rows get none) and line up with numberOfTanks below — otherwise
+  // an ATU at tanks.0 would survive the step's `tanks.slice(0, numberOfTanks)` and the septic tank
+  // behind it would be the one deleted.
+  const septicTanks = facts.tanks.filter(isSepticTank);
+  septicTanks.forEach((tank, i) => {
     const base = `septicTank.tanks.${i}`;
     if (tank.capacityGal) {
       fill(`${base}.tankCapacity`, String(Math.round(tank.capacityGal.value)), prov(tank.capacityGal));
@@ -255,7 +260,6 @@ export function mapPermitFacts(
   });
   // numberOfTanks counts septic tanks only; a listed dosing/pump/treatment tank means the
   // count is an inference about which rows are septic tanks, so it is held to a chip (0.7)
-  const septicTanks = facts.tanks.filter(isSepticTank);
   if (septicTanks.length > 0) {
     const best = septicTanks
       .flatMap((t) => [t.capacityGal, t.material, t.model, t.dimensions])

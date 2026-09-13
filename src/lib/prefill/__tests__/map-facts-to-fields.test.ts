@@ -403,6 +403,11 @@ describe("mapPermitFacts — tanks that are not septic tanks (audit batch 0 §3b
     expect(n.value).toBe("1");
     expect(n.provenance.confidence).toBeLessThanOrEqual(0.7);
     expect(n.provenance.explanation).toBe("Permit OW-17-00474 · Discharge Authorization lists 1 tank (p.1)");
+    // review round 1: the per-tank slots follow the count — the septic tank is tanks.0, the ATU
+    // gets no septicTank.tanks.* slot (otherwise accepting "1" would slice(0,1) and keep the ATU)
+    expect(props["septicTank.tanks.0.tankCapacity"].value).toBe("1000");
+    expect(props["septicTank.tanks.0.capacityBasis"].value).toBe("permit_document");
+    expect(Object.keys(props).filter((k) => k.startsWith("septicTank.tanks.1."))).toEqual([]);
   });
 
   it.each([
@@ -418,8 +423,8 @@ describe("mapPermitFacts — tanks that are not septic tanks (audit batch 0 §3b
     const props = byPath(mapPermitFacts(facts, record));
     expect(props["generalTreatment.systemTypes"]).toBeUndefined();
     expect(props["septicTank.numberOfTanks"]).toBeUndefined();
-    // the per-tank fields still describe what the permit lists
-    expect(props["septicTank.tanks.0.tankCapacity"].value).toBe("500");
+    // the form's septicTank.tanks[] holds septic tanks only — a dosing tank gets no slot
+    expect(Object.keys(props).filter((k) => k.startsWith("septicTank.tanks."))).toEqual([]);
   });
 
   it("a lone dosing tank beside a disposal field still ticks only the disposal box", () => {
@@ -440,6 +445,28 @@ describe("mapPermitFacts — tanks that are not septic tanks (audit batch 0 §3b
     const uncapped = byPath(mapPermitFacts(plain, record))["septicTank.numberOfTanks"];
     expect(uncapped.value).toBe("2");
     expect(uncapped.provenance.confidence).toBe(0.97);
+  });
+
+  it("re-indexes the per-tank proposals over the septic tanks so the slots match the count", () => {
+    // dosing tank listed between two septic tanks: septic tanks take tanks.0 and tanks.1
+    const facts: PermitFacts = {
+      ...emptyPermitFacts(),
+      tanks: [
+        tankOf(1250, null, 0.97, 1),
+        tankOf(500, "dosing tank", 0.99, 2),
+        { capacityGal: f(1000, 0.95, 3, "1000 gal"), material: f("plastic" as const, 0.9, 3), model: null, dimensions: null },
+      ],
+    };
+    const props = byPath(mapPermitFacts(facts, record));
+    expect(props["septicTank.numberOfTanks"].value).toBe("2");
+    expect(props["septicTank.tanks.0.tankCapacity"].value).toBe("1250");
+    expect(props["septicTank.tanks.0.tankCapacity"].provenance.page).toBe(1);
+    expect(props["septicTank.tanks.1.tankCapacity"].value).toBe("1000");
+    expect(props["septicTank.tanks.1.tankMaterial"].value).toBe("plastic");
+    expect(props["septicTank.tanks.1.tankMaterial"].provenance.page).toBe(3);
+    // the dosing tank's 500 gal never lands in a septic-tank slot
+    expect(Object.values(props).some((p) => /^septicTank\.tanks\./.test(p.fieldPath) && p.value === "500")).toBe(false);
+    expect(Object.keys(props).filter((k) => k.startsWith("septicTank.tanks.2."))).toEqual([]);
   });
 });
 
