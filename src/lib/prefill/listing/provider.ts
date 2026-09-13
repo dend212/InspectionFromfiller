@@ -13,6 +13,8 @@ export interface ListingFacts {
   lotSqft?: number;
   /** Raw Zillow home type token (e.g. "SINGLE_FAMILY", "TOWNHOUSE"), as served — never normalised here. */
   homeType?: string;
+  /** Assessor parcel number as Zillow carries it (`parcelId`, else `resoFacts.parcelNumber`), trimmed — e.g. "21174047P" */
+  parcelId?: string;
   raw: Record<string, unknown>;
 }
 

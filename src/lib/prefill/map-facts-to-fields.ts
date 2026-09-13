@@ -5,7 +5,7 @@
 import type { Fact, PermitDocumentKind, PermitFacts } from "@/lib/ai/permit-extraction-schema";
 import { GP402_SYSTEM_TYPES, WATER_SOURCES } from "@/lib/constants/inspection";
 import type { ListingFacts } from "./listing/provider";
-import { SEWER_KEYS, WATER_KEYS, findFact, flattenText } from "./listing/zillow-apify";
+import { SEWER_KEYS, WATER_KEYS, canonicalHomeType, findFact, flattenText } from "./listing/zillow-apify";
 import { DOC_CLASS_RANK, classifyDocType } from "./permits/doc-types";
 import type { PrefillSource, ProposalAuthority, ProposedField } from "./types";
 
@@ -363,9 +363,9 @@ export const LISTING_SEWER_WARNING = 'Listing says "Sewer" — confirm this prop
 /**
  * Zillow homeType → Wastewater Source + Facility Type (fallback for a parcel the
  * assessor stage hasn't covered): assessor's property use code outranks this in
- * `dedupeProposals` (SOURCE_RANK: assessor 2 > listing 1) whenever both fire.
- * Compared upper-cased; `LOT`, `HOME_TYPE_UNKNOWN` and anything unmapped propose
- * nothing.
+ * `dedupeProposals` (FIELD_SOURCE_RANK: assessor > listing) whenever both fire.
+ * Keyed by the canonical token (`canonicalHomeType`); `LOT`, `HOME_TYPE_UNKNOWN`
+ * and anything unmapped propose nothing.
  */
 interface HomeTypeRule {
   wastewaterSource: "residential";
@@ -388,8 +388,33 @@ function humaniseHomeType(token: string): string {
   return token
     .split("_")
     .filter(Boolean)
-    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
+}
+
+/**
+ * Parcel guard (audit batch 0 §2 tier 2): a listing found by address can be the wrong
+ * house. When the listing carries a parcel number and the run has an APN, they must agree
+ * once dashes/spaces/case are stripped — the letter suffix stays significant, so
+ * `211-74-047P` is `21174047P` but `21174047` is not. Every listing proposal is then held
+ * under the fill gate and says why.
+ */
+export const LISTING_PARCEL_MISMATCH_CONFIDENCE = 0.6;
+
+function normaliseParcel(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+/** True when both sides are present and name different parcels */
+export function listingParcelMismatch(parcelId: string | undefined, apn: string | undefined): boolean {
+  const a = parcelId ? normaliseParcel(parcelId) : "";
+  const b = apn ? normaliseParcel(apn) : "";
+  return Boolean(a && b && a !== b);
+}
+
+export interface MapListingFactsOptions {
+  /** The run's APN, when it has one — compared against `facts.parcelId` */
+  apn?: string;
 }
 
 /** Original (un-normalised) text of a listing fact, for the popover evidence line. */
@@ -405,7 +430,7 @@ function listingEvidence(raw: Record<string, unknown>, keys: string[]): string |
   return text ? text : undefined;
 }
 
-export function mapListingFacts(facts: ListingFacts): ProposedField[] {
+export function mapListingFacts(facts: ListingFacts, opts: MapListingFactsOptions = {}): ProposedField[] {
   const out: ProposedField[] = [];
   const sourceUrl = facts.url ? { sourceUrl: facts.url } : {};
 
@@ -459,11 +484,12 @@ export function mapListingFacts(facts: ListingFacts): ProposedField[] {
   }
 
   if (facts.homeType) {
-    const rule = HOME_TYPE_RULES[facts.homeType.toUpperCase()];
+    const canonical = canonicalHomeType(facts.homeType);
+    const rule = HOME_TYPE_RULES[canonical];
     if (rule) {
       const provenance = {
         source: "listing" as const,
-        explanation: `Zillow lists the home as ${humaniseHomeType(facts.homeType.toUpperCase())}`,
+        explanation: `Zillow lists the home as ${humaniseHomeType(canonical)}`,
         evidence: `homeType: ${facts.homeType}`,
         ...sourceUrl,
       };
@@ -486,5 +512,16 @@ export function mapListingFacts(facts: ListingFacts): ProposedField[] {
     }
   }
 
+  if (listingParcelMismatch(facts.parcelId, opts.apn)) {
+    const note = ` · listing parcel ${facts.parcelId} ≠ APN ${opts.apn} — confirm this is the right property`;
+    return out.map((p) => ({
+      ...p,
+      provenance: {
+        ...p.provenance,
+        confidence: Math.min(p.provenance.confidence, LISTING_PARCEL_MISMATCH_CONFIDENCE),
+        explanation: `${p.provenance.explanation}${note}`,
+      },
+    }));
+  }
   return out;
 }

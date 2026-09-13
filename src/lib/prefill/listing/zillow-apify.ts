@@ -219,6 +219,54 @@ function findHomeType(item: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
+/**
+ * Canonical Zillow home-type token for the `HOME_TYPE_RULES` lookup: upper-case,
+ * letters only, then the spellings Zillow uses across `homeType`, `resoFacts.homeType`
+ * ("SingleFamily") and `resoFacts.propertySubType` ("Single Family Residence",
+ * "Manufactured Home") collapse onto the API's own enum. Anything unaliased comes back
+ * as its letters-only key, which simply misses the rule table (`LOT`, `HOMETYPEUNKNOWN`).
+ */
+const HOME_TYPE_ALIASES: Record<string, string> = {
+  SINGLEFAMILY: "SINGLE_FAMILY",
+  SINGLEFAMILYRESIDENCE: "SINGLE_FAMILY",
+  CONDOMINIUM: "CONDO",
+  CONDO: "CONDO",
+  MANUFACTUREDHOME: "MANUFACTURED",
+  MOBILEHOME: "MANUFACTURED",
+  MANUFACTURED: "MANUFACTURED",
+  TOWNHOME: "TOWNHOUSE",
+  TOWNHOUSE: "TOWNHOUSE",
+  MULTIFAMILY: "MULTI_FAMILY",
+  APARTMENT: "APARTMENT",
+};
+
+export function canonicalHomeType(raw: string): string {
+  const key = raw.toUpperCase().replace(/[^A-Z]/g, "");
+  return HOME_TYPE_ALIASES[key] ?? key;
+}
+
+/**
+ * The parcel number Zillow attaches to the listing, own data only: top-level
+ * `parcelId`, else `resoFacts.parcelNumber`; strings trimmed, a finite number as
+ * its decimal string. Compared against the run's APN by `mapListingFacts` so a
+ * listing for the wrong house is flagged rather than trusted.
+ */
+function parcelText(v: unknown): string | undefined {
+  if (typeof v === "string") return v.trim() || undefined;
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return undefined;
+}
+
+function findParcelId(item: Record<string, unknown>): string | undefined {
+  const own = parcelText(item.parcelId);
+  if (own) return own;
+  const reso = item.resoFacts;
+  if (reso && typeof reso === "object") {
+    return parcelText((reso as Record<string, unknown>).parcelNumber);
+  }
+  return undefined;
+}
+
 /** Absolute Zillow home-details URL from an absolute URL or an `hdpUrl` path. */
 function toZillowUrl(v: unknown): string | undefined {
   if (typeof v !== "string") return undefined;
@@ -258,6 +306,7 @@ export function normaliseListingItem(raw: unknown): ListingFacts | null {
   const yearBuilt = toInteger(findListingFact(item, YEAR_BUILT_KEYS));
   const lotSqft = findLotSqft(item);
   const homeType = findHomeType(item);
+  const parcelId = findParcelId(item);
 
   const hasFacts =
     waterSource !== undefined ||
@@ -278,6 +327,7 @@ export function normaliseListingItem(raw: unknown): ListingFacts | null {
   if (yearBuilt !== undefined) facts.yearBuilt = yearBuilt;
   if (lotSqft !== undefined) facts.lotSqft = lotSqft;
   if (homeType !== undefined) facts.homeType = homeType;
+  if (parcelId !== undefined) facts.parcelId = parcelId;
   return facts;
 }
 

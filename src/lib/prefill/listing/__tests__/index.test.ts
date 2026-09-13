@@ -95,6 +95,41 @@ describe("runListingStage", () => {
     ]);
   });
 
+  it("passes the run's APN to the mapper and flags a listing whose parcel is not that APN", async () => {
+    const facts: ListingFacts = {
+      provider: "zillow",
+      url: URL,
+      bedrooms: 3,
+      homeType: "SINGLE_FAMILY",
+      parcelId: "21174047P",
+      raw: {},
+    };
+    const result = await runListingStage(INPUT, makeCtx(), providerReturning(facts));
+    expect(result.stage.status).toBe("done");
+    expect(result.stage.summary).toBe("3 bed · Listing parcel 21174047P does not match APN 219-11-121");
+    expect(result.proposals.length).toBeGreaterThan(0);
+    for (const p of result.proposals) {
+      expect(p.provenance.confidence, p.fieldPath).toBeLessThanOrEqual(0.6);
+      expect(p.provenance.explanation, p.fieldPath).toContain(
+        "listing parcel 21174047P ≠ APN 219-11-121 — confirm this is the right property",
+      );
+    }
+  });
+
+  it("leaves the summary and confidences alone when the listing parcel is the APN (dashes ignored)", async () => {
+    const facts: ListingFacts = { provider: "zillow", url: URL, bedrooms: 3, parcelId: "21911121", raw: {} };
+    const result = await runListingStage(INPUT, makeCtx(), providerReturning(facts));
+    expect(result.stage.summary).toBe("3 bed");
+    expect(result.proposals[0].provenance.confidence).toBe(0.85);
+  });
+
+  it("does not guard an address-only run (no APN to compare against)", async () => {
+    const facts: ListingFacts = { provider: "zillow", url: URL, bedrooms: 3, parcelId: "21174047P", raw: {} };
+    const result = await runListingStage({ address: INPUT.address }, makeCtx(), providerReturning(facts));
+    expect(result.stage.summary).toBe("3 bed");
+    expect(result.proposals[0].provenance.confidence).toBe(0.85);
+  });
+
   it("returns done with no link when the listing has no URL", async () => {
     const facts: ListingFacts = { provider: "zillow", url: "", bedrooms: 2, raw: {} };
     const result = await runListingStage(INPUT, makeCtx(), providerReturning(facts));

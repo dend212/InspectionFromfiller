@@ -180,6 +180,106 @@ describe("mapListingFacts — homeType → wastewaterSource + facilityType (task
   });
 });
 
+describe("mapListingFacts — homeType canonicalisation (audit batch 0 §2 tier 2)", () => {
+  it.each([
+    ["SINGLE_FAMILY", "residential", 0.85, "single_family", 0.85, "Single Family"],
+    ["MANUFACTURED", "residential", 0.85, "single_family", 0.85, "Manufactured"],
+    ["TOWNHOUSE", "residential", 0.85, "single_family", 0.8, "Townhouse"],
+    ["CONDO", "residential", 0.85, "multifamily", 0.8, "Condo"],
+    ["APARTMENT", "residential", 0.85, "multifamily", 0.8, "Apartment"],
+    ["MULTI_FAMILY", "residential", 0.85, "multifamily", 0.8, "Multi Family"],
+    // resoFacts.homeType / propertySubType spellings and odd casing collapse onto the same rules
+    ["SingleFamily", "residential", 0.85, "single_family", 0.85, "Single Family"],
+    ["Single Family Residence", "residential", 0.85, "single_family", 0.85, "Single Family"],
+    ["Manufactured Home", "residential", 0.85, "single_family", 0.85, "Manufactured"],
+    ["Mobile Home", "residential", 0.85, "single_family", 0.85, "Manufactured"],
+    ["single_family", "residential", 0.85, "single_family", 0.85, "Single Family"],
+    ["Condominium", "residential", 0.85, "multifamily", 0.8, "Condo"],
+    ["Townhome", "residential", 0.85, "single_family", 0.8, "Townhouse"],
+    ["MultiFamily", "residential", 0.85, "multifamily", 0.8, "Multi Family"],
+  ])("%j → %s @ %s / %s @ %s, explained as %j", (raw, wsValue, wsConf, ftValue, ftConf, human) => {
+    const out = mapListingFacts(facts({ homeType: raw }));
+    expect(out).toEqual([
+      expect.objectContaining({
+        fieldPath: "facilityInfo.wastewaterSource",
+        value: wsValue,
+        provenance: expect.objectContaining({
+          confidence: wsConf,
+          explanation: `Zillow lists the home as ${human}`,
+          evidence: `homeType: ${raw}`,
+        }),
+      }),
+      expect.objectContaining({
+        fieldPath: "facilityInfo.facilityType",
+        value: ftValue,
+        provenance: expect.objectContaining({ confidence: ftConf, explanation: `Zillow lists the home as ${human}` }),
+      }),
+    ]);
+  });
+
+  it("proposes nothing for tokens outside the table even after canonicalisation", () => {
+    expect(mapListingFacts(facts({ homeType: "Lot" }))).toEqual([]);
+    expect(mapListingFacts(facts({ homeType: "HOME_TYPE_UNKNOWN" }))).toEqual([]);
+    expect(mapListingFacts(facts({ homeType: "Vacant Land" }))).toEqual([]);
+  });
+});
+
+describe("mapListingFacts — parcel guard (listing parcel vs the run's APN)", () => {
+  const MISMATCH = " · listing parcel 21174047P ≠ APN 211-74-047 — confirm this is the right property";
+
+  it("caps every listing proposal at 0.6 and says why when the listing parcel is not the APN", () => {
+    const out = mapListingFacts(
+      facts({ parcelId: "21174047P", waterSource: "private_well", bedrooms: 3, sewer: "sewer", homeType: "SINGLE_FAMILY" }),
+      { apn: "211-74-047" },
+    );
+    expect(out.map((p) => `${p.kind}:${p.fieldPath}`)).toEqual([
+      "fill:facilityInfo.waterSource",
+      "fill:designFlow.numberOfBedrooms",
+      "warning:facilityInfo.wastewaterSource",
+      "fill:facilityInfo.facilityType",
+    ]);
+    for (const p of out) {
+      expect(p.provenance.confidence, p.fieldPath).toBe(0.6);
+      expect(p.provenance.explanation, p.fieldPath).toMatch(new RegExp(`${MISMATCH.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+    }
+    expect(out[0].provenance.explanation).toBe(`Zillow listing · Water source: Private Well${MISMATCH}`);
+    expect(out[2].provenance.explanation).toBe(`${LISTING_SEWER_WARNING}${MISMATCH}`);
+  });
+
+  it("never raises a confidence to the cap", () => {
+    const [p] = mapListingFacts(facts({ parcelId: "1", bedrooms: 3 }), { apn: "2" });
+    expect(p.provenance.confidence).toBe(0.6);
+    // a proposal already below the cap keeps its own confidence
+    const low = mapListingFacts(facts({ parcelId: "1", homeType: "TOWNHOUSE" }), { apn: "2" });
+    expect(low.map((p) => p.provenance.confidence)).toEqual([0.6, 0.6]);
+  });
+
+  it("compares with dashes and case stripped but keeps a letter suffix — 211-74-047P is 21174047P, 21174047 is not", () => {
+    const same = mapListingFacts(facts({ parcelId: "21174047P", bedrooms: 3 }), { apn: "211-74-047P" });
+    expect(same[0].provenance.confidence).toBe(LISTING_BEDROOMS_CONFIDENCE);
+    expect(same[0].provenance.explanation).toBe("Zillow listing · 3 bedrooms");
+    const lower = mapListingFacts(facts({ parcelId: "21174047p", bedrooms: 3 }), { apn: "211-74-047P" });
+    expect(lower[0].provenance.confidence).toBe(LISTING_BEDROOMS_CONFIDENCE);
+    const different = mapListingFacts(facts({ parcelId: "21174047P", bedrooms: 3 }), { apn: "211-74-047" });
+    expect(different[0].provenance.confidence).toBe(0.6);
+  });
+
+  it("does nothing without both a listing parcel and a run APN", () => {
+    expect(mapListingFacts(facts({ bedrooms: 3 }), { apn: "211-74-047" })[0].provenance.confidence).toBe(
+      LISTING_BEDROOMS_CONFIDENCE,
+    );
+    expect(mapListingFacts(facts({ parcelId: "21174047P", bedrooms: 3 }))[0].provenance.confidence).toBe(
+      LISTING_BEDROOMS_CONFIDENCE,
+    );
+    expect(mapListingFacts(facts({ parcelId: "21174047P", bedrooms: 3 }), {})[0].provenance.confidence).toBe(
+      LISTING_BEDROOMS_CONFIDENCE,
+    );
+    expect(mapListingFacts(facts({ parcelId: "  ", bedrooms: 3 }), { apn: "211-74-047" })[0].provenance.confidence).toBe(
+      LISTING_BEDROOMS_CONFIDENCE,
+    );
+  });
+});
+
 describe("dedupeProposals — assessor property-use code beats the listing homeType fallback (per-field source order)", () => {
   it("keeps the assessor residential proposal over the listing's even when the listing is more confident", () => {
     const assessorResidential: ProposedField = {

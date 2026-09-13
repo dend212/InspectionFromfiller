@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canonicalHomeType,
   findFact,
   flattenText,
   normaliseListingItem,
@@ -145,6 +146,7 @@ describe("normaliseListingItem — recorded api-ninja fixtures", () => {
       yearBuilt: 1980,
       lotSqft: 47023,
       homeType: "SINGLE_FAMILY",
+      parcelId: "21911034",
     });
     expect(facts?.url.endsWith("/8078782_zpid/")).toBe(true);
     expect(facts?.raw).toBe(venusForSale);
@@ -171,7 +173,63 @@ describe("normaliseListingItem — recorded api-ninja fixtures", () => {
       url: "https://www.zillow.com/homedetails/1234-E-Example-Ln-Cave-Creek-AZ-85331/12345678_zpid/",
       yearBuilt: 1998,
       homeType: "SINGLE_FAMILY",
+      // no top-level parcelId on the off-market shape — falls back to resoFacts.parcelNumber
+      parcelId: "21112345",
     });
+  });
+});
+
+describe("normaliseListingItem — parcelId (audit batch 0 parcel guard)", () => {
+  it("reads the top-level parcelId, trimmed, before resoFacts.parcelNumber", () => {
+    const facts = normaliseListingItem({ zpid: 1, parcelId: " 21174047P ", resoFacts: { parcelNumber: "99999999" } });
+    expect(facts?.parcelId).toBe("21174047P");
+  });
+
+  it("falls back to resoFacts.parcelNumber, trimmed", () => {
+    expect(normaliseListingItem({ zpid: 1, resoFacts: { parcelNumber: " 21174047P " } })?.parcelId).toBe("21174047P");
+  });
+
+  it("accepts a numeric parcel id as its decimal string", () => {
+    expect(normaliseListingItem({ zpid: 1, parcelId: 21911121 })?.parcelId).toBe("21911121");
+  });
+
+  it("leaves parcelId undefined when neither is a usable string", () => {
+    expect(normaliseListingItem({ zpid: 1 })?.parcelId).toBeUndefined();
+    expect(normaliseListingItem({ zpid: 1, parcelId: "", resoFacts: { parcelNumber: "   " } })?.parcelId).toBeUndefined();
+    expect(normaliseListingItem({ zpid: 1, parcelId: null, resoFacts: { parcelNumber: null } })?.parcelId).toBeUndefined();
+  });
+
+  it("never borrows a neighbour's parcel id", () => {
+    const facts = normaliseListingItem({ zpid: 1, nearbyHomes: [{ parcelId: "11111111" }] });
+    expect(facts?.parcelId).toBeUndefined();
+  });
+});
+
+describe("canonicalHomeType", () => {
+  it.each([
+    ["SINGLE_FAMILY", "SINGLE_FAMILY"],
+    ["SingleFamily", "SINGLE_FAMILY"],
+    ["Single Family Residence", "SINGLE_FAMILY"],
+    ["single_family", "SINGLE_FAMILY"],
+    ["CONDO", "CONDO"],
+    ["Condominium", "CONDO"],
+    ["MANUFACTURED", "MANUFACTURED"],
+    ["Manufactured Home", "MANUFACTURED"],
+    ["Mobile Home", "MANUFACTURED"],
+    ["TOWNHOUSE", "TOWNHOUSE"],
+    ["Townhome", "TOWNHOUSE"],
+    ["MULTI_FAMILY", "MULTI_FAMILY"],
+    ["MultiFamily", "MULTI_FAMILY"],
+    ["APARTMENT", "APARTMENT"],
+    ["apartment", "APARTMENT"],
+  ])("%j → %s", (raw, canonical) => {
+    expect(canonicalHomeType(raw)).toBe(canonical);
+  });
+
+  it("returns the upper-cased letters-only key for anything unaliased, so it simply misses the rule table", () => {
+    expect(canonicalHomeType("LOT")).toBe("LOT");
+    expect(canonicalHomeType("Home Type Unknown")).toBe("HOMETYPEUNKNOWN");
+    expect(canonicalHomeType("  ")).toBe("");
   });
 });
 

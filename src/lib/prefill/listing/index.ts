@@ -1,6 +1,6 @@
 import { WATER_SOURCES } from "@/lib/constants/inspection";
 import type { StageContext, StageResult } from "@/lib/prefill/stage";
-import { mapListingFacts } from "../map-facts-to-fields";
+import { listingParcelMismatch, mapListingFacts } from "../map-facts-to-fields";
 import type { PrefillInput, PrefillStage, StageLink } from "../types";
 import type { ListingFacts, ListingProvider } from "./provider";
 import { fullAddress, zillowApifyProvider } from "./zillow-apify";
@@ -79,9 +79,14 @@ export async function runListingStage(
     }
 
     const links: StageLink[] = facts.url ? [{ label: "Open on Zillow", url: facts.url }] : [];
+    // Parcel guard: the mapper caps every proposal; the tile says why in one line
+    const apn = input.apn;
+    const summary = listingParcelMismatch(facts.parcelId, apn)
+      ? `${summariseListing(facts)} · Listing parcel ${facts.parcelId} does not match APN ${apn}`
+      : summariseListing(facts);
     return {
-      stage: finished({ status: "done", startedAt, summary: summariseListing(facts), links }),
-      proposals: mapListingFacts(facts),
+      stage: finished({ status: "done", startedAt, summary, links }),
+      proposals: mapListingFacts(facts, apn ? { apn } : {}),
     };
   } catch (err) {
     return {
