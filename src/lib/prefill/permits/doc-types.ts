@@ -7,9 +7,16 @@
  * `deriveEplpavDocType` builds one from `Permit Subtype` + `File Name`
  * (686/1000 ONSITE PERMIT rows in the recording are "… FINAL DA", 277 have an
  * empty File Name).
+ *
+ * Owner's precedence rule (2026-09-14): the newest Discharge Authorization on
+ * top, then the Approval to Construct, then Notices of Transfer and
+ * abandonments — so a DA is its own class above `permit` (the ATC), and the
+ * same scale orders extraction and the mapper's proposal authority.
  */
+import type { PermitDocumentKind } from "@/lib/ai/permit-extraction-schema";
 
 export type DocClass =
+  | "discharge_auth"
   | "permit"
   | "permit_sub"
   | "notice_of_transfer"
@@ -17,14 +24,15 @@ export type DocClass =
   | "plan_review"
   | "other";
 
-/** Lower ranks are extracted first */
+/** Lower ranks are extracted first and outrank higher ones in dedupeProposals */
 export const DOC_CLASS_RANK: Record<DocClass, number> = {
-  permit: 0,
-  permit_sub: 1,
-  notice_of_transfer: 2,
-  abandonment: 3,
-  plan_review: 4,
-  other: 5,
+  discharge_auth: 0,
+  permit: 1,
+  permit_sub: 2,
+  notice_of_transfer: 3,
+  abandonment: 4,
+  plan_review: 5,
+  other: 6,
 };
 
 export function classifyDocType(docType: string): DocClass {
@@ -41,20 +49,54 @@ export function classifyDocType(docType: string): DocClass {
   ) {
     return "plan_review";
   }
-  if (
-    t === "PERMIT" ||
-    t.includes("FINAL DA") ||
-    t.includes("DA FINAL") ||
-    t === "DA" ||
-    t.includes("DISCHARGE")
-  ) {
-    return "permit";
+  if (t === "PERMIT") return "permit";
+  if (t.includes("FINAL DA") || t.includes("DA FINAL") || t === "DA" || t.includes("DISCHARGE")) {
+    return "discharge_auth";
   }
   return "other";
 }
 
+/** A Discharge Authorization or an Approval to Construct — the two classes that identify the permit itself */
+export function isPermitClass(cls: DocClass): boolean {
+  return cls === "discharge_auth" || cls === "permit";
+}
+
+/** What the inspector reads for the model's verdict; `other` has no label — the EDMS type stands in */
+export const DOC_KIND_LABEL: Record<Exclude<PermitDocumentKind, "other">, string> = {
+  approval_to_construct: "Approval to Construct",
+  discharge_authorization: "Discharge Authorization",
+  final_da: "Final Discharge Authorization",
+  notice_of_transfer: "Notice of Transfer",
+  abandonment: "Abandonment",
+};
+
+/** A Notice of Transfer by the model's verdict, or by the EDMS index when the model could not tell */
+export function isTransferRecord(kind: PermitDocumentKind, docType: string): boolean {
+  return kind === "notice_of_transfer" || (kind === "other" && classifyDocType(docType) === "notice_of_transfer");
+}
+
 export function isAbandonmentDocType(docType: string): boolean {
   return classifyDocType(docType) === "abandonment";
+}
+
+/**
+ * Authority of a record's facts: what the model read outranks the EDMS index — a document the
+ * model classed `other` falls back to its EDMS type. Lower wins (DOC_CLASS_RANK scale).
+ */
+export function permitDocRank(kind: PermitDocumentKind, docType: string): number {
+  switch (kind) {
+    case "discharge_authorization":
+    case "final_da":
+      return DOC_CLASS_RANK.discharge_auth;
+    case "approval_to_construct":
+      return DOC_CLASS_RANK.permit;
+    case "notice_of_transfer":
+      return DOC_CLASS_RANK.notice_of_transfer;
+    case "abandonment":
+      return DOC_CLASS_RANK.abandonment;
+    default:
+      return DOC_CLASS_RANK[classifyDocType(docType)];
+  }
 }
 
 /** PLAN REVIEW / SUB / unknown types are stored but never sent to extraction */
@@ -81,7 +123,11 @@ export function deriveEplpavDocType(subtype: string, fileName: string): string {
   }
 }
 
-/** Stable: class rank ascending, then docDate descending (undated last). Returns a copy. */
+/**
+ * Stable: class rank ascending (DA → PERMIT → PERMIT SUB → NOT → ABANDONMENT → …), then
+ * docDate descending within a class (undated last). An older FINAL DA therefore sorts
+ * before a newer PERMIT. Returns a copy.
+ */
 export function rankForExtraction<T extends { docType: string; docDate?: string }>(docs: T[]): T[] {
   return docs
     .map((doc, index) => ({ doc, index }))

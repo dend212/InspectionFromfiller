@@ -4,9 +4,16 @@ import { Copy, ExternalLink } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { classifyDocType, rankForExtraction } from "@/lib/prefill/permits/doc-types";
+import {
+  DOC_CLASS_RANK,
+  DOC_KIND_LABEL,
+  classifyDocType,
+  isTransferRecord,
+  permitDocRank,
+  rankForExtraction,
+} from "@/lib/prefill/permits/doc-types";
 import { groupByProperty } from "@/lib/prefill/permits/search";
-import type { PermitCandidate, PrefillRunDTO } from "@/lib/prefill/types";
+import type { InspectionRecordDTO, PermitCandidate, PrefillRunDTO } from "@/lib/prefill/types";
 import { RecordExtractionBadge, isRecordBeingRead } from "./record-extraction-badge";
 
 export interface PermitRecordsListProps {
@@ -89,11 +96,42 @@ export function groupCandidates(candidates: PermitCandidate[]): CandidateGroup[]
   });
 }
 
+/** A Notice of Transfer by the model's verdict, or by the EDMS index until it has been read — the mapper's rule */
+function isTransferRow(r: InspectionRecordDTO): boolean {
+  return isTransferRecord(r.documentKind ?? "other", r.docType);
+}
+
+/**
+ * The model's kind, shown only where it adds information next to the EDMS type: on a legacy
+ * "PERMIT" row always (that type covers Approvals to Construct and Discharge Authorizations
+ * alike), otherwise only when the verdict moved the row out of its EDMS class. A transfer
+ * verdict is already spelled out by the transfer note, so it is never repeated; an abandonment
+ * verdict on an ABANDONMENT row is already the badge.
+ */
+function kindLabel(r: InspectionRecordDTO): string | null {
+  const kind = r.documentKind;
+  if (!kind || kind === "other" || kind === "notice_of_transfer") return null;
+  const cls = classifyDocType(r.docType);
+  if (cls !== "permit" && permitDocRank(kind, r.docType) === DOC_CLASS_RANK[cls]) return null;
+  return DOC_KIND_LABEL[kind];
+}
+
 export function PermitRecordsList({ run, onSelectCandidates, disabled }: PermitRecordsListProps) {
   const [chosenGroup, setChosenGroup] = useState<string | null>(null);
   const groups = useMemo(() => groupCandidates(run.candidates), [run.candidates]);
   const showPicker = run.status === "awaiting_selection" && groups.length > 0;
   const apn = run.input.apn;
+  // run-dto orders records by precedence (newest DA → ATC → transfers → abandonments), so the
+  // first permit-class row that was actually read is the one whose facts win in dedupeProposals.
+  // A skipped / failed / still-queued row sorts by class too but contributed nothing (foldFacts
+  // only sees `done` facts), so it must never carry the marker.
+  const primaryId = run.records.find(
+    (r) =>
+      r.extractionStatus === "done" &&
+      !isTransferRow(r) &&
+      !r.isAbandonment &&
+      r.documentKind !== "abandonment",
+  )?.id;
 
   const handleUseSelected = async () => {
     const group = groups.find((g) => g.key === chosenGroup);
@@ -130,7 +168,13 @@ export function PermitRecordsList({ run, onSelectCandidates, disabled }: PermitR
               ) : (
                 <span className="text-muted-foreground">{r.docType}</span>
               )}
-              {classifyDocType(r.docType) === "notice_of_transfer" && (
+              {kindLabel(r) && <span className="text-muted-foreground">{kindLabel(r)}</span>}
+              {r.id === primaryId && (
+                <span className="rounded bg-muted px-1 text-xs font-medium text-muted-foreground">
+                  Primary source
+                </span>
+              )}
+              {isTransferRow(r) && (
                 <span className="text-muted-foreground"> · transfer record — used only for facts no permit states</span>
               )}
               {r.docDate && (

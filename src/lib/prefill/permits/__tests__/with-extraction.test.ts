@@ -14,7 +14,7 @@ import {
   type WithExtractionDeps,
 } from "@/lib/prefill/permits/with-extraction";
 import type { StageContext, StageResult } from "@/lib/prefill/stage";
-import type { ProposedField } from "@/lib/prefill/types";
+import type { ProposalAuthority, ProposedField } from "@/lib/prefill/types";
 
 const ctx: StageContext = {
   inspectionId: "insp-1",
@@ -139,14 +139,18 @@ describe("withExtraction", () => {
         runId: "run-1",
       },
     };
-    const fromMapper = (docRank: number, explanation: string): ProposedField => ({
+    const fromMapper = (authority: ProposalAuthority, explanation: string): ProposedField => ({
       ...fill("facilityInfo.recordsAvailable", "yes", 1),
       provenance: { source: "permit", confidence: 1, explanation, recordId: "rec-x", page: 1 },
-      authority: { docRank },
+      authority,
     });
     for (const mapper of [
-      fromMapper(0, "Permit 071533 on file (PERMIT)"),
-      fromMapper(2, "Notice of Transfer OWR-23-02001 on file"),
+      fromMapper({ docRank: 1, docDate: "2007-04-12" }, "Permit 071533 on file (PERMIT)"),
+      fromMapper({ docRank: 1 }, "Permit 071533 on file (PERMIT)"),
+      // a dated Discharge Authorization (class 0) ties the index row on rank; the date never breaks that tie
+      fromMapper({ docRank: 0, docDate: "2016-01-25" }, "Permit OW-15-00667 on file (Discharge Authorization)"),
+      fromMapper({ docRank: 3, docDate: "2023-04-27" }, "Notice of Transfer OWR-23-02001 on file"),
+      fromMapper({ docRank: 3 }, "Notice of Transfer OWR-23-02001 on file"),
     ]) {
       const d = deps({ extract: vi.fn().mockResolvedValue({ ...extraction, proposals: [mapper] }) });
       const out = await withExtraction(ctx, { ...done, proposals: [phase2] }, d);

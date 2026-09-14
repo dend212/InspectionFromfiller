@@ -50,10 +50,18 @@ describe("prefill Drizzle schema", () => {
       "extractionStatus",
       "extractionError",
       "extracted",
+      "extractionVersion",
       "createdAt",
     ]);
     expect(getTableColumns(inspectionRecords).selected.default).toBe(true);
     expect(getTableColumns(inspectionRecords).extractionStatus.default).toBe("pending");
+  });
+
+  it("stamps extraction_version on inspection_records as a nullable text column", () => {
+    const col = getTableColumns(inspectionRecords).extractionVersion;
+    expect(col.name).toBe("extraction_version");
+    expect(col.notNull).toBe(false);
+    expect(col.default).toBeUndefined();
   });
 });
 
@@ -85,5 +93,19 @@ describe("migration 0015", () => {
     expect(sql).toContain("ALTER TABLE public.inspection_records ENABLE ROW LEVEL SECURITY");
     expect(sql).toContain('CREATE POLICY "Prefill runs readable by authenticated"');
     expect(sql).toContain('CREATE POLICY "Inspection records readable by authenticated"');
+  });
+});
+
+describe("migration 0016", () => {
+  const sql = readFileSync(
+    path.resolve(process.cwd(), "src/lib/db/migrations/0016_inspection_records_extraction_version.sql"),
+    "utf8",
+  );
+
+  it("adds the nullable extraction_version column idempotently", () => {
+    expect(sql).toContain(
+      "ALTER TABLE public.inspection_records\n  ADD COLUMN IF NOT EXISTS extraction_version text;",
+    );
+    expect(sql).not.toMatch(/extraction_version text NOT NULL/);
   });
 });

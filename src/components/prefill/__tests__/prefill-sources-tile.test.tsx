@@ -47,6 +47,7 @@ const ABANDONMENT: InspectionRecordDTO = {
   extractionStatus: "pending",
   extractionError: null,
   isAbandonment: true,
+  documentKind: null,
   downloadUrl: "/api/inspections/insp-1/records/rec-1",
 };
 

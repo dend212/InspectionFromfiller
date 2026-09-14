@@ -204,6 +204,29 @@ describe("extractPermitFactsFromPdf — passes", () => {
       expect(result.facts.tanks[0].capacityGal?.page).toBe(4);
     });
 
+    it("reads a FINAL DA further too — a Discharge Authorization is permit-class", async () => {
+      // pass 1 found a tank but neither the kind nor the issue date; the DA stamp is on a later page
+      const daPass1: PermitFacts = { ...dovePass1, issueDate: null };
+      const daPass2: PermitFacts = {
+        ...emptyPermitFacts(),
+        documentKind: "discharge_authorization",
+        issueDate: { value: "2016-01-25", confidence: 0.95, page: 2, evidence: "Issued 01/25/2016", handwritten: false },
+      };
+      const { client, parse } = fakeClient(reply(daPass1), reply(daPass2));
+      const result = await extractPermitFactsFromPdf(
+        await makePdf(15),
+        { ...meta, permitNumber: "OW-15-00667", docType: "FINAL DA" },
+        { client, escalate: false },
+      );
+      expect(parse).toHaveBeenCalledTimes(2);
+      expect(result.passes).toBe(2);
+      expect(attachedText(parse.mock.calls[1][0])).toContain("pages 5–15 of a 15-page document");
+      expect(result.facts.documentKind).toBe("discharge_authorization");
+      expect(result.facts.issueDate?.value).toBe("2016-01-25");
+      expect(result.facts.issueDate?.page).toBe(6);
+      expect(result.facts.tanks[0].capacityGal?.value).toBe(1500);
+    });
+
     it("does not read further for a NOTICE OF TRANSFER whose first pages carry core facts", async () => {
       const { client, parse } = fakeClient(reply(dovePass1));
       const result = await extractPermitFactsFromPdf(
@@ -237,6 +260,17 @@ describe("extractPermitFactsFromPdf — passes", () => {
       expect(result.facts.tanks[0].capacityGal?.value).toBe(1000);
       expect(result.facts.tanks[0].capacityGal?.page).toBe(7);
     });
+  });
+
+  it("labels a dropped Sonnet row with the permit number so the log line is attributable", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const parsed = toWire(withCapacity(emptyPermitFacts(), 1200));
+    parsed.facts.push({ path: "septicTankGallons", value: 1200, confidence: 0.9, page: 1, evidence: "", handwritten: false });
+    const { client } = fakeClient({ parsed_output: parsed, stop_reason: "end_turn", usage: sonnetUsage, content: [] });
+    const result = await extractPermitFactsFromPdf(await makePdf(7), meta, { client, escalate: false });
+    expect(result.facts.tanks[0].capacityGal?.value).toBe(1200);
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", { label: "000972", path: "septicTankGallons", value: 1200 });
+    warn.mockRestore();
   });
 
   it("does not run a second pass when the document has no more pages", async () => {
@@ -376,6 +410,15 @@ describe("extractPermitFactsFromPdf — Opus escalation", () => {
       expect(result.facts.tanks[0].capacityGal?.value).toBe(1200);
       expect(result.facts.tanks[0].capacityGal?.confidence).toBe(0.5);
     }
+  });
+
+  it("logs an Opus answer that does not fit the fact instead of dropping it silently", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { client } = fakeClient(reply(weakCapacity()), opusReply(found("twelve hundred", 0.9)));
+    const result = await extractPermitFactsFromPdf(await makePdf(7), meta, { client });
+    expect(result.facts.tanks[0].capacityGal?.value).toBe(1200);
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped escalation answer", { path: "tanks.0.capacityGal", value: "twelve hundred" });
+    warn.mockRestore();
   });
 
   it("does not escalate typed facts, or handwritten facts at or above the threshold", async () => {

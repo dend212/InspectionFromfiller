@@ -38,6 +38,9 @@ export const MAX_WIRE_TANKS = 3;
 /** The persisted cap on notes (PermitFactsSchema); the wire trims to it rather than rejecting the pass */
 export const MAX_NOTES_CHARS: number = PermitFactsSchema.shape.notes.maxLength ?? 500;
 
+/** A dropped value is logged trimmed to this — the model can put a whole evidence quote in `value` */
+export const MAX_LOGGED_VALUE_CHARS = 80;
+
 /**
  * Trims `text` to at most `max` chars, ending in "…" when anything was cut. The API cannot enforce
  * string lengths (structured outputs drop minLength/maxLength from the grammar), so the persisted
@@ -107,22 +110,42 @@ function ensureTank(facts: PermitFacts, path: string): void {
   }
 }
 
+export interface PermitFactsFromWireOptions {
+  /** Names the document in drop logs (the permit number); a bare path + value is untraceable in a run log */
+  label?: string;
+}
+
 /**
  * Folds the flat rows into PermitFacts. Rows with an unknown path or a value
  * that does not fit the fact are dropped (a stray row must never fail the
- * document); when a path is reported twice the more confident row wins.
+ * document) but logged — a silent drop hid the model answering waterSource
+ * with the form's own label ("water_company") on every replay of OW-15-00667;
+ * when a path is reported twice the more confident row wins.
  */
-export function permitFactsFromWire(wire: PermitFactsWire): PermitFacts {
+export function permitFactsFromWire(wire: PermitFactsWire, opts: PermitFactsFromWireOptions = {}): PermitFacts {
   const facts = emptyPermitFacts();
   facts.documentKind = wire.documentKind;
   facts.isAbandonment = wire.isAbandonment;
   facts.notes = clampText(wire.notes, MAX_NOTES_CHARS);
 
+  const dropped = (row: PermitFactRow) =>
+    console.warn("[prefill] dropped fact row", {
+      ...(opts.label ? { label: opts.label } : {}),
+      path: row.path,
+      value: typeof row.value === "string" ? clampText(row.value, MAX_LOGGED_VALUE_CHARS) : row.value,
+    });
+
   for (const row of wire.facts) {
     const spec = SPEC_BY_PATH.get(row.path.trim());
-    if (!spec) continue;
+    if (!spec) {
+      dropped(row);
+      continue;
+    }
     const value = coerceWireValue(spec.kind, row.value);
-    if (value === null) continue;
+    if (value === null) {
+      dropped(row);
+      continue;
+    }
     ensureTank(facts, spec.path);
     const existing = getFactAt(facts, spec.path);
     if (existing && existing.confidence >= row.confidence) continue;

@@ -179,6 +179,9 @@ export interface ReuseRecordPatch {
   runId: string;
   extractionStatus: ExtractionStatus;
   extractionError: string | null;
+  /** Set (to null) when a `done` row's facts were read under an older PERMIT_EXTRACTION_VERSION: the run re-reads it */
+  extracted?: null;
+  extractionVersion?: null;
 }
 
 /** D7: re-parents an already-stored row onto the current run so it is listed (and read) as that run's */

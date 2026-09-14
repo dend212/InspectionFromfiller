@@ -6,6 +6,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("@/lib/storage/record-storage", () => ({ RECORD_BUCKET: "inspection-media" }));
 
 import { ExtractionError } from "@/lib/ai/extract-permit-facts";
+import { PERMIT_EXTRACTION_VERSION } from "@/lib/ai/permit-extraction-prompt";
 import { emptyPermitFacts, type PermitFacts } from "@/lib/ai/permit-extraction-schema";
 import { dedupeProposals } from "@/lib/prefill/map-facts-to-fields";
 import {
@@ -70,7 +71,7 @@ function deps(over: Partial<ExtractRecordsDeps> = {}) {
 }
 
 describe("rankRecordsForExtraction", () => {
-  it("orders PERMIT/FINAL DA (newest first) → PERMIT SUB → NOTICE OF TRANSFER and never PLAN REVIEW / SUB", () => {
+  it("orders FINAL DA → PERMIT (newest first within a class) → PERMIT SUB → NOTICE OF TRANSFER and never PLAN REVIEW / SUB", () => {
     const records = [
       rec({ id: "sub", docType: "SUB" }),
       rec({ id: "old", docType: "PERMIT", docDate: "2000-03-15" }),
@@ -126,7 +127,12 @@ describe("extractStoredRecords", () => {
       { signal: c.signal },
     );
     expect(c.progress).toHaveBeenCalledWith({ status: "running", summary: "Reading OW-17-00474…" });
-    expect(d.persist).toHaveBeenCalledWith("r1", { extractionStatus: "done", extractionError: null, extracted: daFacts });
+    expect(d.persist).toHaveBeenCalledWith("r1", {
+      extractionStatus: "done",
+      extractionError: null,
+      extracted: daFacts,
+      extractionVersion: PERMIT_EXTRACTION_VERSION,
+    });
     expect(result.done).toBe(1);
     expect(result.failed).toBe(0);
     expect(result.estimatedCostUsd).toBeCloseTo(0.04, 5);
@@ -172,6 +178,26 @@ describe("extractStoredRecords", () => {
     expect(d.persist).toHaveBeenCalledWith("d", { extractionStatus: "skipped", extractionError: "Only the first 3 documents are read per run" });
     expect(d.persist).toHaveBeenCalledWith("plan", { extractionStatus: "skipped", extractionError: "PLAN REVIEW documents are not read" });
     expect(d.extract).toHaveBeenCalledTimes(3);
+  });
+
+  it("stamps the current extraction version on `done` rows only — failed and skipped rows carry none", async () => {
+    const d = deps();
+    d.extract
+      .mockResolvedValueOnce({ facts: daFacts, passes: 1, escalations: 0, pageCount: 4, usage: { calls: [], estimatedCostUsd: 0.04 } })
+      .mockRejectedValueOnce(new ExtractionError("Claude API error: 529 overloaded"));
+    await extractStoredRecords(
+      [
+        rec({ id: "ok", docDate: "2020-01-01" }),
+        rec({ id: "boom", docDate: "2019-01-01" }),
+        rec({ id: "plan", docType: "PLAN REVIEW" }),
+      ],
+      ctx(),
+      d,
+    );
+    expect(PERMIT_EXTRACTION_VERSION).toMatch(/^\d{4}-\d{2}-\d{2}\.\d+$/);
+    expect(d.persist).toHaveBeenCalledWith("ok", expect.objectContaining({ extractionStatus: "done", extractionVersion: PERMIT_EXTRACTION_VERSION }));
+    expect(d.persist).toHaveBeenCalledWith("boom", { extractionStatus: "failed", extractionError: "Claude API error: 529 overloaded" });
+    expect(d.persist).toHaveBeenCalledWith("plan", { extractionStatus: "skipped", extractionError: "PLAN REVIEW documents are not read" });
   });
 
   it("flags abandonment documents and proposes nothing from them", async () => {
@@ -232,6 +258,28 @@ describe("extractStoredRecords", () => {
       expect(result.proposals.filter((p) => p.fieldPath === "septicTank.tanks.0.tankCapacity")).toHaveLength(2);
     });
 
+    it("reads a `done` row the reuse gate re-queued for a stale extraction version and stamps the current one", async () => {
+      // storeDocument turned the stale row pending (facts + stamp cleared) — from here it is an ordinary read
+      const d = deps();
+      const result = await extractStoredRecords(
+        [rec({ id: "r-stale", extractionStatus: "pending", extracted: null })],
+        ctx(),
+        d,
+      );
+      expect(d.loadPdf).toHaveBeenCalledWith("records/insp-1/r-stale.pdf");
+      expect(d.extract).toHaveBeenCalledTimes(1);
+      expect(d.persist).toHaveBeenCalledTimes(1);
+      expect(d.persist).toHaveBeenCalledWith("r-stale", {
+        extractionStatus: "done",
+        extractionError: null,
+        extracted: daFacts,
+        extractionVersion: PERMIT_EXTRACTION_VERSION,
+      });
+      expect(result.done).toBe(1);
+      expect(d.log).not.toHaveBeenCalledWith(expect.stringContaining("reused stored facts"));
+      expect(result.proposals.filter((p) => p.fieldPath === "septicTank.tanks.0.tankCapacity")).toHaveLength(1);
+    });
+
     it("ignores a `done` record without stored facts", async () => {
       const d = deps();
       const result = await extractStoredRecords([rec({ id: "r-old", extractionStatus: "done", extracted: null })], ctx(), d);
@@ -278,6 +326,61 @@ describe("extractStoredRecords", () => {
       const flow = dedupeProposals(result.proposals).find((p) => p.fieldPath === "designFlow.estimatedDesignFlow");
       expect(flow?.value).toBe("450");
       expect(flow?.provenance.recordId).toBe("rec-not");
+      // the record's EDMS docDate reaches the mapper: a transfer record is dated by it, a permit by its issue date
+      expect(flow?.authority).toEqual({ docRank: 3, docDate: "2023-06-07" });
+      expect(ages[0].authority).toEqual({ docRank: 1, docDate: "2007-04-12" });
+    });
+
+    it("Saint Andrews: a replayed Approval to Construct yields to the freshly read Discharge Authorization", async () => {
+      // 11420 N Saint Andrews Way — the 1975 ATC (740805) was reused from an earlier run and replays first;
+      // the 2016 DA (OW-15-00667) is read fresh. The DA must win every field both state.
+      const atcFacts: PermitFacts = {
+        ...emptyPermitFacts(),
+        documentKind: "approval_to_construct",
+        issueDate: f("1975-08-14", 0.99),
+        bedrooms: f(3, 0.99),
+        tanks: [{ capacityGal: f(1500, 0.99), material: null, model: null, dimensions: null }],
+        disposal: { ...emptyPermitFacts().disposal, type: f("seepage_pit" as const, 0.95) },
+        hasSitePlan: f(true, 0.95, 2),
+      };
+      const saDaFacts: PermitFacts = {
+        ...emptyPermitFacts(),
+        documentKind: "discharge_authorization",
+        issueDate: f("2016-01-25", 0.9),
+        bedrooms: f(5, 0.9),
+        designFlowGpd: f(750, 0.9),
+        tanks: [{ capacityGal: f(1500, 0.9), material: null, model: null, dimensions: null }],
+        waterSource: f("municipal" as const, 0.95),
+      };
+      const d = deps({
+        extract: vi.fn().mockResolvedValue({ facts: saDaFacts, passes: 1, escalations: 0, pageCount: 6, usage: { calls: [], estimatedCostUsd: 0.05 } }),
+      });
+      const result = await extractStoredRecords(
+        [
+          rec({ id: "rec-atc", permitNumber: "740805", docType: "PERMIT", docDate: "2015-09-11", extractionStatus: "done", extracted: atcFacts }),
+          rec({ id: "rec-da", permitNumber: "OW-15-00667", docType: "PERMIT", docDate: "2016-07-11", extractionStatus: "pending" }),
+        ],
+        ctx(),
+        d,
+      );
+      expect(d.extract).toHaveBeenCalledTimes(1);
+      // D7 order: the replayed ATC's proposals come first
+      expect(result.proposals[0].provenance.recordId).toBe("rec-atc");
+      const out = dedupeProposals(result.proposals);
+      const at = (path: string) => out.find((p) => p.fieldPath === path);
+      expect(at("designFlow.numberOfBedrooms")?.value).toBe("5");
+      expect(at("designFlow.numberOfBedrooms")?.provenance.recordId).toBe("rec-da");
+      expect(at("facilityInfo.facilityAge")?.provenance.recordId).toBe("rec-da");
+      expect(at("facilityInfo.facilityAge")?.provenance.explanation).toBe(
+        "Discharge authorization issued 01/2016 (permit OW-15-00667)",
+      );
+      expect(at("septicTank.tanks.0.tankCapacity")?.value).toBe("1500");
+      expect(at("septicTank.tanks.0.tankCapacity")?.provenance.recordId).toBe("rec-da");
+      expect(at("facilityInfo.waterSource")?.value).toBe("municipal");
+      // ATC-only fields survive from the ATC
+      expect(at("facilityInfo.approvalPermitNo")?.value).toBe("740805");
+      expect(at("facilityInfo.hasSitePlan")?.provenance.recordId).toBe("rec-atc");
+      expect(at("disposalWorks.disposalType")?.provenance.recordId).toBe("rec-atc");
     });
   });
 

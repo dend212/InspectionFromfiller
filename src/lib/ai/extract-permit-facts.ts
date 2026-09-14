@@ -21,7 +21,7 @@ import Anthropic, {
   RateLimitError,
 } from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { classifyDocType } from "@/lib/prefill/permits/doc-types";
+import { classifyDocType, isPermitClass } from "@/lib/prefill/permits/doc-types";
 import { buildSubPdf, loadPdfDocument, planPasses } from "@/lib/prefill/permits/triage";
 import { HANDWRITING_ESCALATION_THRESHOLD, type PermitArchive } from "@/lib/prefill/types";
 import {
@@ -50,7 +50,7 @@ import {
   type FactSpec,
   type FactValue,
 } from "./permit-facts-utils";
-import { PermitFactsWireSchema, clampText, permitFactsFromWire } from "./permit-facts-wire";
+import { MAX_LOGGED_VALUE_CHARS, PermitFactsWireSchema, clampText, permitFactsFromWire } from "./permit-facts-wire";
 import type { PDFDocument } from "pdf-lib";
 
 // Built lazily: constructing the SDK client at import time throws under vitest's jsdom
@@ -230,7 +230,7 @@ async function runPass(
       `Claude returned no structured output (stop_reason: ${message.stop_reason ?? "unknown"})`,
     );
   }
-  return rebasePages(permitFactsFromWire(message.parsed_output), meta.pageNumbers);
+  return rebasePages(permitFactsFromWire(message.parsed_output, { label: meta.permitNumber }), meta.pageNumbers);
 }
 
 async function askEscalation(
@@ -309,7 +309,15 @@ async function escalateWeakHandwriting(
     answered++;
     if (!answer?.found) continue;
     const value = coerceFactValue(spec.kind, answer.value);
-    if (value === null || answer.confidence <= fact.confidence) continue;
+    if (value === null) {
+      // same defect class as the wire's silent drop: an unusable Opus answer must leave a trace
+      console.warn("[prefill] dropped escalation answer", {
+        path: spec.path,
+        value: clampText(answer.value, MAX_LOGGED_VALUE_CHARS),
+      });
+      continue;
+    }
+    if (answer.confidence <= fact.confidence) continue;
     setFactAt(facts, spec.path, {
       value,
       confidence: answer.confidence,
@@ -350,10 +358,10 @@ export async function extractPermitFactsFromPdf(
   );
   let passes: 1 | 2 = 1;
 
-  // Owner rule: a permit-class document (EDMS class "permit") is read further until the
-  // permit itself is identified (kind + issue date), not only until the core facts appear —
+  // Owner rule: a permit-class document (EDMS class "discharge_auth" or "permit") is read further
+  // until the permit itself is identified (kind + issue date), not only until the core facts appear —
   // an invoice's "1500 gal" on page 4 must not hide the Approval to Construct stamp on page 14.
-  const permitClass = classifyDocType(meta.docType) === "permit";
+  const permitClass = isPermitClass(classifyDocType(meta.docType));
   const needsSecondPass =
     plan.second.length > 0 && (!hasCoreFacts(facts) || (permitClass && !hasPermitIdentity(facts)));
   if (needsSecondPass) {

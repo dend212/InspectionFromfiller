@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { emptyPermitFacts, type PermitFacts } from "@/lib/ai/permit-extraction-schema";
 import {
+  DISPOSAL_TYPE_VALUES,
+  FACT_SPECS,
+  type FactKind,
+  SYSTEM_TYPE_VALUES,
+  TANK_MATERIAL_VALUES,
+  WATER_SOURCE_VALUES,
   allFactSpecs,
   coerceFactValue,
   getFactAt,
@@ -52,6 +58,14 @@ describe("fact path registry", () => {
     expect(facts.disposal.type?.value).toBe("trench");
     setFactAt(facts, "tanks.0.capacityGal", f(1250, 0.95));
     expect(facts.tanks[0].capacityGal?.value).toBe(1250);
+  });
+
+  it("asks the waterSource escalation with the tokens and the Water Company → municipal / private_company hint", () => {
+    const q = FACT_SPECS.find((s) => s.path === "waterSource")!.question;
+    expect(q).toContain("Answer with one of: municipal, private_company, shared_well, private_well, hauled_water.");
+    expect(q).toContain(
+      "A city or town utility, even when the form's category reads 'Water Company', is municipal; any other named water company is private_company.",
+    );
   });
 });
 
@@ -134,5 +148,45 @@ describe("coerceFactValue", () => {
     expect(coerceFactValue({ type: "string" }, "  OW-17-00474 ")).toBe("OW-17-00474");
     expect(coerceFactValue({ type: "string" }, "   ")).toBeNull();
     expect(coerceFactValue({ type: "number" }, "n/a")).toBeNull();
+  });
+
+  it("aliases loose waterSource spellings onto the tokens but never the ambiguous ones", () => {
+    const water: FactKind = { type: "enum", values: WATER_SOURCE_VALUES };
+    expect(coerceFactValue(water, "municipal")).toBe("municipal");
+    expect(coerceFactValue(water, "city")).toBe("municipal");
+    expect(coerceFactValue(water, "City Water")).toBe("municipal");
+    expect(coerceFactValue(water, "Town")).toBe("municipal");
+    expect(coerceFactValue(water, "municipal-water")).toBe("municipal");
+    expect(coerceFactValue(water, "domestic well")).toBe("private_well");
+    expect(coerceFactValue(water, "Exempt Well")).toBe("private_well");
+    expect(coerceFactValue(water, "individual well")).toBe("private_well");
+    expect(coerceFactValue(water, "shared")).toBe("shared_well");
+    expect(coerceFactValue(water, "shared private well")).toBe("shared_well");
+    expect(coerceFactValue(water, "hauled")).toBe("hauled_water");
+    expect(coerceFactValue(water, "Hauled-in")).toBe("hauled_water");
+    expect(coerceFactValue(water, "water haul")).toBe("hauled_water");
+    // ambiguous between municipal and private_company: the prompt decides from the provider named on the page
+    expect(coerceFactValue(water, "water_company")).toBeNull();
+    expect(coerceFactValue(water, "Water Company")).toBeNull();
+    expect(coerceFactValue(water, "water co")).toBeNull();
+    expect(coerceFactValue(water, "utility")).toBeNull();
+    // a "public water system" (PWS) is ANY ADEQ-regulated provider — EPCOR and Arizona Water Company
+    // carry PWS IDs too — so it is just as ambiguous as "water company"
+    expect(coerceFactValue(water, "Public Water System")).toBeNull();
+    expect(coerceFactValue(water, "public water")).toBeNull();
+    // a bare "well" says nothing about sharing (the DA has its own "Shared Well:" blank)
+    expect(coerceFactValue(water, "well")).toBeNull();
+    expect(coerceFactValue(water, "Well")).toBeNull();
+    expect(coerceFactValue(water, "moon")).toBeNull();
+  });
+
+  it("keeps the waterSource aliases out of the other enums", () => {
+    expect(coerceFactValue({ type: "enum", values: TANK_MATERIAL_VALUES }, "city")).toBeNull();
+    expect(coerceFactValue({ type: "enum", values: TANK_MATERIAL_VALUES }, "well")).toBeNull();
+    expect(coerceFactValue({ type: "enum", values: DISPOSAL_TYPE_VALUES }, "well")).toBeNull();
+    expect(coerceFactValue({ type: "enum", values: DISPOSAL_TYPE_VALUES }, "hauled")).toBeNull();
+    expect(coerceFactValue({ type: "enum", values: SYSTEM_TYPE_VALUES }, "city")).toBeNull();
+    expect(coerceFactValue({ type: "enum", values: SYSTEM_TYPE_VALUES }, "shared")).toBeNull();
+    expect(coerceFactValue({ type: "enum", values: DISPOSAL_TYPE_VALUES }, "Seepage Pit")).toBe("seepage_pit");
   });
 });

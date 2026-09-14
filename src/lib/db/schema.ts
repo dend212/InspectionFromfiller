@@ -164,6 +164,8 @@ export const inspectionRecords = pgTable("inspection_records", {
   extractionStatus: text("extraction_status").notNull().default("pending"),
   extractionError: text("extraction_error"),
   extracted: jsonb("extracted"),
+  /** PERMIT_EXTRACTION_VERSION the `extracted` facts were read under; null until read (or read before versioning) */
+  extractionVersion: text("extraction_version"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

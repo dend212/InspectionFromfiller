@@ -1,7 +1,8 @@
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MAX_EVIDENCE_CHARS, PermitFactsSchema, emptyPermitFacts } from "@/lib/ai/permit-extraction-schema";
 import {
+  MAX_LOGGED_VALUE_CHARS,
   MAX_NOTES_CHARS,
   MAX_UNION_PARAMETERS,
   MAX_WIRE_TANKS,
@@ -172,7 +173,8 @@ describe("permitFactsFromWire", () => {
     expect(facts.permitNumber?.value).toBe("972");
   });
 
-  it("drops rows whose path is unknown or whose value does not fit the fact", () => {
+  it("drops rows whose path is unknown or whose value does not fit the fact, and logs each drop", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const facts = permitFactsFromWire(
       wire([
         row("septicTankGallons", 1250),
@@ -190,6 +192,96 @@ describe("permitFactsFromWire", () => {
       documentKind: "discharge_authorization",
       issueDate: fact("2000-03-01"),
     });
+    // a dropped row used to vanish with a bare `continue` — the waterSource "water_company" drop hid for weeks
+    expect(warn).toHaveBeenCalledTimes(7);
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", { path: "septicTankGallons", value: 1250 });
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", { path: "waterSource", value: "moon" });
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", { path: "bedrooms", value: 2.5 });
+    warn.mockRestore();
+  });
+
+  it("names the document and bounds a long value in the drop log", () => {
+    // A drop line with no document identifier cannot be traced back to a permit in the run log, and a
+    // model can put a whole 300-char quote (or worse) in `value`.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const facts = permitFactsFromWire(
+      wire([row("waterSource", "w".repeat(200)), row("septicTankGallons", 1250), row("bedrooms", "3")]),
+      { label: "OW-15-00667" },
+    );
+    expect(facts.bedrooms?.value).toBe(3);
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", {
+      label: "OW-15-00667",
+      path: "waterSource",
+      value: `${"w".repeat(MAX_LOGGED_VALUE_CHARS - 1)}…`,
+    });
+    expect(warn.mock.calls[0][1].value).toHaveLength(80);
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", {
+      label: "OW-15-00667",
+      path: "septicTankGallons",
+      value: 1250,
+    });
+    warn.mockRestore();
+  });
+
+  it("maps the model's loose waterSource spellings onto the schema tokens", () => {
+    const source = (value: string) => permitFactsFromWire(wire([row("waterSource", value)])).waterSource?.value;
+    expect(source("municipal")).toBe("municipal");
+    expect(source("city")).toBe("municipal");
+    expect(source("City Water")).toBe("municipal");
+    expect(source("domestic well")).toBe("private_well");
+    expect(source("hauled")).toBe("hauled_water");
+    expect(source("shared")).toBe("shared_well");
+  });
+
+  it('still drops "water_company" for waterSource (ambiguous between municipal and private_company) and warns', () => {
+    // Seen live on OW-15-00667 (DA prints "Water Source: Water Company"): the model echoed the form's label
+    // on 5/5 replays. The prompt decides the token from the provider name; the wire must not guess.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const facts = permitFactsFromWire(wire([row("waterSource", "water_company"), row("waterSource", "Water Company")]));
+    expect(facts.waterSource).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", { path: "waterSource", value: "water_company" });
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", { path: "waterSource", value: "Water Company" });
+    warn.mockRestore();
+  });
+
+  it('drops "public water system" (any PWS, private utilities included) and a bare "well" (shared or private?) the same way', () => {
+    // The prompt itself calls the "Water Source ID #" the ADEQ public water system number, and EPCOR / Arizona
+    // Water Company are PWSs too — so the phrase must not coerce to municipal. A lone "well" cannot tell
+    // shared_well from private_well; the DA has a separate "Shared Well:" blank the model can read.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const facts = permitFactsFromWire(
+      wire([row("waterSource", "Public Water System"), row("waterSource", "public_water"), row("waterSource", "well")]),
+    );
+    expect(facts.waterSource).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(3);
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", { path: "waterSource", value: "Public Water System" });
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", { path: "waterSource", value: "public_water" });
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", { path: "waterSource", value: "well" });
+    warn.mockRestore();
+  });
+
+  it("keeps the waterSource aliases out of the material, disposal and systemType enums", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const facts = permitFactsFromWire(
+      wire([
+        row("tanks.0.material", "city"),
+        row("disposal.type", "well"),
+        row("systemType", "hauled"),
+        row("disposal.type", "Seepage Pit"),
+      ]),
+    );
+    expect(facts).toEqual({
+      ...emptyPermitFacts(),
+      documentKind: "discharge_authorization",
+      disposal: { ...emptyPermitFacts().disposal, type: { ...fact("seepage_pit"), evidence: "ev:Seepage Pit" } },
+    });
+    expect(warn).toHaveBeenCalledTimes(3);
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", { path: "tanks.0.material", value: "city" });
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", { path: "disposal.type", value: "well" });
+    expect(warn).toHaveBeenCalledWith("[prefill] dropped fact row", { path: "systemType", value: "hauled" });
+    warn.mockRestore();
   });
 
   it("keeps the more confident row when a path is reported twice, whatever the order", () => {

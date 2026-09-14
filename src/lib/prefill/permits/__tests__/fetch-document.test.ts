@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { PDFDocument } from "pdf-lib";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PERMIT_EXTRACTION_VERSION } from "@/lib/ai/permit-extraction-prompt";
 import { MAX_DOCUMENT_BYTES } from "../../types";
 import type { SearchHit } from "../candidates";
 import { EDMS_ARCHIVES } from "../edms-client";
@@ -192,9 +193,10 @@ describe("storeDocument", () => {
       pageCount: 4,
       extractionStatus: "done",
       extractionError: null,
+      extractionVersion: PERMIT_EXTRACTION_VERSION,
     };
 
-    it("reuses a `done` row as-is: no EDMS call, no download, no upload, no new row, no re-extraction", async () => {
+    it("reuses a `done` row read under the current extraction version as-is: no EDMS call, no download, no upload, no new row, no re-extraction", async () => {
       deps = makeDeps({ findExisting: vi.fn().mockResolvedValue(existing) });
       const result = await storeDocument(baseInput, deps);
 
@@ -243,6 +245,59 @@ describe("storeDocument", () => {
       expect(deps.fetchDocumentBytes).not.toHaveBeenCalled();
       expect(deps.reuseRecord).toHaveBeenCalledWith("rec-old", expect.objectContaining({ extractionStatus: "pending" }));
       expect(result.extractionStatus).toBe("pending");
+    });
+
+    it("re-queues a `done` row whose facts were read under an older extraction version: pending, facts dropped, PDF kept", async () => {
+      deps = makeDeps({ findExisting: vi.fn().mockResolvedValue({ ...existing, extractionVersion: "2026-09-01.1" }) });
+      const result = await storeDocument(baseInput, deps);
+      expect(deps.getDocumentInfo).not.toHaveBeenCalled();
+      expect(deps.fetchDocumentBytes).not.toHaveBeenCalled();
+      expect(deps.upload).not.toHaveBeenCalled();
+      expect(deps.insertRecord).not.toHaveBeenCalled();
+      expect(deps.reuseRecord).toHaveBeenCalledTimes(1);
+      expect(deps.reuseRecord).toHaveBeenCalledWith("rec-old", {
+        runId: "run-1",
+        extractionStatus: "pending",
+        extractionError: null,
+        extracted: null,
+        extractionVersion: null,
+      });
+      expect(result).toEqual({
+        recordId: "rec-old",
+        stored: true,
+        reused: true,
+        sizeBytes: 712751,
+        pageCount: 4,
+        extractionStatus: "pending",
+      });
+    });
+
+    it("treats a `done` row with no version stamp (read before versioning) as stale and re-queues it", async () => {
+      deps = makeDeps({ findExisting: vi.fn().mockResolvedValue({ ...existing, extractionVersion: null }) });
+      const result = await storeDocument(baseInput, deps);
+      expect(deps.fetchDocumentBytes).not.toHaveBeenCalled();
+      expect(deps.reuseRecord).toHaveBeenCalledWith("rec-old", {
+        runId: "run-1",
+        extractionStatus: "pending",
+        extractionError: null,
+        extracted: null,
+        extractionVersion: null,
+      });
+      expect(result.extractionStatus).toBe("pending");
+    });
+
+    it("keeps a stale `done` row's old facts when no extraction slot is left — old facts beat none; it is re-read by a later run", async () => {
+      deps = makeDeps({ findExisting: vi.fn().mockResolvedValue({ ...existing, extractionVersion: null }) });
+      const result = await storeDocument(
+        { ...baseInput, extractionStatus: "skipped", extractionError: "Over the 3-document limit" },
+        deps,
+      );
+      expect(deps.reuseRecord).toHaveBeenCalledWith("rec-old", {
+        runId: "run-1",
+        extractionStatus: "done",
+        extractionError: null,
+      });
+      expect(result.extractionStatus).toBe("done");
     });
 
     it("keeps a `done` row done even when this run has no extraction slot left for it", async () => {

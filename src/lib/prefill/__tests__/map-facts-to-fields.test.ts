@@ -5,8 +5,10 @@ import {
   SYSTEM_TYPE_MAX_CONFIDENCE,
   dedupeProposals,
   mapPermitFacts,
+  permitDocDate,
+  permitDocRank,
 } from "@/lib/prefill/map-facts-to-fields";
-import type { ProposedField } from "@/lib/prefill/types";
+import type { ProposalAuthority, ProposedField } from "@/lib/prefill/types";
 
 const f = <T>(value: T, confidence = 0.9, page = 1, evidence = `ev:${String(value)}`) => ({
   value,
@@ -133,7 +135,8 @@ describe("mapPermitFacts — spec §7 table", () => {
     expect(p.provenance.evidence).toBe("4.02 Seepage Pit Qty 2");
     expect(p.provenance.page).toBe(1);
     expect(p.provenance.sourceUrl).toBe("/api/inspections/insp-1/records/rec-1#page=1");
-    expect(p.authority).toEqual({ docRank: 0 });
+    // a Discharge Authorization is class 0 and is dated by its own issue date
+    expect(p.authority).toEqual({ docRank: 0, docDate: "2017-05-12" });
     expect(props["generalTreatment.alternativeSystem"]).toBeUndefined();
     expect(props["includeAlternativePages"]).toBeUndefined();
   });
@@ -336,6 +339,7 @@ describe("mapPermitFacts — GP 4.02 system-type boxes", () => {
       expect(p.provenance.page).toBe(2);
       expect(p.provenance.evidence).toBe("Aerobic Treatment Unit");
       expect(p.provenance.explanation).toBe("Permit OW-17-00474 · Discharge Authorization p.2");
+      // no issueDate read → an undated DA (never the EDMS docDate)
       expect(p.authority).toEqual({ docRank: 0 });
     }
     // the Summary "System Type" suggestion is untouched
@@ -542,7 +546,8 @@ describe("mapPermitFacts — document authority (Dove Valley)", () => {
     );
     expect(props["facilityInfo.recordsAvailable"].provenance.explanation).toBe("Notice of Transfer OWR-23-02001 on file");
     expect(all.length).toBeGreaterThan(0);
-    for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(2);
+    // NOT_REC carries no EDMS docDate, so a transfer record's authority is undated (never its issueDate)
+    for (const p of all) expect(p.authority, p.fieldPath).toEqual({ docRank: 3 });
   });
 
   it("treats a document the model could not classify as a transfer record when EDMS filed it as one", () => {
@@ -551,7 +556,7 @@ describe("mapPermitFacts — document authority (Dove Valley)", () => {
     expect(props["facilityInfo.facilityAge"]).toBeUndefined();
     expect(props["facilityInfo.facilityAgeEstimateExplanation"]).toBeUndefined();
     expect(props["designFlow.estimatedDesignFlow"].value).toBe("450");
-    for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(2);
+    for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(3);
   });
 
   it("captions a NOT's tank count, disposal type and site-plan notes as a transfer record, never as a permit", () => {
@@ -594,10 +599,10 @@ describe("mapPermitFacts — document authority (Dove Valley)", () => {
     expect(props["generalTreatment.systemTypes"].provenance.explanation).toBe(
       "Notice of Transfer OWR-23-02001 · GP 4.02 Conventional, Septic Tank, Disposal by Seepage Pit p.3 (transfer record — secondary source)",
     );
-    for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(2);
+    for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(3);
   });
 
-  it("derives the age from a PERMIT-class record the model classed `other` and ranks it 0", () => {
+  it("derives the age from a PERMIT-class record the model classed `other` and ranks it as an ATC dated by its issue date", () => {
     const all = mapPermitFacts(permitFacts, PERMIT_REC, { now: NOW });
     const props = byPath(all);
     expect(props["facilityInfo.facilityAge"].value).toBe("19");
@@ -608,7 +613,7 @@ describe("mapPermitFacts — document authority (Dove Valley)", () => {
     expect(props["generalTreatment.systemTypes"].value).toEqual(["gp402_septic_tank"]);
     expect(props["generalTreatment.systemTypes"].provenance.confidence).toBe(0.72);
     expect(props["generalTreatment.systemTypes"].provenance.explanation).toBe("Permit 071533 · GP 4.02 Septic Tank p.4");
-    for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(0);
+    for (const p of all) expect(p.authority, p.fieldPath).toEqual({ docRank: 1, docDate: "2007-04-12" });
   });
 
   it("trusts the model over the EDMS index for a permit mis-filed as NOTICE OF TRANSFER", () => {
@@ -618,7 +623,7 @@ describe("mapPermitFacts — document authority (Dove Valley)", () => {
     expect(props["facilityInfo.facilityAgeEstimateExplanation"].value).toBe(
       "Approval to construct issued 04/2007 (permit OWR-23-02001)",
     );
-    for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(0);
+    for (const p of all) expect(p.authority?.docRank, p.fieldPath).toBe(1);
   });
 
   it("D7 replay order: the permit's age wins over the NOT and the NOT still supplies the design flow", () => {
@@ -655,6 +660,207 @@ describe("mapPermitFacts — document authority (Dove Valley)", () => {
     const boxes = byPath(out)["generalTreatment.systemTypes"];
     expect(boxes.provenance.confidence).toBe(0.72);
     expect(boxes.provenance.recordId).toBe("rec-permit");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Document precedence — 11420 N SAINT ANDREWS WAY: a 1975 Approval to Construct (740805,
+// scanned into EDMS 2015-09-11) beside the 2016 Discharge Authorization (OW-15-00667).
+// Owner's rule: newest DA on top, then the ATC, then transfers and abandonments.
+// ---------------------------------------------------------------------------
+
+const SA_NOW = new Date("2026-09-14T12:00:00Z");
+const ATC_REC = { id: "rec-atc", permitNumber: "740805", docType: "PERMIT", docDate: "2015-09-11", inspectionId: "insp-1" };
+const DA_REC = { id: "rec-da", permitNumber: "OW-15-00667", docType: "PERMIT", docDate: "2016-07-11", inspectionId: "insp-1" };
+
+const atcFacts: PermitFacts = {
+  ...emptyPermitFacts(),
+  documentKind: "approval_to_construct",
+  issueDate: f("1975-08-14", 0.99, 1, "APPROVED 8/14/75"),
+  bedrooms: f(3, 0.99, 1, "3 bedrooms"),
+  tanks: [{ capacityGal: f(1500, 0.99, 1, "1500 gal"), material: null, model: null, dimensions: null }],
+  disposal: { ...emptyPermitFacts().disposal, type: f("seepage_pit" as const, 0.95, 1, "seepage pit") },
+  hasSitePlan: f(true, 0.95, 2, "PLOT PLAN"),
+};
+
+const saDaFacts: PermitFacts = {
+  ...emptyPermitFacts(),
+  documentKind: "discharge_authorization",
+  issueDate: f("2016-01-25", 0.9, 1, "Issued 01/25/2016"),
+  bedrooms: f(5, 0.9, 1, "Bedrooms: 5"),
+  designFlowGpd: f(750, 0.9, 1, "Design Flow 750 gpd"),
+  tanks: [{ capacityGal: f(1500, 0.9, 1, "Septic Tank 1500"), material: null, model: null, dimensions: null }],
+  waterSource: f("municipal" as const, 0.95, 1, "Water Source: Water Company"),
+};
+
+describe("permitDocRank (re-exported from permits/doc-types)", () => {
+  it("is the same function the mapper uses", () => {
+    expect(permitDocRank("discharge_authorization", "PERMIT")).toBe(0);
+    expect(permitDocRank("approval_to_construct", "PERMIT")).toBe(1);
+    expect(permitDocRank("notice_of_transfer", "PERMIT")).toBe(3);
+  });
+});
+
+describe("permitDocDate", () => {
+  it("dates a permit-class record by the issue date the model read", () => {
+    expect(permitDocDate(saDaFacts, DA_REC, false)).toBe("2016-01-25");
+    expect(permitDocDate(atcFacts, ATC_REC, false)).toBe("1975-08-14");
+  });
+
+  it("leaves a permit-class record undated when no issue date was read — never the EDMS docDate", () => {
+    // the 1975 ATC carries docDate 2015-09-11 (its scan/filing date): a docDate fallback would make it "newer" than a 2007 permit
+    expect(permitDocDate({ ...atcFacts, issueDate: null }, ATC_REC, false)).toBeUndefined();
+    expect(permitDocDate({ ...saDaFacts, issueDate: null }, DA_REC, false)).toBeUndefined();
+    expect(permitDocDate({ ...emptyPermitFacts(), documentKind: "other" }, ATC_REC, false)).toBeUndefined();
+  });
+
+  it("ignores an issue date that is not ISO yyyy-mm-dd", () => {
+    expect(permitDocDate({ ...saDaFacts, issueDate: f("05/2017", 0.9) }, DA_REC, false)).toBeUndefined();
+    expect(permitDocDate({ ...saDaFacts, issueDate: f("March 2017", 0.9) }, DA_REC, false)).toBeUndefined();
+  });
+
+  it("dates a transfer record by its EDMS docDate, never by the dates the model read", () => {
+    const rec = { ...NOT_REC, docDate: "2023-04-27" };
+    expect(permitDocDate(notFacts, rec, true)).toBe("2023-04-27");
+    expect(permitDocDate({ ...notFacts, documentKind: "other" }, rec, true)).toBe("2023-04-27");
+    expect(permitDocDate(notFacts, NOT_REC, true)).toBeUndefined();
+    expect(permitDocDate(notFacts, { ...NOT_REC, docDate: null }, true)).toBeUndefined();
+  });
+
+  it("dates an abandonment by its EDMS docDate", () => {
+    const abandonment: PermitFacts = { ...emptyPermitFacts(), documentKind: "abandonment", isAbandonment: true, issueDate: f("2015-06-01", 0.9) };
+    const rec = { id: "rec-ab", permitNumber: "OWR-15-00520", docType: "ABANDONMENT", docDate: "2015-09-11", inspectionId: "insp-1" };
+    expect(permitDocDate(abandonment, rec, false)).toBe("2015-09-11");
+    // EDMS filed it as an abandonment but the model could not tell
+    expect(permitDocDate({ ...abandonment, documentKind: "other" }, rec, false)).toBe("2015-09-11");
+  });
+
+  it("normalises a timestamp-shaped docDate to its date part", () => {
+    const rec = { ...NOT_REC, docDate: "2015-09-11T00:00:00.000Z" };
+    expect(permitDocDate(notFacts, rec, true)).toBe("2015-09-11");
+    expect(permitDocDate(notFacts, { ...NOT_REC, docDate: "9/11/2015" }, true)).toBeUndefined();
+  });
+});
+
+describe("mapPermitFacts / dedupeProposals — document precedence (Saint Andrews)", () => {
+  const atc = () => mapPermitFacts(atcFacts, ATC_REC, { now: SA_NOW });
+  const da = () => mapPermitFacts(saDaFacts, DA_REC, { now: SA_NOW });
+
+  it("stamps each record's proposals with its class and date", () => {
+    for (const p of atc()) expect(p.authority, p.fieldPath).toEqual({ docRank: 1, docDate: "1975-08-14" });
+    for (const p of da()) expect(p.authority, p.fieldPath).toEqual({ docRank: 0, docDate: "2016-01-25" });
+  });
+
+  it.each([
+    ["ATC first", () => [...atc(), ...da()]],
+    ["DA first", () => [...da(), ...atc()]],
+  ])("the Discharge Authorization wins every shared field, %s", (_label, proposals) => {
+    const props = byPath(dedupeProposals(proposals()));
+    expect(props["designFlow.numberOfBedrooms"].value).toBe("5");
+    expect(props["designFlow.numberOfBedrooms"].provenance.recordId).toBe("rec-da");
+    expect(props["facilityInfo.facilityAge"].value).toBe("10");
+    expect(props["facilityInfo.facilityAge"].provenance.recordId).toBe("rec-da");
+    expect(props["facilityInfo.facilityAgeEstimateExplanation"].value).toBe(
+      "Discharge authorization issued 01/2016 (permit OW-15-00667)",
+    );
+    expect(props["facilityInfo.waterSource"].value).toBe("municipal");
+    expect(props["facilityInfo.waterSource"].provenance.recordId).toBe("rec-da");
+    expect(props["septicTank.tanks.0.tankCapacity"].value).toBe("1500");
+    expect(props["septicTank.tanks.0.tankCapacity"].provenance.recordId).toBe("rec-da");
+    // the ATC still supplies what the DA does not
+    expect(props["facilityInfo.hasApprovalOfConstruction"].value).toBe(true);
+    expect(props["facilityInfo.hasApprovalOfConstruction"].provenance.recordId).toBe("rec-atc");
+    expect(props["facilityInfo.approvalPermitNo"].value).toBe("740805");
+    expect(props["facilityInfo.hasSitePlan"].value).toBe(true);
+    expect(props["facilityInfo.hasSitePlan"].provenance.recordId).toBe("rec-atc");
+    expect(props["disposalWorks.disposalType"].provenance.recordId).toBe("rec-atc");
+    expect(props["facilityInfo.hasDischargeAuth"].provenance.recordId).toBe("rec-da");
+    expect(props["designFlow.estimatedDesignFlow"].value).toBe("750");
+  });
+});
+
+describe("dedupeProposals — newest document wins within a class", () => {
+  const withAuthority = (value: string, confidence: number, authority: ProposalAuthority): ProposedField => ({
+    fieldPath: "designFlow.numberOfBedrooms",
+    value,
+    kind: "fill",
+    provenance: { source: "permit", confidence, explanation: value },
+    authority,
+  });
+  const winner = (proposals: ProposedField[]) => dedupeProposals(proposals).map((p) => p.value);
+
+  it("a newer Discharge Authorization beats an older, more confident one in either order", () => {
+    const older = withAuthority("old", 0.99, { docRank: 0, docDate: "2010-03-01" });
+    const newer = withAuthority("new", 0.8, { docRank: 0, docDate: "2024-05-20" });
+    expect(winner([older, newer])).toEqual(["new"]);
+    expect(winner([newer, older])).toEqual(["new"]);
+  });
+
+  it("a dated document beats an undated one of the same class in either order", () => {
+    const dated = withAuthority("dated", 0.7, { docRank: 0, docDate: "2010-03-01" });
+    const undated = withAuthority("undated", 0.99, { docRank: 0 });
+    expect(winner([dated, undated])).toEqual(["dated"]);
+    expect(winner([undated, dated])).toEqual(["dated"]);
+  });
+
+  it("two undated documents of one class fall back to confidence, then first-seen", () => {
+    expect(winner([withAuthority("a", 0.8, { docRank: 1 }), withAuthority("b", 0.9, { docRank: 1 })])).toEqual(["b"]);
+    expect(winner([withAuthority("a", 0.9, { docRank: 1 }), withAuthority("b", 0.9, { docRank: 1 })])).toEqual(["a"]);
+    // same date too → confidence, then first-seen
+    expect(
+      winner([withAuthority("a", 0.8, { docRank: 0, docDate: "2016-01-25" }), withAuthority("b", 0.9, { docRank: 0, docDate: "2016-01-25" })]),
+    ).toEqual(["b"]);
+    expect(
+      winner([withAuthority("a", 0.9, { docRank: 0, docDate: "2016-01-25" }), withAuthority("b", 0.9, { docRank: 0, docDate: "2016-01-25" })]),
+    ).toEqual(["a"]);
+  });
+
+  it("two Notices of Transfer are ordered by their EDMS docDate", () => {
+    const older = withAuthority("old-not", 0.97, { docRank: 3, docDate: "2019-02-14" });
+    const newer = withAuthority("new-not", 0.8, { docRank: 3, docDate: "2023-04-27" });
+    expect(winner([older, newer])).toEqual(["new-not"]);
+    expect(winner([newer, older])).toEqual(["new-not"]);
+  });
+
+  it("class comes before date: a newer NOT never beats an older ATC, a newer ATC never beats an older DA", () => {
+    const atc2007 = withAuthority("atc-2007", 0.7, { docRank: 1, docDate: "2007-04-12" });
+    const not2024 = withAuthority("not-2024", 0.99, { docRank: 3, docDate: "2024-01-01" });
+    expect(winner([atc2007, not2024])).toEqual(["atc-2007"]);
+    expect(winner([not2024, atc2007])).toEqual(["atc-2007"]);
+    const da2010 = withAuthority("da-2010", 0.7, { docRank: 0, docDate: "2010-03-01" });
+    const atc2024 = withAuthority("atc-2024", 0.99, { docRank: 1, docDate: "2024-01-01" });
+    expect(winner([da2010, atc2024])).toEqual(["da-2010"]);
+    expect(winner([atc2024, da2010])).toEqual(["da-2010"]);
+  });
+
+  it("never displaces the phase-2 index row (no authority) by date", () => {
+    const phase2: ProposedField = {
+      fieldPath: "facilityInfo.recordsAvailable",
+      value: "yes",
+      kind: "fill",
+      provenance: {
+        source: "permit",
+        confidence: 1,
+        explanation: "Permit OW-15-00667 (PERMIT) found on Maricopa EDMS",
+        sourceUrl: "/api/inspections/insp-1/records/rec-da",
+        recordId: "rec-da",
+      },
+    };
+    const fromDa = mapPermitFacts(saDaFacts, DA_REC, { now: SA_NOW }).find(
+      (p) => p.fieldPath === "facilityInfo.recordsAvailable",
+    ) as ProposedField;
+    expect(fromDa.authority).toEqual({ docRank: 0, docDate: "2016-01-25" });
+    // phase 2's proposals always come first in withExtraction
+    const first = dedupeProposals([phase2, fromDa]);
+    expect(first).toHaveLength(1);
+    expect(first[0]).toBe(phase2);
+    const fromNot = mapPermitFacts(notFacts, { ...NOT_REC, docDate: "2023-04-27" }, { now: SA_NOW }).find(
+      (p) => p.fieldPath === "facilityInfo.recordsAvailable",
+    ) as ProposedField;
+    expect(fromNot.authority).toEqual({ docRank: 3, docDate: "2023-04-27" });
+    const second = dedupeProposals([fromNot, phase2]);
+    expect(second).toHaveLength(1);
+    expect(second[0]).toBe(phase2);
   });
 });
 
@@ -746,7 +952,7 @@ describe("dedupeProposals", () => {
       expect(higher.map((p) => p.value)).toEqual(["b"]);
       const equal = dedupeProposals([ranked("f", "a", 0.9, 0), ranked("f", "b", 0.9, 0)]);
       expect(equal.map((p) => p.value)).toEqual(["a"]);
-      const equalNot = dedupeProposals([ranked("f", "a", 0.9, 2), ranked("f", "b", 0.9, 2)]);
+      const equalNot = dedupeProposals([ranked("f", "a", 0.9, 3), ranked("f", "b", 0.9, 3)]);
       expect(equalNot.map((p) => p.value)).toEqual(["a"]);
     });
 
@@ -769,8 +975,8 @@ describe("dedupeProposals", () => {
       const fromNot = mapPermitFacts(notFacts, NOT_REC, { now: NOW }).find(
         (p) => p.fieldPath === "facilityInfo.recordsAvailable",
       ) as ProposedField;
-      expect(fromPermit.authority).toEqual({ docRank: 0 });
-      expect(fromNot.authority).toEqual({ docRank: 2 });
+      expect(fromPermit.authority).toEqual({ docRank: 1, docDate: "2007-04-12" });
+      expect(fromNot.authority).toEqual({ docRank: 3 });
 
       const first = dedupeProposals([phase2, fromPermit]);
       expect(first).toHaveLength(1);
@@ -782,7 +988,7 @@ describe("dedupeProposals", () => {
     });
 
     it("never lets a listing beat a Notice of Transfer for the same field", () => {
-      const fromNot = ranked("designFlow.numberOfBedrooms", "3", 0.6, 2);
+      const fromNot = ranked("designFlow.numberOfBedrooms", "3", 0.6, 3);
       const out = dedupeProposals([listing("designFlow.numberOfBedrooms", "4", 0.95), fromNot]);
       expect(out).toHaveLength(1);
       expect(out[0]).toBe(fromNot);

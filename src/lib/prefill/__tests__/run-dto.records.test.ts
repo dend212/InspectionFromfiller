@@ -25,6 +25,7 @@ const ROW: InspectionRecordRow = {
   extractionStatus: "pending",
   extractionError: null,
   extracted: null,
+  extractionVersion: null,
   createdAt: new Date("2026-09-11T10:00:03.000Z"),
 };
 
@@ -43,6 +44,7 @@ describe("toInspectionRecordDTO (phase 2)", () => {
       extractionStatus: "pending",
       extractionError: null,
       isAbandonment: true,
+      documentKind: null,
       downloadUrl: "/api/inspections/insp-1/records/rec-1",
     });
   });
@@ -74,5 +76,18 @@ describe("toInspectionRecordDTO (phase 2)", () => {
     });
     expect(dto.isAbandonment).toBe(true);
     expect(toInspectionRecordDTO({ ...ROW, docType: "PERMIT" }).isAbandonment).toBe(false);
+  });
+
+  it("exposes the kind the model read (null until the document is read)", async () => {
+    const { emptyPermitFacts } = await import("@/lib/ai/permit-extraction-schema");
+    expect(toInspectionRecordDTO(ROW).documentKind).toBeNull();
+    expect(
+      toInspectionRecordDTO({
+        ...ROW,
+        docType: "PERMIT",
+        extractionStatus: "done",
+        extracted: { ...emptyPermitFacts(), documentKind: "discharge_authorization" },
+      }).documentKind,
+    ).toBe("discharge_authorization");
   });
 });

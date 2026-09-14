@@ -1,3 +1,5 @@
+import type { PermitDocumentKind } from "@/lib/ai/permit-extraction-schema";
+
 /** Where a prefilled value came from. Colours/labels in ./sources.ts */
 export type PrefillSource = "assessor" | "permit" | "listing" | "scan";
 
@@ -46,9 +48,15 @@ export interface ProvenanceEntry {
 /** Keyed by dotted form field path, e.g. "septicTank.tankCapacity" */
 export type FieldProvenance = Record<string, ProvenanceEntry>;
 
-/** Which document class a permit-stage proposal came from; lower outranks higher (see DOC_CLASS_RANK) */
+/** Which document a permit-stage proposal came from; lower `docRank` outranks higher (see DOC_CLASS_RANK) */
 export interface ProposalAuthority {
   docRank: number;
+  /**
+   * ISO yyyy-mm-dd: the record's extracted issue date for permit-class kinds (DA / ATC), else its
+   * EDMS doc date for transfer / abandonment kinds. Within one class the newer document wins;
+   * absent = undated, which loses to any dated document of the same class.
+   */
+  docDate?: string;
 }
 
 /** What a prefill stage proposes for one field; the client merges these into the form */
@@ -58,7 +66,10 @@ export interface ProposedField {
   kind: ProposalKind;
   /** `warning` is never proposed directly — a `kind: "warning"` proposal becomes one in merge */
   provenance: Omit<ProvenanceEntry, "state" | "value" | "at" | "kind" | "warning">;
-  /** Permit-stage record proposals only; absent elsewhere (dedupe treats absent as rank 0) */
+  /**
+   * Permit-stage record proposals only; absent elsewhere. An absent authority is the phase-2
+   * EDMS index row: dedupe treats it as rank 0 (DA class) and never displaces it by date.
+   */
   authority?: ProposalAuthority;
 }
 
@@ -142,6 +153,8 @@ export interface InspectionRecordDTO {
   extractionStatus: ExtractionStatus;
   extractionError: string | null;
   isAbandonment: boolean;
+  /** What the model read the document to be; null until it has been read (`other` = could not tell) */
+  documentKind: PermitDocumentKind | null;
   /** Auth-gated route that 302s to a signed URL */
   downloadUrl: string;
 }

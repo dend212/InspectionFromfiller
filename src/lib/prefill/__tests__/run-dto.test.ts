@@ -12,6 +12,8 @@ vi.mock("@/lib/prefill/run-store", () => ({
   listRecordRows: mockListRecordRows,
 }));
 
+import { emptyPermitFacts } from "@/lib/ai/permit-extraction-schema";
+import type { PermitFacts } from "@/lib/ai/permit-extraction-schema";
 import type { InspectionRecordRow, PrefillRunRow } from "@/lib/prefill/run-store";
 import {
   isAbandonmentDocType,
@@ -54,6 +56,7 @@ const RECORD: InspectionRecordRow = {
   extractionStatus: "pending",
   extractionError: null,
   extracted: null,
+  extractionVersion: null,
   createdAt: new Date("2026-09-11T10:00:03.000Z"),
 };
 
@@ -88,6 +91,78 @@ describe("toPrefillRunDTO", () => {
     expect(dto.finishedAt).toBeNull();
     expect(dto.proposals).toEqual([]);
     expect(dto.candidates).toEqual([]);
+  });
+});
+
+describe("toPrefillRunDTO — record precedence", () => {
+  const f = (value: string) => ({ value, confidence: 0.9, page: 1, evidence: `ev:${value}`, handwritten: false });
+  const facts = (over: Partial<PermitFacts>): PermitFacts => ({ ...emptyPermitFacts(), ...over });
+  /** Unread PERMIT row by default; `createdAt` = insertion (extraction / replay) order */
+  const row = (over: Partial<InspectionRecordRow> & { id: string; at: number }): InspectionRecordRow => {
+    const { at, ...rest } = over;
+    return {
+      ...RECORD,
+      docType: "PERMIT",
+      docDate: null,
+      extracted: null,
+      createdAt: new Date(`2026-09-11T10:00:0${at}.000Z`),
+      ...rest,
+    };
+  };
+  const ids = (records: InspectionRecordRow[]) => toPrefillRunDTO(RUN, records).records.map((r) => r.id);
+
+  it("orders DA → ATC → NOT → abandonment by the kind the model read, not by createdAt", () => {
+    // DB order (createdAt asc) is the extraction order — the abandonment was stored first, the DA last
+    const records = [
+      row({ id: "aband", at: 1, docType: "ABANDONMENT", docDate: "2015-11-02", extracted: facts({ documentKind: "abandonment", isAbandonment: true }) }),
+      row({ id: "not", at: 2, docType: "NOTICE OF TRANSFER", docDate: "2020-10-27", extracted: facts({ documentKind: "notice_of_transfer" }) }),
+      row({ id: "atc", at: 3, docType: "PERMIT", docDate: "2015-09-11", extracted: facts({ documentKind: "approval_to_construct", issueDate: f("1975-06-12") }) }),
+      // Filed under PERMIT in EDMS — the model's verdict, not the index type, puts it on top
+      row({ id: "da", at: 4, docType: "PERMIT", docDate: "2016-01-25", extracted: facts({ documentKind: "discharge_authorization", issueDate: f("2016-01-25") }) }),
+    ];
+    const dto = toPrefillRunDTO(RUN, records);
+    expect(dto.records.map((r) => r.id)).toEqual(["da", "atc", "not", "aband"]);
+    expect(dto.records.map((r) => r.documentKind)).toEqual([
+      "discharge_authorization",
+      "approval_to_construct",
+      "notice_of_transfer",
+      "abandonment",
+    ]);
+  });
+
+  it("puts the newest DA first by the issue date the model read; an unread DA (no issue date) sorts last in its class", () => {
+    // EDMS docDate is the scan / filing date, never the issue date — it must not order permit-class rows
+    const records = [
+      row({ id: "da-2016", at: 1, docType: "FINAL DA", docDate: "2026-01-01", extracted: facts({ documentKind: "final_da", issueDate: f("2016-01-25") }) }),
+      row({ id: "da-unread", at: 2, docType: "FINAL DA", docDate: "2027-01-01" }),
+      row({ id: "da-2024", at: 3, docType: "FINAL DA", docDate: "2016-01-01", extracted: facts({ documentKind: "discharge_authorization", issueDate: f("2024-03-02") }) }),
+      row({ id: "atc", at: 4, docType: "PERMIT", extracted: facts({ documentKind: "approval_to_construct", issueDate: f("2015-06-01") }) }),
+    ];
+    expect(ids(records)).toEqual(["da-2024", "da-2016", "da-unread", "atc"]);
+  });
+
+  it("dates transfers by the EDMS docDate and sorts an unread row after dated siblings by its EDMS class", () => {
+    const records = [
+      // Unread PERMIT: EDMS class permit, undated — after the dated ATC even though its docDate is newer
+      row({ id: "unread-permit", at: 1, docType: "PERMIT", docDate: "2025-01-01" }),
+      // A transfer is dated by the index, not by whatever date the model read off it
+      row({ id: "not-2020", at: 2, docType: "NOTICE OF TRANSFER", docDate: "2020-10-27", extracted: facts({ documentKind: "notice_of_transfer", issueDate: f("2024-01-01") }) }),
+      row({ id: "not-2022", at: 3, docType: "NOTICE OF TRANSFER", docDate: "2022-03-28" }),
+      row({ id: "atc-1975", at: 4, docType: "PERMIT", docDate: "2015-09-11", extracted: facts({ documentKind: "approval_to_construct", issueDate: f("1975-06-12") }) }),
+    ];
+    const dto = toPrefillRunDTO(RUN, records);
+    expect(dto.records.map((r) => r.id)).toEqual(["atc-1975", "unread-permit", "not-2022", "not-2020"]);
+    expect(dto.records.find((r) => r.id === "unread-permit")?.documentKind).toBeNull();
+    expect(dto.records.find((r) => r.id === "not-2022")?.documentKind).toBeNull();
+  });
+
+  it("falls back to createdAt (DB order) for rows nothing else separates", () => {
+    const records = [
+      row({ id: "second", at: 2 }),
+      row({ id: "first", at: 1 }),
+      row({ id: "third", at: 3 }),
+    ];
+    expect(ids(records)).toEqual(["first", "second", "third"]);
   });
 });
 

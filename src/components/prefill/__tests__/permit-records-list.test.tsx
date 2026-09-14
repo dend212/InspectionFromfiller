@@ -30,6 +30,7 @@ function record(over: Partial<InspectionRecordDTO> & { id: string }): Inspection
     extractionStatus: "pending",
     extractionError: null,
     isAbandonment: false,
+    documentKind: null,
     downloadUrl: `/api/inspections/insp-1/records/${over.id}`,
     ...over,
   };
@@ -211,6 +212,268 @@ describe("PermitRecordsList — records", () => {
       "href",
       "/api/inspections/insp-1/records/rec-7",
     );
+  });
+
+  it("labels each row with the kind the model read and marks the first permit-class row as the primary source", () => {
+    // Already in precedence order (run-dto sorts): DA → ATC → NOT → abandonment
+    render(
+      <PermitRecordsList
+        run={run({
+          records: [
+            record({
+              id: "da",
+              permitNumber: "OW-15-00667",
+              docType: "PERMIT",
+              docDate: "2016-01-25",
+              extractionStatus: "done",
+              documentKind: "discharge_authorization",
+            }),
+            record({
+              id: "atc",
+              permitNumber: "740805",
+              docType: "PERMIT",
+              docDate: "2015-09-11",
+              extractionStatus: "done",
+              documentKind: "approval_to_construct",
+            }),
+            record({
+              id: "not",
+              permitNumber: "OWR-22-01478",
+              docType: "NOTICE OF TRANSFER",
+              docDate: "2022-03-28",
+              extractionStatus: "done",
+              documentKind: "notice_of_transfer",
+            }),
+            record({
+              id: "aband",
+              permitNumber: "OWR-15-00520",
+              docType: "ABANDONMENT",
+              docDate: "2015-11-02",
+              extractionStatus: "done",
+              documentKind: "abandonment",
+              isAbandonment: true,
+            }),
+          ],
+        })}
+        onSelectCandidates={vi.fn()}
+      />,
+    );
+    const rows = within(screen.getByRole("list", { name: /permit documents/i })).getAllByRole(
+      "listitem",
+    );
+    expect(rows).toHaveLength(4);
+
+    expect(rows[0]).toHaveTextContent("OW-15-00667");
+    expect(rows[0]).toHaveTextContent("PERMIT");
+    expect(rows[0]).toHaveTextContent("Discharge Authorization");
+    expect(rows[0]).toHaveTextContent("Primary source");
+
+    expect(rows[1]).toHaveTextContent("Approval to Construct");
+    expect(rows[1]).not.toHaveTextContent("Primary source");
+
+    // the transfer note already says what the row is — the kind label is not repeated
+    expect(rows[2]).toHaveTextContent("NOTICE OF TRANSFER");
+    expect(rows[2]).not.toHaveTextContent("Notice of Transfer");
+    expect(rows[2]).toHaveTextContent("transfer record — used only for facts no permit states");
+    expect(rows[2]).not.toHaveTextContent("Primary source");
+
+    // likewise the ABANDONMENT badge
+    expect(within(rows[3]).getByText("ABANDONMENT", { selector: "span.uppercase" })).toBeInTheDocument();
+    expect(rows[3]).not.toHaveTextContent("Abandonment");
+    expect(rows[3]).not.toHaveTextContent("Primary source");
+
+    expect(screen.getAllByText("Primary source")).toHaveLength(1);
+  });
+
+  it("shows the model's kind only where it adds information: a PERMIT row always, otherwise only a verdict that changed the class", () => {
+    render(
+      <PermitRecordsList
+        run={run({
+          records: [
+            // legacy "PERMIT" covers ATCs and DAs alike, so both verdicts are named
+            record({ id: "permit-atc", permitNumber: "740805", docType: "PERMIT", extractionStatus: "done", documentKind: "approval_to_construct" }),
+            record({ id: "permit-da", permitNumber: "OW-15-00667", docType: "PERMIT", extractionStatus: "done", documentKind: "discharge_authorization" }),
+            // a FINAL DA read as a DA says nothing new; read as an ATC it does
+            record({ id: "da-da", permitNumber: "OW-24-00001", docType: "FINAL DA", extractionStatus: "done", documentKind: "final_da" }),
+            record({ id: "da-atc", permitNumber: "OW-24-00002", docType: "FINAL DA", extractionStatus: "done", documentKind: "approval_to_construct" }),
+            // a NOT verdict is spelled out by the transfer note, whatever the EDMS type
+            record({ id: "not-not", permitNumber: "OWR-22-01478", docType: "NOTICE OF TRANSFER", extractionStatus: "done", documentKind: "notice_of_transfer" }),
+            record({ id: "permit-not", permitNumber: "OWR-23-02001", docType: "PERMIT", extractionStatus: "done", documentKind: "notice_of_transfer" }),
+            // the ABANDONMENT badge prints the EDMS type: redundant on an ABANDONMENT row, news on a PERMIT row
+            record({ id: "aband-aband", permitNumber: "OWR-15-00520", docType: "ABANDONMENT", extractionStatus: "done", documentKind: "abandonment", isAbandonment: true }),
+            record({ id: "permit-aband", permitNumber: "OWR-15-00521", docType: "PERMIT", extractionStatus: "done", documentKind: "abandonment", isAbandonment: true }),
+          ],
+        })}
+        onSelectCandidates={vi.fn()}
+      />,
+    );
+    const rows = within(screen.getByRole("list", { name: /permit documents/i })).getAllByRole("listitem");
+    expect(rows).toHaveLength(8);
+
+    expect(rows[0]).toHaveTextContent("Approval to Construct");
+    expect(rows[1]).toHaveTextContent("Discharge Authorization");
+
+    expect(rows[2]).toHaveTextContent("FINAL DA");
+    expect(rows[2]).not.toHaveTextContent("Discharge Authorization");
+    expect(rows[3]).toHaveTextContent("Approval to Construct");
+
+    expect(within(rows[4]).getAllByText(/notice of transfer/i)).toHaveLength(1);
+    expect(rows[4]).not.toHaveTextContent("Notice of Transfer");
+    expect(rows[4]).toHaveTextContent("transfer record — used only for facts no permit states");
+    expect(rows[5]).not.toHaveTextContent("Notice of Transfer");
+    expect(rows[5]).toHaveTextContent("transfer record — used only for facts no permit states");
+
+    expect(within(rows[6]).getAllByText(/abandonment/i)).toHaveLength(1);
+    expect(within(rows[6]).getByText("ABANDONMENT", { selector: "span.uppercase" })).toBeInTheDocument();
+    expect(rows[6]).not.toHaveTextContent("Abandonment");
+    expect(within(rows[7]).getByText("PERMIT", { selector: "span.uppercase" })).toBeInTheDocument();
+    expect(rows[7]).toHaveTextContent("Abandonment");
+  });
+
+  it("skips transfers, abandonments and unread rows for the primary marker and shows no kind label for an unread or 'other' row", () => {
+    render(
+      <PermitRecordsList
+        run={run({
+          records: [
+            record({
+              id: "not",
+              permitNumber: "OWR-23-02001",
+              docType: "NOTICE OF TRANSFER",
+              docDate: "2023-06-07",
+              extractionStatus: "done",
+              documentKind: "notice_of_transfer",
+            }),
+            record({
+              id: "aband",
+              permitNumber: "OWR-22-01512",
+              docType: "ABANDONMENT",
+              docDate: "2025-04-14",
+              isAbandonment: true,
+            }),
+            record({ id: "unread", permitNumber: "OW-17-00474", docType: "PERMIT" }),
+            record({
+              id: "other",
+              permitNumber: "743691",
+              docType: "PERMIT SUB",
+              extractionStatus: "done",
+              documentKind: "other",
+            }),
+          ],
+        })}
+        onSelectCandidates={vi.fn()}
+      />,
+    );
+    const rows = within(screen.getByRole("list", { name: /permit documents/i })).getAllByRole(
+      "listitem",
+    );
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toHaveTextContent("transfer record — used only for facts no permit states");
+    expect(rows[0]).not.toHaveTextContent("Primary source");
+    expect(rows[1]).not.toHaveTextContent("Primary source");
+
+    // The unread PERMIT row contributed no facts, so it cannot be the source of any fill
+    expect(within(rows[2]).getByText("Queued")).toBeInTheDocument();
+    expect(rows[2]).not.toHaveTextContent("Primary source");
+    expect(rows[2]).not.toHaveTextContent("Approval to Construct");
+    expect(rows[2]).not.toHaveTextContent("Discharge Authorization");
+
+    // `other` = the model could not tell — only the EDMS type is shown; it is the only
+    // permit-class row that was read, so its facts are the ones that filled the form
+    expect(rows[3]).toHaveTextContent("PERMIT SUB");
+    expect(rows[3]).not.toHaveTextContent(/other/i);
+    expect(rows[3]).toHaveTextContent("Primary source");
+    expect(screen.getAllByText("Primary source")).toHaveLength(1);
+  });
+
+  it("moves the primary marker past a FINAL DA that was not read to the ATC whose facts filled the form", () => {
+    // run-dto sorts by class first, so a skipped (over 25 MB) or failed DA still sits on top —
+    // but only the `done` ATC's facts reached dedupeProposals
+    const cases: Array<Partial<InspectionRecordDTO>> = [
+      {
+        extractionStatus: "skipped",
+        extractionError: "Larger than 25 MB (25.0 MB) — open it on Maricopa EDMS",
+        downloadUrl: "",
+      },
+      { extractionStatus: "failed", extractionError: "Claude timed out" },
+    ];
+    for (const da of cases) {
+      const { unmount } = render(
+        <PermitRecordsList
+          run={run({
+            records: [
+              record({
+                id: "da",
+                permitNumber: "OW-24-00001",
+                docType: "FINAL DA",
+                docDate: "2024-05-01",
+                ...da,
+              }),
+              record({
+                id: "atc",
+                permitNumber: "740805",
+                docType: "PERMIT",
+                docDate: "2015-09-11",
+                extractionStatus: "done",
+                documentKind: "approval_to_construct",
+              }),
+            ],
+          })}
+          onSelectCandidates={vi.fn()}
+        />,
+      );
+      const rows = within(screen.getByRole("list", { name: /permit documents/i })).getAllByRole(
+        "listitem",
+      );
+      expect(rows[0]).toHaveTextContent("OW-24-00001");
+      expect(rows[0]).not.toHaveTextContent("Primary source");
+      expect(rows[1]).toHaveTextContent("Approval to Construct");
+      expect(rows[1]).toHaveTextContent("Primary source");
+      expect(screen.getAllByText("Primary source")).toHaveLength(1);
+      unmount();
+    }
+  });
+
+  it("marks no primary source when no permit-class row was read (NOT + PLAN REVIEW, or a run still queued)", () => {
+    const { unmount } = render(
+      <PermitRecordsList
+        run={run({
+          records: [
+            record({
+              id: "pr",
+              permitNumber: "743691",
+              docType: "PLAN REVIEW",
+              docDate: "2015-09-11",
+              extractionStatus: "skipped",
+              extractionError: "PLAN REVIEW documents are not read",
+            }),
+            record({
+              id: "not",
+              permitNumber: "OWR-23-02001",
+              docType: "NOTICE OF TRANSFER",
+              docDate: "2023-06-07",
+              extractionStatus: "done",
+              documentKind: "notice_of_transfer",
+            }),
+          ],
+        })}
+        onSelectCandidates={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("Primary source")).toBeNull();
+    unmount();
+
+    render(
+      <PermitRecordsList
+        run={run({
+          status: "running",
+          stages: { ...emptyStages(), permits: { status: "running", links: [], summary: "Reading OW-17-00474…" } },
+          records: [record({ id: "queued", permitNumber: "OW-17-00474", docType: "PERMIT" })],
+        })}
+        onSelectCandidates={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Reading…")).toBeInTheDocument();
+    expect(screen.queryByText("Primary source")).toBeNull();
   });
 
   it("renders no list and no picker for an empty done run", () => {

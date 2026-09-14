@@ -6,14 +6,21 @@ import type { Fact, PermitDocumentKind, PermitFacts } from "@/lib/ai/permit-extr
 import { GP402_SYSTEM_TYPES, WATER_SOURCES } from "@/lib/constants/inspection";
 import type { ListingFacts } from "./listing/provider";
 import { SEWER_KEYS, WATER_KEYS, canonicalHomeType, findFact, flattenText } from "./listing/zillow-apify";
-import { DOC_CLASS_RANK, classifyDocType } from "./permits/doc-types";
+import { DOC_KIND_LABEL, classifyDocType, isTransferRecord, permitDocRank } from "./permits/doc-types";
 import type { PrefillSource, ProposalAuthority, ProposedField } from "./types";
+
+// permitDocRank, DOC_KIND_LABEL and isTransferRecord moved to permits/doc-types (next to
+// DOC_CLASS_RANK — and out of the "use client" bundle, which must not pull the listing code in);
+// kept exported here for importers
+export { DOC_KIND_LABEL, isTransferRecord, permitDocRank };
 
 export interface PermitRecordRef {
   id: string;
   permitNumber: string;
   docType: string;
   inspectionId: string;
+  /** The EDMS index date (Drizzle `date()` → string | null); dates a transfer / abandonment record in dedupe */
+  docDate?: string | null;
 }
 
 export interface MapPermitFactsOptions {
@@ -24,14 +31,6 @@ export interface MapPermitFactsOptions {
 /** Spec §7: cesspool and system type are suggestion-only — kept under PREFILL_FILL_THRESHOLD (0.75) */
 export const CESSPOOL_MAX_CONFIDENCE = 0.7;
 export const SYSTEM_TYPE_MAX_CONFIDENCE = 0.7;
-
-const DOC_KIND_LABEL: Record<Exclude<PermitDocumentKind, "other">, string> = {
-  approval_to_construct: "Approval to Construct",
-  discharge_authorization: "Discharge Authorization",
-  final_da: "Final Discharge Authorization",
-  notice_of_transfer: "Notice of Transfer",
-  abandonment: "Abandonment",
-};
 
 type Provenance = ProposedField["provenance"];
 
@@ -115,29 +114,33 @@ function gp402Tokens(facts: PermitFacts): Gp402Boxes | null {
   return { boxes, primary };
 }
 
-const AUTHORITATIVE_KINDS: ReadonlySet<PermitDocumentKind> = new Set([
-  "approval_to_construct",
-  "discharge_authorization",
-  "final_da",
-]);
-
-/** A Notice of Transfer by the model's verdict, or by the EDMS index when the model could not tell */
-export function isTransferRecord(kind: PermitDocumentKind, docType: string): boolean {
-  return kind === "notice_of_transfer" || (kind === "other" && classifyDocType(docType) === "notice_of_transfer");
-}
-
-/** Authority of a record's facts: what the model read outranks the EDMS index; lower wins */
-export function permitDocRank(kind: PermitDocumentKind, docType: string): number {
-  if (AUTHORITATIVE_KINDS.has(kind)) return DOC_CLASS_RANK.permit;
-  if (kind === "notice_of_transfer") return DOC_CLASS_RANK.notice_of_transfer;
-  if (kind === "abandonment") return DOC_CLASS_RANK.abandonment;
-  return DOC_CLASS_RANK[classifyDocType(docType)];
+/** An abandonment by the model's verdict, or by the EDMS index when the model could not tell */
+function isAbandonmentRecord(kind: PermitDocumentKind, docType: string): boolean {
+  return kind === "abandonment" || (kind === "other" && classifyDocType(docType) === "abandonment");
 }
 
 function parseIsoDate(value: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return null;
   const d = new Date(`${value.trim()}T00:00:00Z`);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * The date that orders a record against others of its class in dedupeProposals (newer wins).
+ * Transfer and abandonment records are dated by the EDMS index (`docDate`, trimmed to yyyy-mm-dd —
+ * a raw pg dump carries "2015-09-11T00:00:00.000Z" shapes): the dates the model reads off them are
+ * signature / escrow / inspection dates. Every other kind (DA, ATC, other) is dated by the issue
+ * date the model read, or left undated. Deliberately NO docDate fallback for permit-class
+ * documents: in the legacy env archive docDate is the scan / filing date (the 1975 ATC 740805
+ * carries docDate 2015-09-11), so it would order a permit with an unread issue date as "newer".
+ */
+export function permitDocDate(facts: PermitFacts, record: PermitRecordRef, transfer: boolean): string | undefined {
+  if (transfer || isAbandonmentRecord(facts.documentKind, record.docType)) {
+    const raw = record.docDate ?? "";
+    return /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : undefined;
+  }
+  if (!facts.issueDate || !parseIsoDate(facts.issueDate.value)) return undefined;
+  return facts.issueDate.value.trim();
 }
 
 /** Whole years from `from` to `now` (UTC), never negative */
@@ -159,9 +162,14 @@ export function mapPermitFacts(
   const label = facts.documentKind === "other" ? record.docType : DOC_KIND_LABEL[facts.documentKind];
   const permitNo = facts.permitNumber?.value.trim() || record.permitNumber;
   const url = (page: number) => `/api/inspections/${record.inspectionId}/records/${record.id}#page=${page}`;
-  // A transfer record's facts are secondary: a permit-class record beats them in dedupeProposals
+  // A transfer record's facts are secondary: a permit-class record beats them in dedupeProposals;
+  // within one class the newer document wins, so the authority also carries the record's date
   const transfer = isTransferRecord(facts.documentKind, record.docType);
-  const authority: ProposalAuthority = { docRank: permitDocRank(facts.documentKind, record.docType) };
+  const docDate = permitDocDate(facts, record, transfer);
+  const authority: ProposalAuthority = {
+    docRank: permitDocRank(facts.documentKind, record.docType),
+    ...(docDate ? { docDate } : {}),
+  };
   // Caption prefix/suffix shared by prov() and the explanation overrides below — a NOT is never "Permit N"
   const docLabel = transfer ? `Notice of Transfer ${record.permitNumber}` : `Permit ${permitNo}`;
   const secondary = transfer ? " (transfer record — secondary source)" : "";
@@ -375,8 +383,28 @@ function sourceRankOf(p: ProposedField): number {
   return (FIELD_SOURCE_RANK[p.fieldPath] ?? SOURCE_RANK)[p.provenance.source];
 }
 
+/**
+ * No authority = the phase-2 EDMS index row. Its default is rank 0 — the DA class — on purpose:
+ * it must not lose to an ATC / NOT mapper proposal, and it ties a DA's, where the date never breaks
+ * the tie (see beats) and first-seen keeps it.
+ */
 function docRankOf(p: ProposedField): number {
   return p.authority?.docRank ?? 0;
+}
+
+/**
+ * Newer document first within a class, only between two proposals that BOTH carry authority (the
+ * index row has none and must keep winning its first-seen tie). Dated beats undated; both undated
+ * falls through (0). ISO yyyy-mm-dd strings compare lexically.
+ */
+function docDateDiff(p: ProposedField, cur: ProposedField): number {
+  if (!p.authority || !cur.authority) return 0;
+  const a = p.authority.docDate;
+  const b = cur.authority.docDate;
+  if (a === b) return 0;
+  if (!a) return -1;
+  if (!b) return 1;
+  return a > b ? 1 : -1;
 }
 
 /** True when `p` should replace `cur` for the same `kind:fieldPath` */
@@ -385,14 +413,22 @@ function beats(p: ProposedField, cur: ProposedField): boolean {
   if (rankDiff !== 0) return rankDiff > 0;
   const docDiff = docRankOf(p) - docRankOf(cur);
   if (docDiff !== 0) return docDiff < 0;
+  const dateDiff = docDateDiff(p, cur);
+  if (dateDiff !== 0) return dateDiff > 0;
   return p.provenance.confidence > cur.provenance.confidence;
 }
 
 /**
- * Combine stage proposals per `kind:fieldPath`: higher SOURCE_RANK wins (permit > assessor >
- * listing > scan, except the FIELD_SOURCE_RANK paths); within a source the more authoritative document wins (lower
- * `authority.docRank`; no authority = rank 0, i.e. the EDMS index row); then strictly higher
- * confidence; then first-seen. Warnings never collide with fills. Output keeps first-seen order.
+ * Combine stage proposals per `kind:fieldPath`, in this order:
+ *   1. higher SOURCE_RANK (permit > assessor > listing > scan, except the FIELD_SOURCE_RANK paths);
+ *   2. within a source, the more authoritative document class (lower `authority.docRank`:
+ *      Discharge Authorization → Approval to Construct → … → Notice of Transfer → abandonment;
+ *      no authority = rank 0, i.e. the EDMS index row);
+ *   3. within a class, the newer document (`authority.docDate`, dated beats undated) — only when
+ *      both proposals carry authority, so the index row is never displaced by date;
+ *   4. strictly higher confidence;
+ *   5. first-seen.
+ * Warnings never collide with fills. Output keeps first-seen order.
  */
 export function dedupeProposals(proposals: ProposedField[]): ProposedField[] {
   const best = new Map<string, ProposedField>();

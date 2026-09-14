@@ -82,6 +82,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({ storage: { from: () => ({ download: mocks.download }) } }),
 }));
 
+import { PERMIT_EXTRACTION_VERSION } from "@/lib/ai/permit-extraction-prompt";
 import { emptyPermitFacts, type PermitFacts } from "@/lib/ai/permit-extraction-schema";
 import type { SearchHit } from "@/lib/prefill/permits/candidates";
 import { storeDocument } from "@/lib/prefill/permits/fetch-document";
@@ -131,6 +132,7 @@ function existingRow(over: Partial<Record<string, unknown>> = {}) {
     extractionStatus: "done",
     extractionError: null,
     extracted: facts,
+    extractionVersion: PERMIT_EXTRACTION_VERSION,
     createdAt: new Date("2026-09-11T00:00:00Z"),
     ...over,
   };
@@ -190,7 +192,13 @@ describe("second Find records on an inspection with a stored + extracted record 
 
     // the one row now belongs to run 2 and is listed for it, exactly as if just stored
     expect(mocks.table).toHaveLength(1);
-    expect(mocks.table[0]).toMatchObject({ id: "rec-run-1", runId: "run-2", extractionStatus: "done", extracted: facts });
+    expect(mocks.table[0]).toMatchObject({
+      id: "rec-run-1",
+      runId: "run-2",
+      extractionStatus: "done",
+      extracted: facts,
+      extractionVersion: PERMIT_EXTRACTION_VERSION,
+    });
     await expect(mocks.listRecordRows("run-2")).resolves.toHaveLength(1);
 
     expect(result.stage.status).toBe("done");
@@ -219,10 +227,87 @@ describe("second Find records on an inspection with a stored + extracted record 
     expect(mocks.createRecordRow).not.toHaveBeenCalled();
     expect(mocks.download).toHaveBeenCalledWith("records/insp-1/rec-run-1.pdf");
     expect(mocks.extractPermitFactsFromPdf).toHaveBeenCalledTimes(1);
-    expect(mocks.persistSet).toHaveBeenCalledWith({ extractionStatus: "done", extractionError: null, extracted: facts });
+    expect(mocks.persistSet).toHaveBeenCalledWith({
+      extractionStatus: "done",
+      extractionError: null,
+      extracted: facts,
+      extractionVersion: PERMIT_EXTRACTION_VERSION,
+    });
     expect(mocks.table).toHaveLength(1);
-    expect(mocks.table[0]).toMatchObject({ id: "rec-run-1", runId: "run-2", extractionStatus: "done" });
+    expect(mocks.table[0]).toMatchObject({
+      id: "rec-run-1",
+      runId: "run-2",
+      extractionStatus: "done",
+      extractionVersion: PERMIT_EXTRACTION_VERSION,
+    });
     expect(result.proposals.find((p) => p.fieldPath === "septicTank.tanks.0.tankCapacity")?.value).toBe("1000");
+  });
+
+  describe("facts read under an older extraction version (prompt / schema / coercion bump)", () => {
+    // 11420 N Saint Andrews Way: the DA's stored facts pre-date the waterSource prompt fix and must be
+    // re-read — replaying them would keep "Find records" from ever producing the new facts.
+    const staleFacts: PermitFacts = {
+      ...emptyPermitFacts(),
+      documentKind: "discharge_authorization",
+      permitNumber: f("000972", 0.98),
+      tanks: [{ capacityGal: f(1250), material: null, model: null, dimensions: null }],
+    };
+    const freshFacts: PermitFacts = { ...facts, waterSource: f("municipal" as const, 0.95) };
+
+    for (const [label, extractionVersion] of [
+      ["an older version stamp", "2026-09-01.1"],
+      ["no version stamp (read before versioning)", null],
+    ] as const) {
+      it(`re-reads (without re-downloading) a \`done\` record carrying ${label} and stamps the current version`, async () => {
+        mocks.table.push(existingRow({ extracted: staleFacts, extractionVersion }));
+        mocks.extractPermitFactsFromPdf.mockResolvedValue({
+          facts: freshFacts,
+          passes: 1,
+          escalations: 0,
+          pageCount: 4,
+          usage: { calls: [], estimatedCostUsd: 0.04 },
+        });
+        const result = await runPermitsStage(input, ctx(), deps());
+
+        // the stored PDF is kept: no EDMS call, no upload, no new row — but it IS read again
+        expect(mocks.getDocumentInfo).not.toHaveBeenCalled();
+        expect(mocks.fetchDocumentBytes).not.toHaveBeenCalled();
+        expect(mocks.uploadRecordPdf).not.toHaveBeenCalled();
+        expect(mocks.createRecordRow).not.toHaveBeenCalled();
+        expect(mocks.reuseRecordRow).toHaveBeenCalledWith("rec-run-1", {
+          runId: "run-2",
+          extractionStatus: "pending",
+          extractionError: null,
+          extracted: null,
+          extractionVersion: null,
+        });
+        expect(mocks.download).toHaveBeenCalledWith("records/insp-1/rec-run-1.pdf");
+        expect(mocks.extractPermitFactsFromPdf).toHaveBeenCalledTimes(1);
+        expect(mocks.persistSet).toHaveBeenCalledWith({
+          extractionStatus: "done",
+          extractionError: null,
+          extracted: freshFacts,
+          extractionVersion: PERMIT_EXTRACTION_VERSION,
+        });
+        expect(mocks.table).toHaveLength(1);
+        expect(mocks.table[0]).toMatchObject({
+          id: "rec-run-1",
+          runId: "run-2",
+          extractionStatus: "done",
+          extracted: freshFacts,
+          extractionVersion: PERMIT_EXTRACTION_VERSION,
+        });
+
+        // only the fresh facts reach the proposals — the stale 1,250 gal tank is never replayed
+        expect(result.stage.status).toBe("done");
+        const caps = result.proposals.filter((p) => p.fieldPath === "septicTank.tanks.0.tankCapacity");
+        expect(caps.map((p) => p.value)).toEqual(["1000"]);
+        expect(result.proposals.find((p) => p.fieldPath === "facilityInfo.waterSource")?.value).toBe("municipal");
+        expect(result.stage.summary).toBe(
+          "1 permit document found: 000972 PERMIT · 000972: 1,000 gal tank · 450 gpd design flow",
+        );
+      });
+    }
   });
 
   it("treats the same permit with a different doc date as a new document", async () => {

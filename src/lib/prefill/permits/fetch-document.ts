@@ -14,11 +14,14 @@
  * D7: a document this inspection already stored (same archive + permit number +
  * doc type + doc date — the `PermitCandidate.key` fields) is reused instead:
  * no EDMS call, no upload, no new row — the existing row is re-parented onto
- * this run, and one that was already read keeps its facts (no re-extraction).
+ * this run, and one that was already read under the current
+ * PERMIT_EXTRACTION_VERSION keeps its facts (no re-extraction). Facts read under
+ * an older version (or before versioning) are dropped and the row is re-queued.
  */
 
 import { randomUUID } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
+import { PERMIT_EXTRACTION_VERSION } from "@/lib/ai/permit-extraction-prompt";
 import { recordStoragePath, uploadRecordPdf } from "@/lib/storage/record-storage";
 import {
   type InspectionRecordRow,
@@ -64,7 +67,7 @@ export interface StoreDocumentResult {
 /** What the reuse path needs from an existing row */
 export type ExistingRecord = Pick<
   InspectionRecordRow,
-  "id" | "storagePath" | "sizeBytes" | "pageCount" | "extractionStatus" | "extractionError"
+  "id" | "storagePath" | "sizeBytes" | "pageCount" | "extractionStatus" | "extractionError" | "extractionVersion"
 >;
 
 export interface StoreDocumentDeps {
@@ -121,18 +124,31 @@ function tooLargeMessage(bytes: number): string {
 
 /**
  * D7: reuse the row an earlier run stored for this document. A row already read
- * keeps `done` + its facts; anything else takes this run's extraction decision
- * (so a failed/pending/skipped read is re-queued when the run has a slot for it).
+ * under the current PERMIT_EXTRACTION_VERSION keeps `done` + its facts; anything
+ * else takes this run's extraction decision (so a failed/pending/skipped read is
+ * re-queued when the run has a slot for it). A `done` row read under an older
+ * version — or before versioning (null) — is stale: when this run has a slot for
+ * it, its facts and stamp are cleared and it is read again from the stored PDF;
+ * when it has none, the stale facts are still replayed (old facts beat no facts)
+ * and the row is re-read by the next run that can fit it.
  */
 async function reuseStoredDocument(
   input: StoreDocumentInput,
   existing: ExistingRecord,
   deps: StoreDocumentDeps,
 ): Promise<StoreDocumentResult> {
-  const keepDone = existing.extractionStatus === "done";
+  const wasDone = existing.extractionStatus === "done";
+  const stale = wasDone && existing.extractionVersion !== PERMIT_EXTRACTION_VERSION;
+  const reread = stale && input.extractionStatus === "pending";
+  const keepDone = wasDone && !reread;
   const extractionStatus: ExtractionStatus = keepDone ? "done" : input.extractionStatus;
   const extractionError = keepDone ? existing.extractionError : (input.extractionError ?? null);
-  await deps.reuseRecord(existing.id, { runId: input.runId, extractionStatus, extractionError });
+  await deps.reuseRecord(existing.id, {
+    runId: input.runId,
+    extractionStatus,
+    extractionError,
+    ...(reread ? { extracted: null, extractionVersion: null } : {}),
+  });
   return {
     recordId: existing.id,
     stored: true,

@@ -27,6 +27,42 @@ export const DISPOSAL_TYPE_VALUES = ["trench", "bed", "chamber", "seepage_pit", 
 export const WATER_SOURCE_VALUES = ["municipal", "private_company", "shared_well", "private_well", "hauled_water"] as const;
 export const SYSTEM_TYPE_VALUES = ["conventional", "alternative"] as const;
 
+/**
+ * Spellings the model may emit for waterSource instead of a token (the form's own wording), keyed
+ * after the usual lower-case / underscore normalisation. Deliberately absent: "water_company",
+ * "water_co", "utility", "public_water" and "public_water_system" — on a Discharge Authorization
+ * "Water Company" is the county's category for any piped utility, and a "public water system" is
+ * ANY ADEQ-regulated provider (EPCOR and Arizona Water Company carry PWS IDs too), so they are
+ * ambiguous between municipal and private_company; likewise a bare "well" cannot tell shared_well
+ * from private_well (the DA has its own "Shared Well:" blank). The prompt decides those from what
+ * is printed on the page, and the wire drops (and logs) the bare label.
+ */
+export const WATER_SOURCE_ALIASES: Readonly<Record<string, (typeof WATER_SOURCE_VALUES)[number]>> = {
+  city: "municipal",
+  city_water: "municipal",
+  town: "municipal",
+  town_water: "municipal",
+  municipal_water: "municipal",
+  municipal_system: "municipal",
+  domestic_well: "private_well",
+  exempt_well: "private_well",
+  individual_well: "private_well",
+  private_domestic_well: "private_well",
+  shared: "shared_well",
+  shared_private_well: "shared_well",
+  hauled: "hauled_water",
+  haul: "hauled_water",
+  hauled_in: "hauled_water",
+  water_haul: "hauled_water",
+};
+
+/**
+ * Every enum alias, applied by coerceFactValue only when the alias's target is one of that enum's
+ * own values — so the waterSource table cannot leak into material, disposal.type or systemType,
+ * which currently have no aliases of their own.
+ */
+const ENUM_ALIASES: Readonly<Record<string, string>> = { ...WATER_SOURCE_ALIASES };
+
 /** Top-level (non-tank) fact specs */
 export const FACT_SPECS: readonly FactSpec[] = [
   { path: "permitNumber", question: "What is the permit number printed or written on this page? Keep dashes exactly as shown.", kind: { type: "string" } },
@@ -39,7 +75,7 @@ export const FACT_SPECS: readonly FactSpec[] = [
   { path: "disposal.count", question: "How many disposal units (trenches, pits or beds) does this page specify? Answer with digits only.", kind: { type: "integer" } },
   { path: "disposal.dimensions", question: "What are the disposal works dimensions exactly as written on this page?", kind: { type: "string" } },
   { path: "disposal.absorptionAreaSqft", question: "What absorption area in square feet is printed on this page? Answer with digits only.", kind: { type: "number" } },
-  { path: "waterSource", question: "What is the domestic water source on this page? Answer with one of: municipal, private_company, shared_well, private_well, hauled_water.", kind: { type: "enum", values: WATER_SOURCE_VALUES } },
+  { path: "waterSource", question: "What is the domestic water source on this page? Answer with one of: municipal, private_company, shared_well, private_well, hauled_water. A city or town utility, even when the form's category reads 'Water Company', is municipal; any other named water company is private_company.", kind: { type: "enum", values: WATER_SOURCE_VALUES } },
   { path: "isCesspool", question: "Does this page describe the system as a cesspool or cesspit? Answer true or false.", kind: { type: "boolean" } },
   { path: "hasSitePlan", question: "Is this page a site plan / plot plan / as-built drawing of the lot showing the septic system layout? Answer true or false.", kind: { type: "boolean" } },
   { path: "systemType", question: "Is the system on this page conventional or alternative? Answer with one of: conventional, alternative.", kind: { type: "enum", values: SYSTEM_TYPE_VALUES } },
@@ -173,7 +209,9 @@ export function coerceFactValue(kind: FactKind, raw: string): FactValue | null {
     }
     case "enum": {
       const l = s.toLowerCase().replace(/[\s-]+/g, "_");
-      return kind.values.includes(l) ? l : null;
+      if (kind.values.includes(l)) return l;
+      const alias = ENUM_ALIASES[l];
+      return alias !== undefined && kind.values.includes(alias) ? alias : null;
     }
   }
 }

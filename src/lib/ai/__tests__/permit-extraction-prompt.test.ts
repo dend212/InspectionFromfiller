@@ -1,11 +1,13 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   ESCALATION_SYSTEM_PROMPT,
   PERMIT_EXTRACTION_SYSTEM_PROMPT,
+  PERMIT_EXTRACTION_VERSION,
   buildEscalationUserMessage,
   buildPassUserMessage,
 } from "@/lib/ai/permit-extraction-prompt";
-import { FACT_SPECS, tankFactSpecs } from "@/lib/ai/permit-facts-utils";
+import { FACT_SPECS, WATER_SOURCE_ALIASES, tankFactSpecs } from "@/lib/ai/permit-facts-utils";
 import { MAX_WIRE_TANKS } from "@/lib/ai/permit-facts-wire";
 
 describe("PERMIT_EXTRACTION_SYSTEM_PROMPT", () => {
@@ -46,6 +48,44 @@ describe("PERMIT_EXTRACTION_SYSTEM_PROMPT", () => {
     expect(p).not.toContain("`");
   });
 
+  it("spells out the waterSource tokens and how a Discharge Authorization's two water fields map onto them", () => {
+    // 2026-09-14, OW-15-00667: the DA prints "Water Source: Water Company" beside "Water Source ID #: NNNNN -
+    // City Of … Water …"; the model echoed the form's label ("water_company") on 5/5 replays and the wire
+    // dropped it. The tokens were never listed for waterSource, unlike material / disposal.type / systemType.
+    const p = PERMIT_EXTRACTION_SYSTEM_PROMPT;
+    expect(p).toMatch(/- waterSource: one of municipal, private_company, shared_well, private_well, hauled_water\./);
+    expect(p.indexOf("- waterSource:")).toBeGreaterThan(-1);
+    expect(p.indexOf("- waterSource:")).toBeLessThan(p.indexOf("- systemType:"));
+    expect(p).toContain('do not write "water_company", "city" or "well"');
+    // the DA's two-field layout, described generically (no real provider string to parrot as evidence)
+    expect(p).toMatch(/"Water Source: Water Company" \(or Private Well \/ Shared Well \/ Hauled Water\)/);
+    expect(p).toContain('"Water Source ID #: NNNNN - ');
+    expect(p).toContain("ADEQ public water system number");
+    expect(p).toMatch(/"Shared Well:" blank[^.]*filled only when the well is shared/);
+    expect(p).toContain("Bedroom Equivalents");
+    expect(p).not.toContain("Scottsdale");
+    expect(p).not.toContain("07098");
+    // the category rule and the provider-name mapping
+    expect(p).toMatch(
+      /"Water Company" is the county's category for any piped utility, so decide municipal vs private_company from the provider named in "Water Source ID #"/,
+    );
+    expect(p).toMatch(/city, town or county utility \(City of X Water[^→]*→ municipal\./);
+    // the calibration section governs confidence — the mapping must not dictate a number
+    expect(p).not.toMatch(/→ municipal, at 0\.\d/);
+    // Sun City / Sun City West are place names, not city utilities (EPCOR serves them)
+    expect(p).toMatch(/merely contains "City" \(Sun City, Sun City West\) is not a city utility[^.]*provider actually named/);
+    expect(p).toMatch(/Any other named water company or utility \(EPCOR, Arizona Water Company[^→]*→ private_company/);
+    expect(p).toMatch(/"water company" box beside a separate "city" box → private_company/);
+    expect(p).toMatch(/"Shared Well" checked[^→]*→ shared_well/);
+    expect(p).toMatch(/"Private Well", "Domestic Well", "Exempt Well", "Individual Well"[^→]*55-xxxxxx[^→]*→ private_well/);
+    expect(p).toMatch(/"Hauled" → hauled_water/);
+    expect(p).toMatch(/says only "Water Company" and names no provider, leave waterSource out and say so in notes/);
+    expect(p).toContain("Quote the line naming the provider as evidence");
+    // the Approval to Construct's checkbox / name-blank presentation
+    expect(p).toContain('"Water Company ____ / Private Well ____"');
+    expect(p).toContain("an empty blank is a missing fact");
+  });
+
   it("names every wire fact path and tells the model to omit, not null, what it cannot find", () => {
     const p = PERMIT_EXTRACTION_SYSTEM_PROMPT;
     for (const { path } of [...FACT_SPECS, ...tankFactSpecs(0)]) expect(p).toContain(path);
@@ -53,6 +93,23 @@ describe("PERMIT_EXTRACTION_SYSTEM_PROMPT", () => {
     expect(p).toContain("facts array");
     expect(p).toContain("left out of the array");
     expect(p).not.toMatch(/return null/);
+  });
+});
+
+describe("PERMIT_EXTRACTION_VERSION", () => {
+  it("is bumped together with the extraction contract (system prompt, escalation questions, waterSource aliases)", () => {
+    // If this fails, the extraction contract changed — bump PERMIT_EXTRACTION_VERSION and update the hash.
+    // D7 reuse replays stored facts only under the current version; a prompt / coercion change that
+    // ships without a bump would keep serving facts read under the old contract.
+    const contract =
+      PERMIT_EXTRACTION_SYSTEM_PROMPT +
+      JSON.stringify(FACT_SPECS.map((s) => s.question)) +
+      JSON.stringify(WATER_SOURCE_ALIASES);
+    const hash = createHash("sha256").update(contract).digest("hex");
+    expect({ version: PERMIT_EXTRACTION_VERSION, hash }).toEqual({
+      version: "2026-09-14.2",
+      hash: "0061e4a415638e55c9c1b93048eb2e5f2fae17f2378f639cb05e0b7d3cbf9bfb",
+    });
   });
 });
 

@@ -10,6 +10,7 @@ import {
   type ExtractPermitFactsResult,
   extractPermitFactsFromPdf,
 } from "@/lib/ai/extract-permit-facts";
+import { PERMIT_EXTRACTION_VERSION } from "@/lib/ai/permit-extraction-prompt";
 import type { PermitFacts } from "@/lib/ai/permit-extraction-schema";
 import { db } from "@/lib/db";
 import { inspectionRecords } from "@/lib/db/schema";
@@ -46,6 +47,8 @@ export interface RecordExtractionPatch {
   extractionStatus: ExtractionStatus;
   extractionError?: string | null;
   extracted?: PermitFacts | null;
+  /** PERMIT_EXTRACTION_VERSION on a `done` patch; absent (→ null) on failed/skipped so D7 never replays them */
+  extractionVersion?: string | null;
 }
 
 export interface ExtractRecordsDeps {
@@ -88,6 +91,7 @@ export function defaultExtractRecordsDeps(): ExtractRecordsDeps {
           extractionStatus: patch.extractionStatus,
           extractionError: patch.extractionError ?? null,
           ...(patch.extracted !== undefined ? { extracted: patch.extracted } : {}),
+          extractionVersion: patch.extractionVersion ?? null,
         })
         .where(eq(inspectionRecords.id, recordId));
     },
@@ -172,6 +176,7 @@ function foldFacts(
       id: record.id,
       permitNumber: record.permitNumber,
       docType: record.docType,
+      docDate: record.docDate,
       inspectionId: ctx.inspectionId,
     }),
   );
@@ -222,7 +227,12 @@ export async function extractStoredRecords(
         { permitNumber: record.permitNumber, docType: record.docType, archive: record.source },
         { signal: ctx.signal },
       );
-      await deps.persist(record.id, { extractionStatus: "done", extractionError: null, extracted: facts });
+      await deps.persist(record.id, {
+        extractionStatus: "done",
+        extractionError: null,
+        extracted: facts,
+        extractionVersion: PERMIT_EXTRACTION_VERSION,
+      });
       result.done++;
       result.estimatedCostUsd += usage.estimatedCostUsd;
       foldFacts(result, record, facts, ctx);

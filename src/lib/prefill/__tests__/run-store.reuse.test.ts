@@ -79,6 +79,13 @@ describe("findStoredRecordByIdentity", () => {
     expect(sql).toContain('"doc_date" is null');
     expect(params).toEqual(["insp-1", "edms_env", "OW-17-00474", "PERMIT", ""]);
   });
+
+  it("never filters on extraction_version — the stored PDF is reused whatever its facts were read under", async () => {
+    mockLimit.mockResolvedValueOnce([{ id: "rec-old", extractionStatus: "done", extractionVersion: null }]);
+    const row = await findStoredRecordByIdentity("insp-1", identity);
+    expect(row).toMatchObject({ id: "rec-old", extractionVersion: null });
+    expect(lastWhere().sql).not.toContain("extraction_version");
+  });
 });
 
 describe("reuseRecordRow", () => {
@@ -91,5 +98,23 @@ describe("reuseRecordRow", () => {
       selected: true,
     });
     expect(mockUpdateWhere).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the facts and their version stamp when re-queueing a row read under an older extraction version", async () => {
+    await reuseRecordRow("rec-old", {
+      runId: "run-2",
+      extractionStatus: "pending",
+      extractionError: null,
+      extracted: null,
+      extractionVersion: null,
+    });
+    expect(mockSet).toHaveBeenCalledWith({
+      runId: "run-2",
+      extractionStatus: "pending",
+      extractionError: null,
+      extracted: null,
+      extractionVersion: null,
+      selected: true,
+    });
   });
 });
