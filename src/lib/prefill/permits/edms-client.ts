@@ -82,7 +82,7 @@ export const EDMS_TIMEOUT_MS = 15_000;
 /** Per-request timeout for the PDF download (spec §10) */
 export const EDMS_DOCUMENT_TIMEOUT_MS = 60_000;
 /** Always sent explicitly — the server caps at 1000 */
-export const EDMS_QUERY_LIMIT = 50;
+export const EDMS_QUERY_LIMIT = 200;
 
 export interface EdmsKeyword {
   id: number;

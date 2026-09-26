@@ -10,6 +10,7 @@ import {
   parseSearchResponse,
 } from "../edms-client";
 import {
+  APN_SPLIT_SCORE,
   decideFallback,
   dedupeHits,
   groupByProperty,
@@ -115,19 +116,27 @@ describe("scoreCandidate", () => {
     return hit.candidate;
   };
 
-  it("adds direction, city and ZIP points", () => {
-    // OWR-20-04198: 8911 E PRINCESS DR, MESA 85207, no APN -> 3 + 2 + 2
-    expect(scoreCandidate(byPermit("OWR-20-04198"), princess())).toBe(7);
-    // 743691: 8911 E PRINCESS, no city/zip -> direction only
-    expect(scoreCandidate(byPermit("743691"), princess())).toBe(3);
+  it("adds street, direction, city and ZIP points", () => {
+    // OWR-20-04198: 8911 E PRINCESS DR, MESA 85207, no APN -> 4 + 3 + 2 + 2
+    expect(scoreCandidate(byPermit("OWR-20-04198"), princess())).toBe(11);
+    // 743691: 8911 E PRINCESS, no city/zip -> street + direction
+    expect(scoreCandidate(byPermit("743691"), princess())).toBe(7);
   });
 
-  it("returns -Infinity when the row's APN differs from ours", () => {
-    expect(scoreCandidate(byPermit("OWR-22-01478"), princess("999-99-999"))).toBe(-Infinity);
+  it("penalises a row from a different book and map instead of excluding it", () => {
+    // 218-06-099A against our 999-99-999: 11 address points, APN_MISMATCH_PENALTY
+    expect(scoreCandidate(byPermit("OWR-22-01478"), princess("999-99-999"))).toBe(3);
+  });
+
+  it("treats a row whose APN is a split of ours as the same property", () => {
+    // 218-06-099A vs 218-06-099: same book-map-parcel, different split letter
+    expect(scoreCandidate(byPermit("OWR-22-01478"), princess("218-06-099"))).toBe(
+      11 + APN_SPLIT_SCORE,
+    );
   });
 
   it("adds APN_MATCH_SCORE when the row's APN equals ours", () => {
-    expect(scoreCandidate(byPermit("OWR-22-01478"), princess("218-06-099A"))).toBe(17);
+    expect(scoreCandidate(byPermit("OWR-22-01478"), princess("218-06-099A"))).toBe(21);
   });
 
   it("adds subdivision and lot points, tolerating 'UNIT'", () => {
@@ -142,7 +151,7 @@ describe("scoreCandidate", () => {
       subdivision: "Sunrise Unit 4",
       lot: "2",
     };
-    expect(scoreCandidate(byPermit("OW-17-00474"), input)).toBe(3 + 2 + 2 + 3 + 2);
+    expect(scoreCandidate(byPermit("OW-17-00474"), input)).toBe(4 + 3 + 2 + 2 + 3 + 2);
   });
 });
 
@@ -247,7 +256,7 @@ describe("decideFallback", () => {
       "OWR-20-04198",
       "OWR-22-01478",
     ]);
-    expect(result.hits.map((h) => h.candidate.score)).toEqual([3, 7, 7]);
+    expect(result.hits.map((h) => h.candidate.score)).toEqual([7, 11, 11]);
   });
 
   it("is ambiguous when two properties tie at the top", () => {
@@ -259,7 +268,7 @@ describe("decideFallback", () => {
       "OWR-20-04198",
       "743691",
     ]);
-    expect(result.hits.map((h) => h.candidate.score)).toEqual([7, 7, 7, 3]);
+    expect(result.hits.map((h) => h.candidate.score)).toEqual([11, 11, 11, 7]);
   });
 
   it("auto-selects the whole property group when it wins by 3 or more", () => {
@@ -271,13 +280,20 @@ describe("decideFallback", () => {
       "OWR-20-04198",
       "OWR-22-01478",
     ]);
-    expect(result.hits.map((h) => h.candidate.score)).toEqual([3, 7, 17]);
+    expect(result.hits.map((h) => h.candidate.score)).toEqual([7, 11, 21]);
   });
 
-  it("excludes APN mismatches before deciding", () => {
+  it("keeps an APN mismatch with its property, scored below its siblings", () => {
+    // The parcel number on a permit is only as current as the day it was filed,
+    // so a disagreement demotes the row — it no longer deletes it (509 W Lavitt Ln).
     const result = decideFallback(princessHits, princess("999-99-999"));
     expect(result.kind).toBe("found");
-    expect(result.hits.map((h) => h.candidate.permitNumber)).toEqual(["743691", "OWR-20-04198"]);
+    expect(result.hits.map((h) => h.candidate.permitNumber)).toEqual([
+      "743691",
+      "OWR-20-04198",
+      "OWR-22-01478",
+    ]);
+    expect(result.hits.map((h) => h.candidate.score)).toEqual([7, 11, 3]);
   });
 
   it("keeps a property's documents from both archives together", () => {
@@ -290,10 +306,10 @@ describe("decideFallback", () => {
       "edms_env:OWR-22-04475:NOTICE OF TRANSFER:2022-09-21",
       "edms_eplpav:OW-17-00474:FINAL DA:2025-11-21",
     ]);
-    expect(result.hits.map((h) => h.candidate.score)).toEqual([7, 7, 4]);
+    expect(result.hits.map((h) => h.candidate.score)).toEqual([11, 11, 8]);
   });
 
-  it("is ambiguous when the only group scores below 5", () => {
+  it("is ambiguous when the only group scores below AUTO_SELECT_MIN_SCORE", () => {
     const only = streetHits.filter((h) => h.candidate.permitNumber === "743691");
     expect(decideFallback(only, princess()).kind).toBe("ambiguous");
   });
@@ -385,7 +401,7 @@ describe("searchPermits", () => {
       "edms_env:OWR-22-04475:NOTICE OF TRANSFER:2022-09-21",
       "edms_eplpav:OW-17-00474:FINAL DA:2025-11-21",
     ]);
-    expect(outcome.hits.map((h) => h.candidate.score)).toEqual([7, 7, 4]);
+    expect(outcome.hits.map((h) => h.candidate.score)).toEqual([11, 11, 8]);
   });
 
   it("searches a lettered house number uppercased and still matches its rows", async () => {
@@ -418,7 +434,7 @@ describe("searchPermits", () => {
     );
   });
 
-  it("returns ambiguous candidates (at most 8) when no property scores 5", async () => {
+  it("returns ambiguous candidates (at most 8) when no property clears the bar", async () => {
     const search = fakeSearch({ envStreet: envStreet });
     const outcome = await searchPermits(
       { address: { streetNumber: "8911", streetName: "Princess Dr" } },
@@ -428,7 +444,7 @@ describe("searchPermits", () => {
     expect(outcome.kind).toBe("ambiguous");
     if (outcome.kind !== "ambiguous") throw new Error("unreachable");
     expect(outcome.hits).toHaveLength(3);
-    expect(outcome.hits.map((h) => h.candidate.score)).toEqual([0, 0, 0]);
+    expect(outcome.hits.map((h) => h.candidate.score)).toEqual([4, 4, 4]);
     expect(outcome.searched).toEqual(["8911 PRINCESS"]);
     expect(outcome.failedArchives).toEqual([]);
     // APN search is skipped entirely when there is no APN
@@ -440,7 +456,7 @@ describe("searchPermits", () => {
     const outcome = await searchPermits(caveCreek, signal, { search });
     expect(outcome).toEqual({
       kind: "not_found",
-      searched: ["APN 219-11-121", "8911 CAVE CREEK"],
+      searched: ["APN 219-11-121", "8911 CAVE CREEK", "8911"],
       failedArchives: [],
     });
   });
@@ -483,10 +499,10 @@ describe("searchPermits", () => {
     const outcome = await searchPermits(caveCreek, signal, { search });
     expect(outcome).toEqual({
       kind: "not_found",
-      searched: ["APN 219-11-121", "8911 CAVE CREEK"],
+      searched: ["APN 219-11-121", "8911 CAVE CREEK", "8911"],
       failedArchives: ["edms_env"],
     });
-    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledTimes(3);
     warn.mockRestore();
   });
 
@@ -496,10 +512,10 @@ describe("searchPermits", () => {
     const outcome = await searchPermits(caveCreek, signal, { search });
     expect(outcome).toEqual({
       kind: "not_found",
-      searched: ["APN 219-11-121", "8911 CAVE CREEK"],
+      searched: ["APN 219-11-121", "8911 CAVE CREEK", "8911"],
       failedArchives: ["edms_env"],
     });
-    expect(search).toHaveBeenCalledTimes(4);
+    expect(search).toHaveBeenCalledTimes(6);
     warn.mockRestore();
   });
 

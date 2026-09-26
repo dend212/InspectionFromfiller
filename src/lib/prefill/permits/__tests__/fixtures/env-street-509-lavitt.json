@@ -1,0 +1,94 @@
+{
+    "Data": [
+        {
+            "ID": "ATkh6SLxzsDL9xrB0\u00c1pGthqNbG6MxuCMFRf\u00c9wtbEYZJjzyn17U67K5Lbd1DGover1gsr2Lia5zV9zo1OEe3lqcw=",
+            "Name": "EnvSeptic - 9/11/2015 - 000602 - PERMIT",
+            "DisplayType": "OleActivePage",
+            "DisplayColumnValues": [
+                {
+                    "Value": "PERMIT",
+                    "RawValue": null
+                },
+                {
+                    "Value": "000602",
+                    "RawValue": null
+                },
+                {
+                    "Value": "211-23-049J",
+                    "RawValue": null
+                },
+                {
+                    "Value": "509",
+                    "RawValue": null
+                },
+                {
+                    "Value": "W",
+                    "RawValue": null
+                },
+                {
+                    "Value": "LAVITT LN",
+                    "RawValue": null
+                },
+                {
+                    "Value": "PHOENIX",
+                    "RawValue": null
+                },
+                {
+                    "Value": "85086",
+                    "RawValue": null
+                },
+                {
+                    "Value": "",
+                    "RawValue": null
+                },
+                {
+                    "Value": "",
+                    "RawValue": null
+                }
+            ]
+        }
+    ],
+    "Truncated": false,
+    "DisplayColumns": [
+        {
+            "Heading": "EnvSepticDocType",
+            "DataType": "AlphaNumericSingleTable"
+        },
+        {
+            "Heading": "EnvPermitNumber",
+            "DataType": "AlphaNumericSingleTable"
+        },
+        {
+            "Heading": "ParcelNumber",
+            "DataType": "AlphaNumericSingleTable"
+        },
+        {
+            "Heading": "EnvStreetNo",
+            "DataType": "AlphaNumericSingleTable"
+        },
+        {
+            "Heading": "EnvStreetDir",
+            "DataType": "AlphaNumericSingleTable"
+        },
+        {
+            "Heading": "EnvStreet",
+            "DataType": "AlphaNumericSingleTable"
+        },
+        {
+            "Heading": "EnvCity",
+            "DataType": "AlphaNumericSingleTable"
+        },
+        {
+            "Heading": "EnvZip",
+            "DataType": "AlphaNumericSingleTable"
+        },
+        {
+            "Heading": "EnvLotNumber",
+            "DataType": "AlphaNumericSingleTable"
+        },
+        {
+            "Heading": "EnvSubdivision",
+            "DataType": "AlphaNumericSingleTable"
+        }
+    ]
+}

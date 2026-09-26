@@ -9,6 +9,7 @@
  */
 
 import type { StageContext, StageResult } from "@/lib/prefill/stage";
+import { formatApn } from "../apn";
 import {
   type ExtractionStatus,
   MAX_DOCUMENTS_PER_RUN,
@@ -28,6 +29,7 @@ import {
 } from "./doc-types";
 import { EDMS_ARCHIVES } from "./edms-client";
 import { type StoreDocumentInput, type StoreDocumentResult, storeDocument } from "./fetch-document";
+import { apnRelation } from "./normalize";
 import { type PermitSearchOutcome, searchPermits } from "./search";
 import { withExtraction } from "./with-extraction";
 
@@ -72,10 +74,55 @@ export function notFoundSummary(searched: string[]): string {
   return `No permit records found (searched ${searched.join(" and ")} — 0 matches)`;
 }
 
+/**
+ * A list from the house-number round is a different offer to the tech than a
+ * list from the street round: nothing matched the street name, these rows only
+ * share the house number. Say so, or the picker reads as "your permits".
+ */
+export function ambiguousSummary(
+  via: "street" | "number",
+  count: number,
+  input: PrefillInput,
+): string {
+  if (via !== "number") return `${count} possible permits — pick the right one`;
+  const number = (input.address?.streetNumber ?? "").trim();
+  const where = number ? ` house number ${number}` : " this house number";
+  return `No match on the street name — ${plural(count, "permit document")} share${where}, pick the right property`;
+}
+
 const ARCHIVE_LABELS: Record<PermitArchive, string> = {
   edms_env: "the legacy archive (env)",
   edms_eplpav: "the 2024+ archive (eplpav)",
 };
+
+/**
+ * The parcel number on a permit is only as current as the day it was filed: a
+ * lot that is later split keeps its book-map-parcel digits and takes a new
+ * split letter, so the documents for 509 W Lavitt Ln (`211-23-049L` today) are
+ * filed under `211-23-049J`. Those rows are accepted on their address and the
+ * disagreement is said out loud here rather than hidden.
+ */
+export function parcelNote(hits: SearchHit[], input: PrefillInput): string {
+  const ours = formatApn(input.apn);
+  if (!ours) return "";
+  const splits: string[] = [];
+  const others: string[] = [];
+  for (const { candidate } of hits) {
+    const theirs = formatApn(candidate.apn);
+    if (!theirs) continue;
+    const relation = apnRelation(ours, theirs);
+    const bucket = relation === "split" ? splits : relation === "different" ? others : null;
+    if (bucket && !bucket.includes(theirs)) bucket.push(theirs);
+  }
+  const parts: string[] = [];
+  if (splits.length > 0) {
+    parts.push(`filed under parcel ${splits.join(", ")} — a split of ${ours}, matched on address`);
+  }
+  if (others.length > 0) {
+    parts.push(`filed under parcel ${others.join(", ")}, not ${ours} — matched on address`);
+  }
+  return parts.join(SUMMARY_SEPARATOR);
+}
 
 /**
  * Amendment A8: a query that threw is phrased as a failed query, not an
@@ -284,7 +331,7 @@ export async function runPermitsStage(
           stage: finishStage(clock, {
             status: "pending",
             summary: withNote(
-              `${outcome.hits.length} possible permits — pick the right one`,
+              ambiguousSummary(outcome.via, outcome.hits.length, input),
               failedArchivesNote(outcome.failedArchives),
             ),
           }),
@@ -292,7 +339,9 @@ export async function runPermitsStage(
           candidates: outcome.hits.map((h) => h.candidate),
         };
       case "found": {
-        const note = failedArchivesNote(outcome.failedArchives);
+        const note = [failedArchivesNote(outcome.failedArchives), parcelNote(outcome.hits, input)]
+          .filter(Boolean)
+          .join(SUMMARY_SEPARATOR);
         return storeHits(outcome.hits, ctx, deps, clock, note);
       }
     }
@@ -330,7 +379,10 @@ export async function runPermitsSelection(
     if (selected.length === 0) {
       return errorResult(clock, SELECTION_STALE_MESSAGE, SELECTION_STALE_MESSAGE);
     }
-    return storeHits(selected, ctx, deps, clock, failedArchivesNote(outcome.failedArchives));
+    const note = [failedArchivesNote(outcome.failedArchives), parcelNote(selected, input)]
+      .filter(Boolean)
+      .join(SUMMARY_SEPARATOR);
+    return storeHits(selected, ctx, deps, clock, note);
   } catch (err) {
     console.error("[prefill/permits] selection crashed:", err);
     return errorResult(clock, errorMessage(err), "Fetching the selected permits failed");

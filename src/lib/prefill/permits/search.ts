@@ -21,6 +21,7 @@ import {
   searchKeywords,
 } from "./edms-client";
 import {
+  apnRelation,
   isSafeKeywordValue,
   normaliseLot,
   normalisePermitNumber,
@@ -28,6 +29,7 @@ import {
   normalizeStreetName,
   normaliseSubdivision,
   splitStreetAddress,
+  streetSimilarity,
   zip5,
 } from "./normalize";
 
@@ -39,12 +41,19 @@ import {
 export type PermitSearchOutcome =
   | {
       kind: "found";
-      via: "apn" | "street";
+      /** Which round produced the hits — `number` is the house-number-only round */
+      via: "apn" | "street" | "number";
       hits: SearchHit[];
       searched: string[];
       failedArchives: PermitArchive[];
     }
-  | { kind: "ambiguous"; hits: SearchHit[]; searched: string[]; failedArchives: PermitArchive[] }
+  | {
+      kind: "ambiguous";
+      via: "street" | "number";
+      hits: SearchHit[];
+      searched: string[];
+      failedArchives: PermitArchive[];
+    }
   | { kind: "not_found"; searched: string[]; failedArchives: PermitArchive[] }
   | { kind: "error"; message: string; searched: string[] };
 
@@ -58,23 +67,44 @@ export interface SearchDeps {
 
 const defaultDeps: SearchDeps = { search: searchKeywords };
 
-export const AUTO_SELECT_MIN_SCORE = 5;
+/** Street + direction + one of city/ZIP. A direction and an exact street alone (7) is not enough. */
+export const AUTO_SELECT_MIN_SCORE = 9;
 export const AUTO_SELECT_MIN_GAP = 3;
 export const MAX_CANDIDATES = 8;
 export const APN_MATCH_SCORE = 10;
+/** Same book-map-parcel, different split letter — the permit predates a lot split. */
+export const APN_SPLIT_SCORE = 1;
+/**
+ * A different book or map. Enough to keep the row out of auto-select on its own
+ * (a full street match is 11) while still letting it reach the picker, because
+ * the parcel number on a permit is only as current as the day it was filed.
+ */
+export const APN_MISMATCH_PENALTY = -8;
 export const EDMS_UNAVAILABLE_MESSAGE = "Maricopa EDMS unavailable — try Find records later";
 
-/** Spec scoring table (+ APN equality bonus). -Infinity = exclude. */
+/** Spec scoring table, with the street name and the parcel number as graded signals. */
 export function scoreCandidate(candidate: PermitCandidate, input: PrefillInput): number {
   const ourApn = formatApn(input.apn);
   let score = 0;
-  if (candidate.apn) {
-    const theirApn = formatApn(candidate.apn);
-    if (ourApn && theirApn && theirApn !== ourApn) return -Infinity;
-    if (ourApn && theirApn === ourApn) score += APN_MATCH_SCORE;
+  if (candidate.apn && ourApn) {
+    switch (apnRelation(ourApn, candidate.apn)) {
+      case "exact":
+        score += APN_MATCH_SCORE;
+        break;
+      case "split":
+        score += APN_SPLIT_SCORE;
+        break;
+      case "different":
+        score += APN_MISMATCH_PENALTY;
+        break;
+      // "same_map" (same neighbourhood) and "unparseable" say nothing either way.
+      default:
+        break;
+    }
   }
   const addr = input.address;
   const theirs = splitStreetAddress(candidate.streetAddress);
+  score += streetSimilarity(addr?.streetName ?? "", theirs.street);
   const ourDir = normaliseStreetDir(addr?.streetDir ?? "");
   if (ourDir && theirs.dir && ourDir === theirs.dir) score += 3;
   if (
@@ -151,6 +181,12 @@ export function groupByProperty(candidates: PermitCandidate[]): PermitCandidate[
   return groups.map((g) => g.members);
 }
 
+/**
+ * House number must agree; the street name only has to be recognisable
+ * (`streetSimilarity` tolerates a typo, a transposition, a dropped word and
+ * ordinal spellings). The house-number-only round skips this entirely — there
+ * the street is what the tech is being asked to judge.
+ */
 function matchesStreet(candidate: PermitCandidate, input: PrefillInput): boolean {
   const addr = input.address;
   if (!addr) return true;
@@ -159,17 +195,20 @@ function matchesStreet(candidate: PermitCandidate, input: PrefillInput): boolean
   if (theirs.number && ourNumber && theirs.number !== ourNumber) {
     return false;
   }
-  const ours = normalizeStreetName(addr.streetName);
-  return ours === "" || normalizeStreetName(theirs.street).startsWith(ours);
+  return (
+    normalizeStreetName(addr.streetName) === "" ||
+    streetSimilarity(addr.streetName, theirs.street) > 0
+  );
 }
 
 /** Spec §5.2 step 2 decision, applied to property groups (see design notes). */
 export function decideFallback(
   hits: SearchHit[],
   input: PrefillInput,
+  { requireStreetMatch = true }: { requireStreetMatch?: boolean } = {},
 ): { kind: "found" | "ambiguous"; hits: SearchHit[] } {
   const scored = hits
-    .filter((h) => matchesStreet(h.candidate, input))
+    .filter((h) => !requireStreetMatch || matchesStreet(h.candidate, input))
     .map((h) => ({
       ...h,
       candidate: { ...h.candidate, score: scoreCandidate(h.candidate, input) },
@@ -309,7 +348,35 @@ export async function searchPermits(
       if (decision.hits.length > 0) {
         return decision.kind === "found"
           ? { kind: "found", via: "street", hits: decision.hits, searched, failedArchives }
-          : { kind: "ambiguous", hits: decision.hits, searched, failedArchives };
+          : { kind: "ambiguous", via: "street", hits: decision.hits, searched, failedArchives };
+      }
+    }
+  }
+
+  // 3. House number alone — the street keyword is the brittle part of round 2
+  //    (EDMS stores the name the county typed decades ago, we hold whatever the
+  //    tech typed today). A number is 8–40 rows countywide, so rank them here
+  //    and let the picker settle it rather than reporting a false negative.
+  if (!signal.aborted && /^\d{1,8}[A-Z]?$/.test(number) && isSafeKeywordValue(number)) {
+    searched.push(number);
+    const queries: ArchiveQuery[] = [
+      {
+        archive: EDMS_ARCHIVES.env,
+        keywords: [{ id: EDMS_ARCHIVES.env.keywords.streetNo, value: number }],
+      },
+      {
+        archive: EDMS_ARCHIVES.eplpav,
+        keywords: [{ id: EDMS_ARCHIVES.eplpav.keywords.streetNo, value: number }],
+      },
+    ];
+    const round = await runQueries(queries, signal, deps);
+    recordRound(round, queries.length);
+    if (round.hits.length > 0) {
+      const decision = decideFallback(round.hits, input, { requireStreetMatch: false });
+      if (decision.hits.length > 0) {
+        return decision.kind === "found"
+          ? { kind: "found", via: "number", hits: decision.hits, searched, failedArchives }
+          : { kind: "ambiguous", via: "number", hits: decision.hits, searched, failedArchives };
       }
     }
   }

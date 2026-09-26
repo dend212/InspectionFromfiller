@@ -84,6 +84,54 @@ describe("runPermitsStage", () => {
     ctx = makeCtx();
   });
 
+  it("notes on the summary that the permit carries a retired split of our parcel", async () => {
+    // 509 W Lavitt Ln: assessor says 211-23-049L, the 2001 permit says 211-23-049J.
+    const deps = makeDeps({
+      searchPermits: vi.fn().mockResolvedValue({
+        kind: "found",
+        via: "street",
+        hits: [hit({ permitNumber: "000602", docType: "PERMIT", apn: "211-23-049J" })],
+        searched: ["509 LAVITT"],
+        failedArchives: [],
+      }),
+    });
+    const result = await runPermitsStage({ apn: "211-23-049L" }, ctx, deps);
+
+    expect(result.stage.summary).toContain("211-23-049J");
+    expect(result.stage.summary).toMatch(/split/i);
+  });
+
+  it("notes an outright different parcel without calling it a split", async () => {
+    const deps = makeDeps({
+      searchPermits: vi.fn().mockResolvedValue({
+        kind: "found",
+        via: "street",
+        hits: [hit({ permitNumber: "021125", docType: "PERMIT", apn: "504-51-024" })],
+        searched: ["509 LAVITT"],
+        failedArchives: [],
+      }),
+    });
+    const result = await runPermitsStage({ apn: "211-23-049L" }, ctx, deps);
+
+    expect(result.stage.summary).toContain("504-51-024");
+    expect(result.stage.summary).not.toMatch(/split/i);
+  });
+
+  it("says nothing about the parcel when it matches", async () => {
+    const deps = makeDeps({
+      searchPermits: vi.fn().mockResolvedValue({
+        kind: "found",
+        via: "apn",
+        hits: [PERMIT],
+        searched: ["APN 200-08-079"],
+        failedArchives: [],
+      }),
+    });
+    const result = await runPermitsStage(input, ctx, deps);
+
+    expect(result.stage.summary).not.toMatch(/parcel/i);
+  });
+
   it("stores found documents in extraction rank order and proposes recordsAvailable = yes", async () => {
     const deps = makeDeps({
       searchPermits: vi.fn().mockResolvedValue({
@@ -286,6 +334,27 @@ describe("runPermitsStage", () => {
       [PERMIT, TRANSFER, ABANDON].map((h) => h.candidate.key),
     );
     expect(result.proposals).toEqual([]);
+  });
+
+  it("says the list came from the house number when the street round found nothing", async () => {
+    const deps = makeDeps({
+      searchPermits: vi.fn().mockResolvedValue({
+        kind: "ambiguous",
+        via: "number",
+        hits: [PERMIT, TRANSFER],
+        searched: ["509 LAVVIT", "509"],
+        failedArchives: [],
+      }),
+    });
+    const result = await runPermitsStage(
+      { apn: "211-23-049L", address: { streetNumber: "509", streetName: "LAVVIT LN" } },
+      ctx,
+      deps,
+    );
+    expect(result.stage.status).toBe("pending");
+    expect(result.stage.summary).toBe(
+      "No match on the street name — 2 permit documents share house number 509, pick the right property",
+    );
   });
 
   it("reports not_found with the searched terms and suggests recordsAvailable = no", async () => {

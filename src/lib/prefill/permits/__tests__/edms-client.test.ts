@@ -95,7 +95,7 @@ describe("searchKeywords", () => {
       Keywords: [{ ID: 1264, Value: "219-11-121", KeywordOperator: "=" }],
       FromDate: null,
       ToDate: null,
-      QueryLimit: 50,
+      QueryLimit: 200,
     });
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });

@@ -14,7 +14,8 @@ export function normalisePermitNumber(raw: string): string {
 // Phase 1 already normalises street names for the assessor query (uppercase,
 // drop leading direction + trailing suffix — a superset of the spec's list).
 // One implementation, re-exported so the permits code and the UI share it.
-export { normalizeStreetName } from "../input";
+import { normalizeStreetName } from "../input";
+export { normalizeStreetName };
 
 const DIRECTIONS: Record<string, string> = {
   N: "N", S: "S", E: "E", W: "W", NE: "NE", NW: "NW", SE: "SE", SW: "SW",
@@ -59,6 +60,103 @@ export function normaliseLot(raw: string): string {
 export function zip5(raw: string): string {
   const match = /\d{5}/.exec(raw);
   return match ? match[0] : "";
+}
+
+/**
+ * How two Maricopa parcel numbers relate. Book-map-parcel[split]: a lot that is
+ * split or re-drawn keeps its book-map-parcel digits and takes a new trailing
+ * letter, so a decades-old permit routinely names a parcel that no longer
+ * exists (509 W Lavitt Ln is `211-23-049L` today; its 2001 permit says
+ * `211-23-049J`, and the assessor's live layer has no J at all).
+ *
+ * - `exact`     same parcel
+ * - `split`     same book-map-parcel, different split letter — very likely the same dirt
+ * - `same_map`  same book and map — same neighbourhood, no more than that
+ * - `different` different book or map
+ * - `unknown`   one side is missing or unparseable
+ */
+export type ApnRelation = "exact" | "split" | "same_map" | "different" | "unknown";
+
+export function apnRelation(ours?: string | null, theirs?: string | null): ApnRelation {
+  const a = apnParts(ours);
+  const b = apnParts(theirs);
+  if (!a || !b) return "unknown";
+  if (a.full === b.full) return "exact";
+  if (a.book === b.book && a.map === b.map && a.parcel === b.parcel) return "split";
+  if (a.book === b.book && a.map === b.map) return "same_map";
+  return "different";
+}
+
+function apnParts(
+  raw?: string | null,
+): { book: string; map: string; parcel: string; full: string } | null {
+  if (!raw) return null;
+  const compact = raw.toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const match = /^(\d{3})(\d{2})(\d{3})([A-Z]?)$/.exec(compact);
+  if (!match) return null;
+  return { book: match[1], map: match[2], parcel: match[3], full: compact };
+}
+
+/** Optimal string alignment distance (Levenshtein + adjacent transposition), capped at `max`. */
+export function editDistance(a: string, b: string, max = 4): number {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev2: number[] = [];
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    let best = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let d = Math.min(row[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d = Math.min(d, prev2[j - 2] + 1);
+      }
+      row.push(d);
+      if (d < best) best = d;
+    }
+    if (best > max) return max + 1;
+    prev2 = prev;
+    prev = row;
+  }
+  return prev[b.length];
+}
+
+/** "375TH" ≡ "375" ≡ "375 TH" — ordinal suffixes carry no information here. */
+function streetTokens(name: string): string[] {
+  return normalizeStreetName(name)
+    .split(" ")
+    .map((w) => w.replace(/^(\d+)(ST|ND|RD|TH)$/, "$1"))
+    .filter((w) => w !== "ST" && w !== "ND" && w !== "RD" && w !== "TH")
+    .filter(Boolean);
+}
+
+export const STREET_EXACT_SCORE = 4;
+export const STREET_PREFIX_SCORE = 3;
+export const STREET_NEAR_SCORE = 2;
+export const STREET_TOKEN_SCORE = 1;
+
+/**
+ * 0–4 on how much two street names agree, after direction and suffix are
+ * stripped. Tolerates the ways an address reaches us wrong: a typo, a
+ * transposition, a dropped or added word, "375TH" vs "375". 0 means unrelated.
+ */
+export function streetSimilarity(ours: string, theirs: string): number {
+  const a = streetTokens(ours);
+  const b = streetTokens(theirs);
+  if (a.length === 0 || b.length === 0) return 0;
+  const joinedA = a.join("");
+  const joinedB = b.join("");
+  if (joinedA === joinedB) return STREET_EXACT_SCORE;
+  if (joinedA.startsWith(joinedB) || joinedB.startsWith(joinedA)) {
+    return Math.min(joinedA.length, joinedB.length) >= 3 ? STREET_PREFIX_SCORE : 0;
+  }
+  // One typo per ~6 characters, never more than 2 — "LAVVIT"≈"LAVITT", not "MAIN"≈"MAIP".
+  const budget = Math.min(2, Math.floor(Math.min(joinedA.length, joinedB.length) / 6) + 1);
+  if (editDistance(joinedA, joinedB, budget) <= budget) return STREET_NEAR_SCORE;
+  const shared = a.filter((w) => b.includes(w)).length;
+  if (shared > 0 && shared * 2 >= Math.min(a.length, b.length)) return STREET_TOKEN_SCORE;
+  return 0;
 }
 
 /** "9/11/2015" → "2015-09-11"; ISO passes through; anything else → undefined */
