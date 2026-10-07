@@ -32,6 +32,7 @@ import type {
   jobMedia as jobMediaTable,
   jobs as jobsTable,
 } from "@/lib/db/schema";
+import { APP_TIME_ZONE } from "@/lib/constants/time-zone";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSewertimeLogoBytes } from "../sewertime-logo";
 import { fetchImageBytesForPdf } from "./image-embed";
@@ -336,6 +337,7 @@ function buildCoverPage(
   };
 
   const dateStr = (input.job.completedAt ?? input.job.updatedAt).toLocaleDateString("en-US", {
+    timeZone: APP_TIME_ZONE,
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -409,14 +411,18 @@ function buildJobInfoSection(
     c,
     fonts,
     "Scheduled",
-    input.job.scheduledFor ? input.job.scheduledFor.toLocaleString() : null,
+    input.job.scheduledFor
+      ? input.job.scheduledFor.toLocaleString("en-US", { timeZone: APP_TIME_ZONE })
+      : null,
   );
   c = drawLabeledField(
     doc,
     c,
     fonts,
     "Completed",
-    input.job.completedAt ? input.job.completedAt.toLocaleString() : null,
+    input.job.completedAt
+      ? input.job.completedAt.toLocaleString("en-US", { timeZone: APP_TIME_ZONE })
+      : null,
   );
   c.y -= 10;
   return c;

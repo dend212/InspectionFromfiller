@@ -1,6 +1,7 @@
 import { Mail, Phone } from "lucide-react";
 import Image from "next/image";
 import { COMPANY_CONTACT, INSPECTOR_DEFAULTS } from "@/lib/constants/inspection";
+import { APP_TIME_ZONE } from "@/lib/constants/time-zone";
 
 interface JobSummaryItem {
   id: string;
@@ -78,12 +79,14 @@ export function JobSummaryView({
   const addressLine = [job.city, job.state, job.zip].filter(Boolean).join(" ");
   const completedDate = job.completedAt
     ? new Date(job.completedAt).toLocaleDateString("en-US", {
+        timeZone: APP_TIME_ZONE,
         month: "long",
         day: "numeric",
         year: "numeric",
       })
     : null;
   const formattedExpiry = new Date(expiresAt).toLocaleDateString("en-US", {
+    timeZone: APP_TIME_ZONE,
     month: "long",
     day: "numeric",
     year: "numeric",

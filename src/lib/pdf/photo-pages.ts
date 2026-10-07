@@ -21,6 +21,7 @@ import {
 } from "pdf-lib";
 import type { MediaRecord } from "@/components/inspection/media-gallery";
 import { STEP_LABELS } from "@/lib/constants/inspection";
+import { APP_TIME_ZONE } from "@/lib/constants/time-zone";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -149,9 +150,10 @@ async function fetchImageBytes(
 }
 
 /** Format ISO date to "Mar 2, 2026, 9:35 PM" */
-function fmtDate(iso: string): string {
+export function fmtDate(iso: string): string {
   try {
     return new Date(iso).toLocaleString("en-US", {
+      timeZone: APP_TIME_ZONE,
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -165,10 +167,11 @@ function fmtDate(iso: string): string {
 }
 
 /** Format date for the page header — "Mar 2, 2026" */
-function fmtHeaderDate(date?: string): string {
+export function fmtHeaderDate(date?: string): string {
   const d = date ? new Date(date) : new Date();
   try {
     return d.toLocaleDateString("en-US", {
+      timeZone: APP_TIME_ZONE,
       month: "short",
       day: "numeric",
       year: "numeric",
