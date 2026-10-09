@@ -6,10 +6,12 @@ import {
   normaliseLot,
   normalisePermitNumber,
   normaliseStreetDir,
-  normalizeStreetName,
   normaliseSubdivision,
+  normalizeStreetName,
   parseUsDate,
   splitStreetAddress,
+  streetSuffix,
+  subdivisionIdentity,
   zip5,
 } from "../normalize";
 
@@ -71,6 +73,19 @@ describe("splitStreetAddress", () => {
 describe("normaliseSubdivision / normaliseLot / zip5", () => {
   it("treats SUNRISE 4 and SUNRISE UNIT 4 as the same subdivision", () => {
     expect(normaliseSubdivision("SUNRISE 4")).toBe(normaliseSubdivision("Sunrise Unit 4"));
+  });
+  it("reads the trailing street suffix in short form", () => {
+    expect(streetSuffix("104TH PLACE")).toBe("PL");
+    expect(streetSuffix("CAVE CREEK ROAD")).toBe("RD");
+    expect(streetSuffix("98TH WY")).toBe("WAY");
+    expect(streetSuffix("WESTLAND")).toBe("");
+    expect(streetSuffix("")).toBe("");
+  });
+  it("reads roman numerals as digits when comparing subdivisions", () => {
+    expect(subdivisionIdentity("SAGUARO WEST II")).toBe(subdivisionIdentity("Saguaro West 2"));
+    expect(subdivisionIdentity("SUNRISE III")).toBe(subdivisionIdentity("Sunrise Unit 3"));
+    expect(subdivisionIdentity("SUNRISE IV")).not.toBe(subdivisionIdentity("SUNRISE 3"));
+    expect(subdivisionIdentity("DESERT HILLS")).not.toBe(subdivisionIdentity("SAGUARO WEST 2"));
   });
   it("drops leading zeros on lots and keeps letters", () => {
     expect(normaliseLot("002")).toBe("2");

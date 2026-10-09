@@ -70,3 +70,20 @@ Live smoke 2026-09-12: `messages.parse()` with `zodOutputFormat(PermitFactsSchem
 - `src/lib/ai/permit-facts-wire.ts`: `PermitFactsWireSchema = { documentKind, isAbandonment, notes, facts: Array<{ path, value: string | number | boolean, confidence, page, evidence, handwritten }> }` (one union, no `$defs`); `WIRE_FACT_PATHS` = `FACT_SPECS` paths + `tankFactSpecs(0..2)`; `permitFactsFromWire()` folds rows into `PermitFacts` (typed values used as-is, text coerced via `coerceFactValue`, unknown paths / unfit values dropped, duplicate path → higher confidence, tanks grown per index and compacted).
 - `runPass` in `extract-permit-facts.ts` sends the wire schema and converts each pass back; `mergePermitFacts`, `rebasePages`, escalation, `mapPermitFacts` and every test fixture keep the nested `PermitFacts`.
 - The system prompt names every wire path and says "leave the fact out" instead of "return null" (snapshot updated; the prompt test pins path coverage). Verified live: 000972 → 1,200 gal / seepage pit / issued 2000-04-04; OW-17-00474 → 1,250 gal / 2 seepage pits / 600 gpd; system prompt (3,013 tokens) read from cache on every call after the first.
+
+## A12. A transfer or abandonment on the APN no longer ends the permit search (2026-10-09)
+
+Spec §5.2 step 2 ran the street fallback only when the APN search returned zero rows, so a Notice of Transfer or an abandonment on the parcel APN ended the search there. A legacy PERMIT filed with a blank parcel number cannot be returned by any APN query and was never reached: 5116 E Westland Rd (inspection 4e46e23e, 2026-10-09) showed "transfer record — no permit found" while permit 820747 (1982, Approval to Construct file 82-0747) sits on the same house.
+
+Amended `searchPermits`:
+
+- A permit-class APN row (PERMIT or Discharge Authorization) still settles the search, as before.
+- Otherwise the APN rows are the parcel's record. They are reported as found via apn with the APN round's hits and scores, unless the street or house-number round returns a permit-class row that corroborates the parcel (`corroboratesParcel`). The APN rows are never filtered, scored, or grouped by address. The failed-archive list and the searched terms also cover the later rounds.
+- Corroboration needs the same house number and an exact street name. It fails on any populated direction, city ("MARICOPA COUNTY" is no city), ZIP, lot or subdivision that contradicts the parcel. It fails on an APN in another book or map, or in the same map under another parcel number. It fails on a street suffix that differs ("104TH ST" and "104TH PL" can share a house number and a subdivision) unless the APN matches exactly or by a split letter.
+- It needs a positive match: the APN itself (exact or a split letter), or a lot or subdivision on a street whose suffix agrees with the parcel's. A blank lot, subdivision and APN is not enough.
+- Subdivision names are compared with roman numerals read as digits (`subdivisionIdentity`: "SAGUARO WEST II" = "SAGUARO WEST 2"). Scoring still uses `normaliseSubdivision`.
+- Corroborated rows join the parcel's record. The stage proposes the permit first by the existing rank order.
+
+Cost: a transfer-only parcel now makes up to four more EDMS queries, and an archive that fails in those rounds is named in the stage summary.
+
+Limit: a permit under another parcel number, another book, or a different street suffix does not corroborate, so the transfer-only answer stands for that parcel. Recall is lower than it could be: "WY" against "WAY" fails the exact street-name check, and "LOT 38" against "38" fails the lot check.
