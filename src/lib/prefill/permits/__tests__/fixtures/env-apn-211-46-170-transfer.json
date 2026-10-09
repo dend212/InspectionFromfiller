@@ -1,0 +1,94 @@
+{
+  "Data": [
+    {
+      "ID": "ARÉOqqx2JGmxKqV8biYSaabNwÉwTmeGOhg63G7zqsaU76iv4tlYP9TYNÁ3Oa17r3UKWNFrNjO1u9tasJXR9QND0=",
+      "Name": "EnvSeptic - 3/24/2023 - OWR-23-00980 - NOTICE OF TRANSFER",
+      "DisplayType": "OleActivePage",
+      "DisplayColumnValues": [
+        {
+          "Value": "NOTICE OF TRANSFER",
+          "RawValue": null
+        },
+        {
+          "Value": "OWR-23-00980",
+          "RawValue": null
+        },
+        {
+          "Value": "211-46-170",
+          "RawValue": null
+        },
+        {
+          "Value": "5116",
+          "RawValue": null
+        },
+        {
+          "Value": "E",
+          "RawValue": null
+        },
+        {
+          "Value": "WESTLAND RD",
+          "RawValue": null
+        },
+        {
+          "Value": "CAVE CREEK",
+          "RawValue": null
+        },
+        {
+          "Value": "85331",
+          "RawValue": null
+        },
+        {
+          "Value": "38",
+          "RawValue": null
+        },
+        {
+          "Value": "SAGUARO WEST 2",
+          "RawValue": null
+        }
+      ]
+    }
+  ],
+  "Truncated": false,
+  "DisplayColumns": [
+    {
+      "Heading": "EnvSepticDocType",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvPermitNumber",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "ParcelNumber",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvStreetNo",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvStreetDir",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvStreet",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvCity",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvZip",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvLotNumber",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvSubdivision",
+      "DataType": "AlphaNumericSingleTable"
+    }
+  ]
+}

@@ -18,19 +18,74 @@ import { normalizeStreetName } from "../input";
 export { normalizeStreetName };
 
 const DIRECTIONS: Record<string, string> = {
-  N: "N", S: "S", E: "E", W: "W", NE: "NE", NW: "NW", SE: "SE", SW: "SW",
-  NORTH: "N", SOUTH: "S", EAST: "E", WEST: "W",
-  NORTHEAST: "NE", NORTHWEST: "NW", SOUTHEAST: "SE", SOUTHWEST: "SW",
+  N: "N",
+  S: "S",
+  E: "E",
+  W: "W",
+  NE: "NE",
+  NW: "NW",
+  SE: "SE",
+  SW: "SW",
+  NORTH: "N",
+  SOUTH: "S",
+  EAST: "E",
+  WEST: "W",
+  NORTHEAST: "NE",
+  NORTHWEST: "NW",
+  SOUTHEAST: "SE",
+  SOUTHWEST: "SW",
 };
 
 function tokens(raw: string): string[] {
-  return raw.toUpperCase().replace(/[^0-9A-Z ]+/g, " ").split(/\s+/).filter(Boolean);
+  return raw
+    .toUpperCase()
+    .replace(/[^0-9A-Z ]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
 }
 
 /** "east" → "E"; anything that is not a direction → "" */
 export function normaliseStreetDir(raw: string): string {
   const t = raw.trim().toUpperCase().replace(/\./g, "");
   return DIRECTIONS[t] ?? "";
+}
+
+const SUFFIX_SHORT: Record<string, string> = {
+  RD: "RD",
+  ROAD: "RD",
+  DR: "DR",
+  DRIVE: "DR",
+  ST: "ST",
+  STREET: "ST",
+  AVE: "AVE",
+  AVENUE: "AVE",
+  LN: "LN",
+  LANE: "LN",
+  BLVD: "BLVD",
+  BOULEVARD: "BLVD",
+  WAY: "WAY",
+  WY: "WAY",
+  CT: "CT",
+  COURT: "CT",
+  PL: "PL",
+  PLACE: "PL",
+  CIR: "CIR",
+  CIRCLE: "CIR",
+  TRL: "TRL",
+  TRAIL: "TRL",
+  PKWY: "PKWY",
+  PARKWAY: "PKWY",
+  HWY: "HWY",
+  HIGHWAY: "HWY",
+  TER: "TER",
+  TERRACE: "TER",
+  LOOP: "LOOP",
+};
+
+/** The trailing street suffix in short form ("104TH PLACE" → "PL"); "" when there is none */
+export function streetSuffix(street: string): string {
+  const words = tokens(street);
+  return words.length > 1 ? (SUFFIX_SHORT[words[words.length - 1]] ?? "") : "";
 }
 
 /** "8911 E CAVE CREEK RD" → { number: "8911", dir: "E", street: "CAVE CREEK RD" } */
@@ -48,12 +103,43 @@ export function splitStreetAddress(streetAddress?: string): {
 
 /** "SUNRISE 4" ≡ "SUNRISE UNIT 4" — uppercase, drop the word UNIT, keep alphanumerics */
 export function normaliseSubdivision(raw: string): string {
-  return raw.toUpperCase().replace(/\bUNIT\b/g, "").replace(/[^0-9A-Z]/g, "");
+  return raw
+    .toUpperCase()
+    .replace(/\bUNIT\b/g, "")
+    .replace(/[^0-9A-Z]/g, "");
+}
+
+const ROMAN_NUMERALS: Record<string, string> = {
+  I: "1",
+  II: "2",
+  III: "3",
+  IV: "4",
+  V: "5",
+  VI: "6",
+  VII: "7",
+  VIII: "8",
+  IX: "9",
+  X: "10",
+};
+
+/**
+ * Subdivision identity, for telling two rows apart: normaliseSubdivision with
+ * whole-word roman numerals read as digits, so "SAGUARO WEST II" and "SAGUARO WEST 2"
+ * name the same subdivision. Scoring keeps using normaliseSubdivision.
+ */
+export function subdivisionIdentity(raw: string): string {
+  const digits = raw
+    .toUpperCase()
+    .replace(/\b(?:X|IX|VIII|VII|VI|V|IV|III|II|I)\b/g, (token) => ROMAN_NUMERALS[token] ?? token);
+  return normaliseSubdivision(digits);
 }
 
 /** "002" → "2", "19A" → "19A" */
 export function normaliseLot(raw: string): string {
-  return raw.toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/^0+(?=\d)/, "");
+  return raw
+    .toUpperCase()
+    .replace(/[^0-9A-Z]/g, "")
+    .replace(/^0+(?=\d)/, "");
 }
 
 /** "85087-8650" → "85087" */

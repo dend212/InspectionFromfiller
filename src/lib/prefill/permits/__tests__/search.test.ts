@@ -11,14 +11,17 @@ import {
 } from "../edms-client";
 import {
   APN_SPLIT_SCORE,
+  corroboratesParcel,
   decideFallback,
   dedupeHits,
   groupByProperty,
   scoreCandidate,
   searchPermits,
 } from "../search";
+import westlandApnTransfer from "./fixtures/env-apn-211-46-170-transfer.json";
 import env200 from "./fixtures/env-parcel-200-08-079.json";
 import env219 from "./fixtures/env-parcel-219-11-121.json";
+import westlandStreet from "./fixtures/env-street-5116-westland.json";
 import envStreet from "./fixtures/env-street-8911.json";
 import eplEmpty from "./fixtures/eplpav-empty.json";
 import eplParcel from "./fixtures/eplpav-parcel-219-12-165.json";
@@ -70,6 +73,28 @@ function oneRow(fixture: RawResponse, name: string, columns: Record<string, stri
   };
 }
 
+/** A recorded response with some columns of one row replaced (row matched by name); other rows untouched */
+function withColumns(
+  fixture: RawResponse,
+  name: string,
+  columns: Record<string, string>,
+): RawResponse {
+  const headings = fixture.DisplayColumns.map((c) => c.Heading);
+  return {
+    ...fixture,
+    Data: fixture.Data.map((row) =>
+      row.Name.includes(name)
+        ? {
+            ...row,
+            DisplayColumnValues: row.DisplayColumnValues.map((cell, i) =>
+              headings[i] in columns ? { ...cell, Value: columns[headings[i]] } : cell,
+            ),
+          }
+        : row,
+    ),
+  };
+}
+
 const caveCreek: PrefillInput = {
   apn: "219-11-121",
   address: {
@@ -83,7 +108,13 @@ const caveCreek: PrefillInput = {
 
 const princess = (apn?: string): PrefillInput => ({
   apn,
-  address: { streetNumber: "8911", streetName: "Princess Dr", streetDir: "E", city: "Mesa", zip: "85207" },
+  address: {
+    streetNumber: "8911",
+    streetName: "Princess Dr",
+    streetDir: "E",
+    city: "Mesa",
+    zip: "85207",
+  },
 });
 
 const villaChula: PrefillInput = {
@@ -314,6 +345,20 @@ describe("decideFallback", () => {
     expect(decideFallback(only, princess()).kind).toBe("ambiguous");
   });
 });
+
+/** 5116 E Westland Rd, Cave Creek (inspection 4e46e23e, 2026-10-09) */
+const westland: PrefillInput = {
+  apn: "211-46-170",
+  subdivision: "SAGUARO WEST 2",
+  lot: "38",
+  address: {
+    streetNumber: "5116",
+    streetName: "WESTLAND RD",
+    streetDir: "E",
+    city: "CAVE CREEK",
+    zip: "85331",
+  },
+};
 
 describe("searchPermits", () => {
   it("finds by APN on env, searching both archives with the dashed APN", async () => {
@@ -552,5 +597,410 @@ describe("searchPermits", () => {
     );
     expect(outcome).toEqual({ kind: "not_found", searched: [], failedArchives: [] });
     expect(search).not.toHaveBeenCalled();
+  });
+
+  // Regression: the APN query returned only the 2023 Notice of Transfer for 5116 E Westland Rd
+  // (recorded 2026-10-09), so the run stopped there. Permit 820747 is filed with a blank parcel
+  // number, so no APN query can return it; only the street round can.
+  it("keeps searching past an APN hit that is only a transfer, so a blank-APN permit on the house is found", async () => {
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: westlandStreet,
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "street", failedArchives: [] });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber).sort()).toEqual([
+      "820747",
+      "OWR-23-00980",
+    ]);
+    expect(search).toHaveBeenCalledTimes(4);
+  });
+
+  it("still reports a transfer-only parcel as found by APN when no other record turns up", async () => {
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: eplEmpty,
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "apn", failedArchives: [] });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber)).toEqual(["OWR-23-00980"]);
+    expect(outcome.hits[0].candidate.score).toBe(10);
+  });
+
+  it("keeps an APN transfer and names the archive whose street search failed", async () => {
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: new Error("EDMS timeout"),
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "apn", failedArchives: ["edms_env"] });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber)).toEqual(["OWR-23-00980"]);
+  });
+
+  it("does not let an address row replace a permit found by APN", async () => {
+    const search = fakeSearch({
+      envApn: env219,
+      eplApn: eplEmpty,
+      envStreet: westlandStreet,
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits({ ...westland, apn: "219-11-121" }, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "apn" });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber)).toEqual(["000972"]);
+    expect(search).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not attach a same-house permit on another lot to the parcel's transfer", async () => {
+    const otherLot = withColumns(westlandStreet, "820747", {
+      EnvLotNumber: "12",
+      EnvSubdivision: "DESERT HILLS",
+    });
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: otherLot,
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "apn", failedArchives: [] });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber)).toEqual(["OWR-23-00980"]);
+  });
+
+  it("needs a positive identity match, so a same-house permit with no lot or subdivision is not attached", async () => {
+    const bare = withColumns(westlandStreet, "820747", { EnvLotNumber: "", EnvSubdivision: "" });
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: bare,
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "apn" });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber)).toEqual(["OWR-23-00980"]);
+  });
+
+  it("ties a permit filed under a split of the parcel APN to the parcel", async () => {
+    const split = withColumns(westlandStreet, "820747", {
+      ParcelNumber: "211-46-170A",
+      EnvLotNumber: "",
+      EnvSubdivision: "",
+    });
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: split,
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "street" });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber).sort()).toEqual([
+      "820747",
+      "OWR-23-00980",
+    ]);
+  });
+
+  it("keeps an abandonment on the parcel when its street is spelled differently", async () => {
+    const renamed = withColumns(westlandApnTransfer, "OWR-23-00980", {
+      EnvSepticDocType: "ABANDONMENT",
+      EnvStreet: "CAVE CREEK RD",
+    });
+    const search = fakeSearch({
+      envApn: renamed,
+      eplApn: eplEmpty,
+      envStreet: westlandStreet,
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "street" });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.docType).sort()).toEqual(["ABANDONMENT", "PERMIT"]);
+  });
+
+  it("does not let a same-number permit at another address replace the parcel's transfer", async () => {
+    const elsewhere: PrefillInput = {
+      apn: "211-46-170",
+      address: {
+        streetNumber: "509",
+        streetName: "MOUNTAIN RD",
+        streetDir: "S",
+        city: "MARICOPA",
+        zip: "85139",
+      },
+    };
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: westlandStreet,
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits(elsewhere, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "apn" });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber)).toEqual(["OWR-23-00980"]);
+  });
+
+  it("does not attach a same-house permit on the same lot number of another subdivision", async () => {
+    const otherSubdivision = withColumns(westlandStreet, "820747", {
+      EnvSubdivision: "DESERT HILLS",
+    });
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: otherSubdivision,
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "apn" });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber)).toEqual(["OWR-23-00980"]);
+  });
+
+  it("does not attach a same-house permit on another lot of the same subdivision", async () => {
+    const otherLot = withColumns(westlandStreet, "820747", { EnvLotNumber: "12" });
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: otherLot,
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "apn" });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber)).toEqual(["OWR-23-00980"]);
+  });
+
+  it("does not attach a same-house permit filed under another book's parcel number", async () => {
+    const otherBook = withColumns(westlandStreet, "820747", { ParcelNumber: "219-11-121" });
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: otherBook,
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "apn" });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber)).toEqual(["OWR-23-00980"]);
+  });
+
+  it("does not attach a same-house permit on the other side of the street", async () => {
+    const otherSide = withColumns(westlandStreet, "820747", { EnvStreetDir: "W" });
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: otherSide,
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "apn" });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber)).toEqual(["OWR-23-00980"]);
+  });
+
+  it("corroborates an ePLPAV permit filed under a split of the parcel APN", async () => {
+    const eplSplit = oneRow(eplParcel, "OW-24-00070", {
+      "Parcel Number": "211-46-170A",
+      "Address Line 1": "5116 WESTLAND RD",
+      "Address Line 2": "",
+      City: "CAVE CREEK",
+      "ZIP Code": "85331",
+      "Subdivision (For Septic Only)": "",
+      "LotNumber (For Septic Only)": "",
+    });
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: eplEmpty,
+      eplStreet: eplSplit,
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "street", failedArchives: [] });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.archive).sort()).toEqual([
+      "edms_env",
+      "edms_eplpav",
+    ]);
+  });
+
+  it("keeps a corroborated permit and names the archive whose street query failed", async () => {
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: westlandStreet,
+      eplStreet: new Error("EDMS timeout"),
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({
+      kind: "found",
+      via: "street",
+      failedArchives: ["edms_eplpav"],
+    });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber).sort()).toEqual([
+      "820747",
+      "OWR-23-00980",
+    ]);
+  });
+
+  it.each([
+    ["a different ZIP", { EnvZip: "85377" }],
+    ["a different city", { EnvCity: "CAREFREE" }],
+    ["a street name that only starts the same", { EnvStreet: "WESTLANDS RD" }],
+    ["another house number", { EnvStreetNo: "5118" }],
+    ["a house number with a letter", { EnvStreetNo: "5116A" }],
+  ])("does not attach a same-house permit with %s", async (_label, columns) => {
+    const contradicted = withColumns(westlandStreet, "820747", columns);
+    const search = fakeSearch({
+      envApn: westlandApnTransfer,
+      eplApn: eplEmpty,
+      envStreet: contradicted,
+      eplStreet: eplEmpty,
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "apn" });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber)).toEqual(["OWR-23-00980"]);
+  });
+
+  it("corroborates a same-house permit that only the house-number round returns", async () => {
+    // The street round (two keywords) comes back empty; the house-number round (one keyword) has the house
+    const search = vi.fn(async (archive: EdmsArchiveConfig, keywords: EdmsKeyword[]) => {
+      if (archive.id !== "env") return parseSearchResponse(eplEmpty);
+      if (keywords.some((k) => k.id === archive.keywords.apn)) {
+        return parseSearchResponse(westlandApnTransfer);
+      }
+      return parseSearchResponse(keywords.length === 1 ? westlandStreet : eplEmpty);
+    });
+    const outcome = await searchPermits(westland, signal, { search });
+    expect(outcome).toMatchObject({ kind: "found", via: "number" });
+    if (outcome.kind !== "found") throw new Error("unreachable");
+    expect(outcome.hits.map((h) => h.candidate.permitNumber).sort()).toEqual([
+      "820747",
+      "OWR-23-00980",
+    ]);
+  });
+});
+
+describe("corroboratesParcel", () => {
+  const ours: PrefillInput = {
+    apn: "211-46-170",
+    subdivision: "SAGUARO WEST 2",
+    lot: "38",
+    address: {
+      streetNumber: "5116",
+      streetName: "WESTLAND RD",
+      streetDir: "E",
+      city: "CAVE CREEK",
+      zip: "85331",
+    },
+  };
+  const permit = (over: Partial<PermitCandidate> = {}): PermitCandidate => ({
+    key: "edms_env:820747:PERMIT:2015-09-11",
+    archive: "edms_env",
+    permitNumber: "820747",
+    docType: "PERMIT",
+    docDate: "2015-09-11",
+    streetAddress: "5116 WESTLAND RD",
+    city: "CAVE CREEK",
+    zip: "",
+    subdivision: "SAGUARO WEST II",
+    lot: "38",
+    apn: "",
+    score: 0,
+    ...over,
+  });
+
+  it("accepts the parcel own permit when its lot and subdivision agree", () => {
+    expect(corroboratesParcel(permit(), ours)).toBe(true);
+  });
+
+  it("rejects a same-house permit on the other street suffix of the same subdivision", () => {
+    // 509 N 104TH ST (lot 7) and 509 N 104TH PL (lot 39) share a subdivision and a house number
+    const parcel: PrefillInput = {
+      subdivision: "CREST VIEW PARK",
+      address: {
+        streetNumber: "509",
+        streetName: "104TH ST",
+        streetDir: "N",
+        city: "MESA",
+        zip: "85207",
+      },
+    };
+    const pl = permit({
+      streetAddress: "509 N 104TH PL",
+      subdivision: "CREST VIEW PARK",
+      lot: "39",
+      city: "MESA",
+      zip: "85207",
+    });
+    expect(corroboratesParcel(pl, parcel)).toBe(false);
+  });
+
+  it("does not take a subdivision as identity when a street suffix is missing", () => {
+    const noSuffix: PrefillInput = {
+      ...ours,
+      lot: undefined,
+      address: { ...ours.address!, streetName: "WESTLAND" },
+    };
+    expect(
+      corroboratesParcel(permit({ streetAddress: "5116 WESTLAND RD", lot: "" }), noSuffix),
+    ).toBe(false);
+  });
+
+  it("accepts a different suffix when the APN matches exactly", () => {
+    const sameApn = permit({
+      streetAddress: "5116 WESTLAND ST",
+      apn: "211-46-170",
+      lot: "",
+      subdivision: "",
+    });
+    expect(corroboratesParcel(sameApn, ours)).toBe(true);
+  });
+
+  it("rejects a permit under a different parcel number in the same map", () => {
+    expect(corroboratesParcel(permit({ apn: "211-46-171" }), ours)).toBe(false);
+  });
+
+  it("rejects a permit in another book or map", () => {
+    expect(corroboratesParcel(permit({ apn: "219-11-121" }), ours)).toBe(false);
+  });
+
+  it("accepts a permit filed under a split of the parcel APN with no lot or subdivision", () => {
+    expect(corroboratesParcel(permit({ apn: "211-46-170A", lot: "", subdivision: "" }), ours)).toBe(
+      true,
+    );
+  });
+
+  it("rejects a same-house permit on another lot of the same subdivision", () => {
+    expect(corroboratesParcel(permit({ lot: "12" }), ours)).toBe(false);
+  });
+
+  it("rejects a blank lot and subdivision when no APN matches", () => {
+    expect(corroboratesParcel(permit({ lot: "", subdivision: "" }), ours)).toBe(false);
+  });
+
+  it("reads a spelled-out direction as its abbreviation", () => {
+    expect(corroboratesParcel(permit({ streetAddress: "5116 EAST WESTLAND RD" }), ours)).toBe(true);
+  });
+
+  it("rejects the other side of the street", () => {
+    expect(corroboratesParcel(permit({ streetAddress: "5116 W WESTLAND RD" }), ours)).toBe(false);
+  });
+
+  it("reads MARICOPA COUNTY as no city, not a conflict", () => {
+    expect(corroboratesParcel(permit({ city: "MARICOPA COUNTY" }), ours)).toBe(true);
   });
 });

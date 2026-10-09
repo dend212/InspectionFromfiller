@@ -1,0 +1,141 @@
+{
+  "Data": [
+    {
+      "ID": "ASJcFSuCRxfe2vQO2Nt9d4sjsC1iRi6vcXADkcYsEXsdyjWXFcGSV15wlHedcYRMaGI93mhyMPlSh85hje3g8lg=",
+      "Name": "EnvSeptic - 9/11/2015 - 820747 - PERMIT",
+      "DisplayType": "OleActivePage",
+      "DisplayColumnValues": [
+        {
+          "Value": "PERMIT",
+          "RawValue": null
+        },
+        {
+          "Value": "820747",
+          "RawValue": null
+        },
+        {
+          "Value": "",
+          "RawValue": null
+        },
+        {
+          "Value": "5116",
+          "RawValue": null
+        },
+        {
+          "Value": "",
+          "RawValue": null
+        },
+        {
+          "Value": "WESTLAND RD",
+          "RawValue": null
+        },
+        {
+          "Value": "CAVE CREEK",
+          "RawValue": null
+        },
+        {
+          "Value": "",
+          "RawValue": null
+        },
+        {
+          "Value": "38",
+          "RawValue": null
+        },
+        {
+          "Value": "SAGUARO WEST II",
+          "RawValue": null
+        }
+      ]
+    },
+    {
+      "ID": "AfCwahxdemALHF8bqÁSXuÉkC92LUR7CRqq5pwVEeMEcÉAHNdWBnIn72dPguNfpsuRRLkcRaRsEVBqilOAIWiHSU=",
+      "Name": "EnvSeptic - 3/24/2023 - OWR-23-00980 - NOTICE OF TRANSFER",
+      "DisplayType": "OleActivePage",
+      "DisplayColumnValues": [
+        {
+          "Value": "NOTICE OF TRANSFER",
+          "RawValue": null
+        },
+        {
+          "Value": "OWR-23-00980",
+          "RawValue": null
+        },
+        {
+          "Value": "211-46-170",
+          "RawValue": null
+        },
+        {
+          "Value": "5116",
+          "RawValue": null
+        },
+        {
+          "Value": "E",
+          "RawValue": null
+        },
+        {
+          "Value": "WESTLAND RD",
+          "RawValue": null
+        },
+        {
+          "Value": "CAVE CREEK",
+          "RawValue": null
+        },
+        {
+          "Value": "85331",
+          "RawValue": null
+        },
+        {
+          "Value": "38",
+          "RawValue": null
+        },
+        {
+          "Value": "SAGUARO WEST 2",
+          "RawValue": null
+        }
+      ]
+    }
+  ],
+  "Truncated": false,
+  "DisplayColumns": [
+    {
+      "Heading": "EnvSepticDocType",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvPermitNumber",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "ParcelNumber",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvStreetNo",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvStreetDir",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvStreet",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvCity",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvZip",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvLotNumber",
+      "DataType": "AlphaNumericSingleTable"
+    },
+    {
+      "Heading": "EnvSubdivision",
+      "DataType": "AlphaNumericSingleTable"
+    }
+  ]
+}

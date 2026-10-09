@@ -1,10 +1,17 @@
 // src/lib/prefill/permits/search.ts
 /**
- * Spec §5.2 search algorithm:
- *   1. APN on `env` + `eplpav` in parallel -> merge -> dedupe.
- *   2. Zero rows -> street fallback (number + normalised street wildcard) on
- *      both archives -> score -> auto-select / candidates.
- *   3. Zero rows -> not_found with the searched terms.
+ * Spec §5.2 search algorithm, as amended 2026-10-09 (plan amendment A12):
+ *   1. APN on `env` + `eplpav` in parallel -> merge -> dedupe. A permit-class
+ *      row (PERMIT, Discharge Authorization) settles the search.
+ *   2. Otherwise the APN rows (any row that is not permit-class: a transfer, an
+ *      abandonment, a PERMIT SUB) are kept as the parcel's record, and the street
+ *      and house-number rounds run. Their rows can only add permit-class documents
+ *      that corroborate the parcel (`corroboratesParcel`): a legacy permit with a
+ *      blank parcel number is found this way, and nothing else about the parcel
+ *      changes.
+ *   3. No APN rows: street fallback -> score -> auto-select / candidates, as
+ *      before. APN rows with nothing corroborated: found via apn. Neither: not_found
+ *      with the searched terms, or an error when every query failed.
  *
  * Pure apart from the injected `search` dependency so it is unit-tested
  * against recorded fixtures and reused by the /select continuation.
@@ -12,7 +19,8 @@
 
 import { formatApn } from "../apn";
 import type { PermitArchive, PermitCandidate, PrefillInput } from "../types";
-import { type SearchHit, rowsToHits } from "./candidates";
+import { rowsToHits, type SearchHit } from "./candidates";
+import { classifyDocType, isPermitClass } from "./doc-types";
 import {
   EDMS_ARCHIVES,
   type EdmsArchiveConfig,
@@ -26,10 +34,13 @@ import {
   normaliseLot,
   normalisePermitNumber,
   normaliseStreetDir,
-  normalizeStreetName,
   normaliseSubdivision,
+  normalizeStreetName,
+  STREET_EXACT_SCORE,
   splitStreetAddress,
   streetSimilarity,
+  streetSuffix,
+  subdivisionIdentity,
   zip5,
 } from "./normalize";
 
@@ -266,6 +277,113 @@ async function runQueries(
   return { hits: dedupeHits(hits), failedArchives };
 }
 
+/** A permit or a Discharge Authorization identifies the permit; a transfer or abandonment only records one */
+const identifiesPermit = (hit: SearchHit): boolean =>
+  isPermitClass(classifyDocType(hit.candidate.docType));
+
+/** The APN rows as the search reports them: each one matched the parcel by its APN */
+const asParcelHits = (hits: SearchHit[]): SearchHit[] =>
+  hits.map((h) => ({ ...h, candidate: { ...h.candidate, score: APN_MATCH_SCORE } }));
+
+/** EDMS writes "MARICOPA COUNTY" for an unincorporated address; that is no city to compare */
+const cityOf = (raw?: string): string => {
+  const city = (raw ?? "").trim().toUpperCase();
+  return city === "MARICOPA COUNTY" ? "" : city;
+};
+
+/**
+ * Can this row be tied to the parcel the APN named? A legacy permit often carries a
+ * blank or retired parcel number, so the test works from the address and the
+ * attributes that identify a parcel. Every populated attribute must agree: house
+ * number, street name with its suffix, direction, city, ZIP, lot and subdivision. The
+ * APN contradicts when it sits in another book or map, or in the same map under a
+ * different parcel number. The row also needs a positive match: the APN itself (exact,
+ * or a split letter), or a lot or subdivision on a street whose suffix agrees. A blank
+ * lot, subdivision and APN is not enough.
+ */
+export function corroboratesParcel(candidate: PermitCandidate, input: PrefillInput): boolean {
+  const addr = input.address;
+  if (!addr || !isPermitClass(classifyDocType(candidate.docType))) return false;
+
+  const theirs = splitStreetAddress(candidate.streetAddress);
+  if (!theirs.number || theirs.number !== addr.streetNumber.trim().toUpperCase()) return false;
+  if (streetSimilarity(addr.streetName, theirs.street) !== STREET_EXACT_SCORE) return false;
+
+  const ourDir = normaliseStreetDir(addr.streetDir ?? "");
+  const theirDir = normaliseStreetDir(theirs.dir);
+  if (ourDir && theirDir && ourDir !== theirDir) return false;
+  const ourCity = cityOf(addr.city);
+  const theirCity = cityOf(candidate.city);
+  if (ourCity && theirCity && ourCity !== theirCity) return false;
+  const ourZip = zip5(addr.zip ?? "");
+  const theirZip = zip5(candidate.zip ?? "");
+  if (ourZip && theirZip && ourZip !== theirZip) return false;
+
+  const apn = apnRelation(formatApn(input.apn), formatApn(candidate.apn));
+  if (apn === "different" || apn === "same_map") return false;
+  const apnMatches = apn === "exact" || apn === "split";
+
+  // "104TH ST" and "104TH PL" can share a house number and a subdivision and still be two
+  // streets. A lot or subdivision identifies the parcel only when both suffixes agree,
+  // unless the APN itself matches.
+  const ourSuffix = streetSuffix(addr.streetName);
+  const theirSuffix = streetSuffix(theirs.street);
+  const suffixesAgree = ourSuffix !== "" && ourSuffix === theirSuffix;
+  const trusted = apnMatches || suffixesAgree;
+
+  let positive = apnMatches;
+  if (input.lot && candidate.lot) {
+    if (normaliseLot(input.lot) !== normaliseLot(candidate.lot)) return false;
+    if (trusted) positive = true;
+  }
+  if (input.subdivision && candidate.subdivision) {
+    if (subdivisionIdentity(input.subdivision) !== subdivisionIdentity(candidate.subdivision)) {
+      return false;
+    }
+    if (trusted) positive = true;
+  }
+  return positive;
+}
+
+/**
+ * One street or house-number round's answer. Without APN rows it is the score-and-group
+ * decision it always was. With APN rows the parcel is already named, so the round may
+ * only add permit-class rows that corroborate it; when it adds none, the caller moves on
+ * and the APN rows stand. The APN rows are not filtered, scored, or grouped by address
+ * here: they keep the score the APN round gives them.
+ */
+function decideRound(
+  hits: SearchHit[],
+  input: PrefillInput,
+  parcelRecords: SearchHit[],
+  via: "street" | "number",
+  searched: string[],
+  failedArchives: PermitArchive[],
+  opts: { requireStreetMatch?: boolean } = {},
+): PermitSearchOutcome | null {
+  if (parcelRecords.length > 0) {
+    const permits = hits
+      .filter((h) => corroboratesParcel(h.candidate, input))
+      .map((h) => ({
+        ...h,
+        candidate: { ...h.candidate, score: scoreCandidate(h.candidate, input) },
+      }));
+    if (permits.length === 0) return null;
+    return {
+      kind: "found",
+      via,
+      hits: dedupeHits([...asParcelHits(parcelRecords), ...permits]),
+      searched,
+      failedArchives,
+    };
+  }
+  const decision = decideFallback(hits, input, opts);
+  if (decision.hits.length === 0) return null;
+  return decision.kind === "found"
+    ? { kind: "found", via, hits: decision.hits, searched, failedArchives }
+    : { kind: "ambiguous", via, hits: decision.hits, searched, failedArchives };
+}
+
 export async function searchPermits(
   input: PrefillInput,
   signal: AbortSignal,
@@ -286,6 +404,7 @@ export async function searchPermits(
 
   // 1. APN on both archives
   const apn = formatApn(input.apn);
+  let parcelRecords: SearchHit[] = [];
   if (apn && isSafeKeywordValue(apn)) {
     searched.push(`APN ${apn}`);
     const queries: ArchiveQuery[] = [
@@ -300,7 +419,7 @@ export async function searchPermits(
     ];
     const round = await runQueries(queries, signal, deps);
     recordRound(round, queries.length);
-    if (round.hits.length > 0) {
+    if (round.hits.some(identifiesPermit)) {
       return {
         kind: "found",
         via: "apn",
@@ -312,6 +431,7 @@ export async function searchPermits(
         failedArchives,
       };
     }
+    parcelRecords = round.hits;
   }
 
   // 2. Street fallback — the house number must look like one (digits + optional letter).
@@ -344,19 +464,23 @@ export async function searchPermits(
     const round = await runQueries(queries, signal, deps);
     recordRound(round, queries.length);
     if (round.hits.length > 0) {
-      const decision = decideFallback(round.hits, input);
-      if (decision.hits.length > 0) {
-        return decision.kind === "found"
-          ? { kind: "found", via: "street", hits: decision.hits, searched, failedArchives }
-          : { kind: "ambiguous", via: "street", hits: decision.hits, searched, failedArchives };
-      }
+      const outcome = decideRound(
+        round.hits,
+        input,
+        parcelRecords,
+        "street",
+        searched,
+        failedArchives,
+      );
+      if (outcome) return outcome;
     }
   }
 
   // 3. House number alone — the street keyword is the brittle part of round 2
   //    (EDMS stores the name the county typed decades ago, we hold whatever the
   //    tech typed today). A number is 8–40 rows countywide, so rank them here
-  //    and let the picker settle it rather than reporting a false negative.
+  //    and let the picker settle it rather than reporting a false negative. With APN rows
+  //    present, only corroborated permits are added (see decideRound).
   if (!signal.aborted && /^\d{1,8}[A-Z]?$/.test(number) && isSafeKeywordValue(number)) {
     searched.push(number);
     const queries: ArchiveQuery[] = [
@@ -372,15 +496,30 @@ export async function searchPermits(
     const round = await runQueries(queries, signal, deps);
     recordRound(round, queries.length);
     if (round.hits.length > 0) {
-      const decision = decideFallback(round.hits, input, { requireStreetMatch: false });
-      if (decision.hits.length > 0) {
-        return decision.kind === "found"
-          ? { kind: "found", via: "number", hits: decision.hits, searched, failedArchives }
-          : { kind: "ambiguous", via: "number", hits: decision.hits, searched, failedArchives };
-      }
+      const outcome = decideRound(
+        round.hits,
+        input,
+        parcelRecords,
+        "number",
+        searched,
+        failedArchives,
+        { requireStreetMatch: false },
+      );
+      if (outcome) return outcome;
     }
   }
 
+  // Only the parcel's own non-permit rows matched and no permit corroborated them: report
+  // them with the APN round's hits and scores. failedArchives still covers the later rounds.
+  if (parcelRecords.length > 0) {
+    return {
+      kind: "found",
+      via: "apn",
+      hits: asParcelHits(parcelRecords),
+      searched,
+      failedArchives,
+    };
+  }
   if (totalQueries > 0 && totalFailures === totalQueries) {
     return { kind: "error", message: EDMS_UNAVAILABLE_MESSAGE, searched };
   }

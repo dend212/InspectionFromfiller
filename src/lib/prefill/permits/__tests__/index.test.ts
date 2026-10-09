@@ -1,17 +1,22 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StageContext } from "@/lib/prefill/stage";
-import type { PermitCandidate } from "../../types";
+import type { PermitCandidate, PrefillInput } from "../../types";
 import type { SearchHit } from "../candidates";
+import { type EdmsArchiveConfig, type EdmsKeyword, parseSearchResponse } from "../edms-client";
 import type { StoreDocumentInput, StoreDocumentResult } from "../fetch-document";
 import {
-  type PermitsStageDeps,
   failedArchivesNote,
   notFoundSummary,
+  type PermitsStageDeps,
   runPermitsSelection,
   runPermitsStage,
 } from "../index";
+import { searchPermits } from "../search";
 import { withExtraction } from "../with-extraction";
+import westlandApnTransfer from "./fixtures/env-apn-211-46-170-transfer.json";
+import westlandStreet from "./fixtures/env-street-5116-westland.json";
+import eplEmpty from "./fixtures/eplpav-empty.json";
 
 // index.ts → fetch-document.ts → run-store.ts → Drizzle; keep the DB out of the test process
 vi.mock("@/lib/prefill/run-store", () => ({ createRecordRow: vi.fn() }));
@@ -20,7 +25,9 @@ vi.mock("../with-extraction", () => ({
   withExtraction: vi.fn(async (_ctx: unknown, result: unknown) => result),
 }));
 
-function hit(over: Partial<PermitCandidate> & { permitNumber: string; docType: string }): SearchHit {
+function hit(
+  over: Partial<PermitCandidate> & { permitNumber: string; docType: string },
+): SearchHit {
   const candidate: PermitCandidate = {
     key: `edms_env:${over.permitNumber}:${over.docType}:${over.docDate ?? ""}`,
     archive: "edms_env",
@@ -40,10 +47,17 @@ const TRANSFER = hit({
   docType: "NOTICE OF TRANSFER",
   docDate: "2022-09-21",
 });
-const ABANDON = hit({ permitNumber: "OWR-22-01512", docType: "ABANDONMENT", docDate: "2025-04-14" });
+const ABANDON = hit({
+  permitNumber: "OWR-22-01512",
+  docType: "ABANDONMENT",
+  docDate: "2025-04-14",
+});
 const PLAN = hit({ permitNumber: "OWR-23-02201", docType: "PLAN REVIEW", docDate: "2024-11-07" });
 
-function makeCtx(): StageContext & { progress: ReturnType<typeof vi.fn>; controller: AbortController } {
+function makeCtx(): StageContext & {
+  progress: ReturnType<typeof vi.fn>;
+  controller: AbortController;
+} {
   const controller = new AbortController();
   return {
     inspectionId: "insp-1",
@@ -70,7 +84,9 @@ function makeDeps(over: Partial<PermitsStageDeps> = {}): PermitsStageDeps & {
 } {
   let n = 0;
   return {
-    searchPermits: vi.fn().mockResolvedValue({ kind: "not_found", searched: [], failedArchives: [] }),
+    searchPermits: vi
+      .fn()
+      .mockResolvedValue({ kind: "not_found", searched: [], failedArchives: [] }),
     storeDocument: vi.fn(async (input: StoreDocumentInput) => storedResult(input, ++n)),
     ...over,
   } as never;
@@ -199,7 +215,11 @@ describe("runPermitsStage", () => {
         kind: "found",
         via: "apn",
         hits: [
-          hit({ permitNumber: "OWR-23-02001", docType: "NOTICE OF TRANSFER", docDate: "2023-06-07" }),
+          hit({
+            permitNumber: "OWR-23-02001",
+            docType: "NOTICE OF TRANSFER",
+            docDate: "2023-06-07",
+          }),
         ],
         searched: ["APN 200-08-079"],
         failedArchives: [],
@@ -209,6 +229,42 @@ describe("runPermitsStage", () => {
     expect(result.proposals[0].provenance.explanation).toBe(
       "Notice of Transfer OWR-23-02001 found on Maricopa EDMS (transfer record — no permit found)",
     );
+  });
+
+  // Regression, 5116 E Westland Rd (2026-10-09): the APN query returns only the 2023 transfer, and
+  // the 1982 permit has a blank parcel number. Run the real search over the recorded EDMS rows:
+  // the permit must be stored first and proposed, not "transfer record — no permit found".
+  it("proposes the blank-APN permit over the APN transfer on the same house", async () => {
+    const search = vi.fn(async (archive: EdmsArchiveConfig, keywords: EdmsKeyword[]) => {
+      if (archive.id !== "env") return parseSearchResponse(eplEmpty);
+      const isApn = keywords.some((k) => k.id === archive.keywords.apn);
+      return parseSearchResponse(isApn ? westlandApnTransfer : westlandStreet);
+    });
+    const westland: PrefillInput = {
+      apn: "211-46-170",
+      subdivision: "SAGUARO WEST 2",
+      lot: "38",
+      address: {
+        streetNumber: "5116",
+        streetName: "WESTLAND RD",
+        streetDir: "E",
+        city: "CAVE CREEK",
+        zip: "85331",
+      },
+    };
+    const deps = makeDeps({
+      searchPermits: vi.fn((i: PrefillInput, signal: AbortSignal) =>
+        searchPermits(i, signal, { search }),
+      ),
+    });
+
+    const result = await runPermitsStage(westland, ctx, deps);
+
+    expect(result.stage.summary).toContain("820747 PERMIT");
+    const stored = deps.storeDocument.mock.calls.map((c) => c[0] as StoreDocumentInput);
+    expect(stored[0].hit.candidate.permitNumber).toBe("820747");
+    const records = result.proposals.find((p) => p.fieldPath === "facilityInfo.recordsAvailable");
+    expect(records?.provenance.explanation).toBe("Permit 820747 (PERMIT) found on Maricopa EDMS");
   });
 
   it("caps pending extraction at MAX_DOCUMENTS_PER_RUN and skips non-extractable types", async () => {
@@ -294,14 +350,16 @@ describe("runPermitsStage", () => {
         searched: ["APN x"],
         failedArchives: [],
       }),
-      storeDocument: vi.fn(async (i: StoreDocumentInput): Promise<StoreDocumentResult> => ({
-        recordId: `rec-${i.hit.candidate.permitNumber}`,
-        stored: false,
-        sizeBytes: 30 * 1024 * 1024,
-        pageCount: null,
-        extractionStatus: "skipped",
-        error: "Larger than 25 MB (30.0 MB) — open it on Maricopa EDMS",
-      })),
+      storeDocument: vi.fn(
+        async (i: StoreDocumentInput): Promise<StoreDocumentResult> => ({
+          recordId: `rec-${i.hit.candidate.permitNumber}`,
+          stored: false,
+          sizeBytes: 30 * 1024 * 1024,
+          pageCount: null,
+          extractionStatus: "skipped",
+          error: "Larger than 25 MB (30.0 MB) — open it on Maricopa EDMS",
+        }),
+      ),
     });
     const result = await runPermitsStage(input, ctx, deps);
     expect(result.stage.summary).toBe(
@@ -644,7 +702,9 @@ describe("runPermitsSelection", () => {
     });
 
     const empty = makeDeps({
-      searchPermits: vi.fn().mockResolvedValue({ kind: "not_found", searched: ["x"], failedArchives: [] }),
+      searchPermits: vi
+        .fn()
+        .mockResolvedValue({ kind: "not_found", searched: ["x"], failedArchives: [] }),
     });
     const b = await runPermitsSelection(input, ctx, [PERMIT.candidate.key], empty);
     expect(b.stage).toMatchObject({
