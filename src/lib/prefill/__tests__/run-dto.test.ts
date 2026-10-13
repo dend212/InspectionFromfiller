@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockLoadRunRow, mockLoadLatestRunRow, mockListRecordRows } = vi.hoisted(() => ({
+const { mockLoadRunRow, mockLoadLatestRunRow, mockListRecordRows, mockFailStaleRuns } = vi.hoisted(() => ({
   mockLoadRunRow: vi.fn(),
   mockLoadLatestRunRow: vi.fn(),
   mockListRecordRows: vi.fn(),
+  mockFailStaleRuns: vi.fn(),
 }));
 
 vi.mock("@/lib/prefill/run-store", () => ({
   loadRunRow: mockLoadRunRow,
   loadLatestRunRow: mockLoadLatestRunRow,
   listRecordRows: mockListRecordRows,
+  failStaleRuns: mockFailStaleRuns,
 }));
 
 import { emptyPermitFacts } from "@/lib/ai/permit-extraction-schema";
@@ -63,6 +65,7 @@ const RECORD: InspectionRecordRow = {
 beforeEach(() => {
   vi.clearAllMocks();
   mockListRecordRows.mockResolvedValue([]);
+  mockFailStaleRuns.mockReset().mockResolvedValue(undefined);
 });
 
 describe("toPrefillRunDTO", () => {
@@ -224,5 +227,39 @@ describe("loadLatestRunDTOForDraft", () => {
       expect.any(Error),
     );
     consoleErrorSpy.mockRestore();
+  });
+});
+
+describe("loadLatestRunDTOForDraft — stale-run sweep (spec §10)", () => {
+  it("fails stale runs before loading the latest run", async () => {
+    const order: string[] = [];
+    mockFailStaleRuns.mockImplementation(async () => {
+      order.push("sweep");
+    });
+    mockLoadLatestRunRow.mockImplementation(async () => {
+      order.push("load");
+      return RUN;
+    });
+    mockListRecordRows.mockResolvedValue([]);
+    const dto = await loadLatestRunDTOForDraft("insp-1", "draft");
+    expect(mockFailStaleRuns).toHaveBeenCalledWith("insp-1");
+    expect(order).toEqual(["sweep", "load"]);
+    expect(dto?.id).toBe("run-1");
+  });
+
+  it("logs a sweep failure and still loads the run", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockFailStaleRuns.mockRejectedValue(new Error("db down"));
+    mockLoadLatestRunRow.mockResolvedValue(RUN);
+    mockListRecordRows.mockResolvedValue([]);
+    const dto = await loadLatestRunDTOForDraft("insp-1", "draft");
+    expect(dto?.id).toBe("run-1");
+    expect(errorSpy).toHaveBeenCalledWith("[prefill] stale-run sweep failed", expect.anything());
+    errorSpy.mockRestore();
+  });
+
+  it("does not sweep for a non-draft inspection", async () => {
+    await loadLatestRunDTOForDraft("insp-1", "submitted");
+    expect(mockFailStaleRuns).not.toHaveBeenCalled();
   });
 });
