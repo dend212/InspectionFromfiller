@@ -1,3 +1,4 @@
+import { splitUnit } from "./address-key";
 import { formatApn } from "./apn";
 import { normalizeStreetName, parseStreetAddress } from "./input";
 import { normalizeFieldPath, valuesEqual } from "./merge";
@@ -42,24 +43,6 @@ export function appendSecondaryText(current: unknown, addition: string): string 
 }
 
 const looseText = (value: string): string => value.replace(/\s+/g, " ").trim().toLowerCase();
-
-const UNIT_WORD = /^(UNIT|APT|STE|SUITE|SPACE|SPC|LOT)$/i;
-
-/** "100 E Example Rd Space 12" → { street: "100 E Example Rd", unit: "12" } */
-function splitUnit(line: string): { street: string; unit: string } {
-  const words = line.replace(/\s+/g, " ").trim().split(" ");
-  for (let i = 1; i < words.length; i++) {
-    const word = words[i];
-    const rest = (from: number) => words.slice(from).join("").replace(/#/g, "").toUpperCase();
-    if (word.startsWith("#")) return { street: words.slice(0, i).join(" "), unit: rest(i) };
-    const next = words[i + 1];
-    // A unit word only counts when a unit token follows ("Lot Rd" is a street, "Lot 7" a unit)
-    if (UNIT_WORD.test(word) && next && /^#?[A-Za-z0-9-]{1,8}$/.test(next) && (/\d/.test(next) || /^#?[A-Za-z]$/.test(next))) {
-      return { street: words.slice(0, i).join(" "), unit: rest(i + 1) };
-    }
-  }
-  return { street: words.join(" "), unit: "" };
-}
 
 function addressesEqual(a: string, b: string): boolean {
   const left = splitUnit(a);
