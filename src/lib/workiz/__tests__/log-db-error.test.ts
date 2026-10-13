@@ -45,4 +45,18 @@ describe("logDbError", () => {
     logDbError("insert", drizzleError({ code: "Test Client", constraint_name: "a b" }), { serialId: 1 });
     expect(spy.mock.calls[0][0]).toBe("[workiz-import] db error scope=insert job=1 code=unknown constraint=-");
   });
+
+  it("uses the given prefix, defaulting to [workiz-import], and still logs no PII", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    logDbError("match_lookup", drizzleError({ code: "57014" }), {}, "inspection-matches");
+    logDbError("jobs_match_lookup", drizzleError({ code: "57014" }));
+    expect(spy.mock.calls[0]).toEqual([
+      "[inspection-matches] db error scope=match_lookup job=- code=57014 constraint=-",
+    ]);
+    expect(spy.mock.calls[1]).toEqual([
+      "[workiz-import] db error scope=jobs_match_lookup job=- code=57014 constraint=-",
+    ]);
+    const logged = JSON.stringify(spy.mock.calls);
+    for (const value of PII) expect(logged).not.toContain(value);
+  });
 });
