@@ -12,7 +12,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "smoke:permits": "tsx scripts/prefill-permits-smoke.mts"
+    "smoke:permits": "tsx scripts/prefill-permits-smoke.mts",
+    "smoke:workiz": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.local scripts/workiz-adeq-smoke.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
