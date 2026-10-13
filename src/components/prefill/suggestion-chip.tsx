@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import { useFormContext, useWatch } from "react-hook-form";
 import { valuesEqual } from "@/lib/prefill/merge";
+import { isSecondaryVisible } from "@/lib/prefill/secondary";
 import { SOURCE_META } from "@/lib/prefill/sources";
 import type { ProvenanceEntry } from "@/lib/prefill/types";
 import { cn } from "@/lib/utils";
@@ -67,6 +68,61 @@ const CHIP_CLASS =
   // max-w-full + min-w-0: still wrap inside that column.
   "inline-flex w-fit min-w-0 max-w-full justify-self-start items-start gap-1 whitespace-normal break-words rounded-lg border px-2 py-0.5 text-xs";
 
+interface ChipViewProps {
+  entry: ProvenanceEntry;
+  fieldPath: string;
+  readOnly: boolean;
+  onAccept: () => void;
+  onDismiss: () => void;
+  /** data-slot of the chip container */
+  slot?: string;
+  dismissLabel?: string;
+}
+
+/** Presentational chip body shared by the records chip and the Workiz (secondary) chip */
+export function ChipView({
+  entry,
+  fieldPath,
+  readOnly,
+  onAccept,
+  onDismiss,
+  slot = "suggestion-chip",
+  dismissLabel = "Dismiss suggestion",
+}: ChipViewProps) {
+  const meta = SOURCE_META[entry.source];
+  const isWarning = entry.kind === "warning";
+  return (
+    <div data-slot={slot} className={cn(CHIP_CLASS, isWarning ? WARNING_CLASS : meta.accentClass)}>
+      {isWarning ? (
+        <span className="min-w-0 whitespace-normal break-words" title={entry.explanation}>
+          {entry.explanation}
+        </span>
+      ) : (
+        <button
+          type="button"
+          disabled={readOnly}
+          aria-label={`Accept suggestion from ${meta.label}: ${formatFieldValue(fieldPath, entry.value)}`}
+          title={suggestionText(entry, fieldPath)}
+          onClick={onAccept}
+          className="min-w-0 whitespace-normal break-words text-left underline-offset-2 hover:underline disabled:no-underline"
+        >
+          {suggestionDisplayText(entry, fieldPath)}
+        </button>
+      )}
+      {!readOnly && (
+        <button
+          type="button"
+          aria-label={dismissLabel}
+          onClick={onDismiss}
+          className="ml-1 shrink-0 rounded-full p-0.5 hover:bg-black/5"
+        >
+          <X className="h-3 w-3" aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SuggestionChipBody({
   fieldPath,
   currentValue,
@@ -74,7 +130,6 @@ function SuggestionChipBody({
   const { entry, acceptSuggestion, dismissSuggestion, dismissWarning, readOnly } = useProvenance(fieldPath);
   if (!entry) return null;
 
-  const meta = SOURCE_META[entry.source];
   const isWarning = entry.kind === "warning";
   // Nothing to suggest when the field already says exactly this (warnings have no value to compare)
   const showChip = entry.state === "suggested" && (isWarning || !valuesEqual(currentValue, entry.value));
@@ -84,34 +139,13 @@ function SuggestionChipBody({
   return (
     <>
       {showChip && (
-        <div data-slot="suggestion-chip" className={cn(CHIP_CLASS, isWarning ? WARNING_CLASS : meta.accentClass)}>
-          {isWarning ? (
-            <span className="min-w-0 whitespace-normal break-words" title={entry.explanation}>
-              {entry.explanation}
-            </span>
-          ) : (
-            <button
-              type="button"
-              disabled={readOnly}
-              aria-label={`Accept suggestion from ${meta.label}: ${formatFieldValue(fieldPath, entry.value)}`}
-              title={suggestionText(entry, fieldPath)}
-              onClick={() => acceptSuggestion(fieldPath)}
-              className="min-w-0 whitespace-normal break-words text-left underline-offset-2 hover:underline disabled:no-underline"
-            >
-              {suggestionDisplayText(entry, fieldPath)}
-            </button>
-          )}
-          {!readOnly && (
-            <button
-              type="button"
-              aria-label="Dismiss suggestion"
-              onClick={() => dismissSuggestion(fieldPath)}
-              className="ml-1 shrink-0 rounded-full p-0.5 hover:bg-black/5"
-            >
-              <X className="h-3 w-3" aria-hidden="true" />
-            </button>
-          )}
-        </div>
+        <ChipView
+          entry={entry}
+          fieldPath={fieldPath}
+          readOnly={readOnly}
+          onAccept={() => acceptSuggestion(fieldPath)}
+          onDismiss={() => dismissSuggestion(fieldPath)}
+        />
       )}
       {warning && (
         <div data-slot="provenance-warning" className={cn(CHIP_CLASS, WARNING_CLASS)}>
@@ -131,5 +165,41 @@ function SuggestionChipBody({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Import from Workiz: the pink chip for a `secondary.<path>` entry (spec §6.4). Rendered by
+ * FormItem / FormFieldGroup whenever a secondary exists, independently of the primary's state;
+ * returns null while isSecondaryVisible says the chip has nothing new to offer.
+ */
+export function SecondarySuggestionChip({ fieldPath }: SuggestionChipProps) {
+  const form = useFormContext();
+  if (!form) return <SecondaryChipBody fieldPath={fieldPath} />;
+  return <WatchedSecondaryChip fieldPath={fieldPath} />;
+}
+
+function WatchedSecondaryChip({ fieldPath }: SuggestionChipProps) {
+  const currentValue = useWatch({ name: fieldPath });
+  return <SecondaryChipBody fieldPath={fieldPath} currentValue={currentValue} />;
+}
+
+function SecondaryChipBody({
+  fieldPath,
+  currentValue,
+}: SuggestionChipProps & { currentValue?: unknown }) {
+  const { entry: primary, getSecondary, acceptSecondary, dismissSecondary, readOnly } = useProvenance(fieldPath);
+  const secondary = getSecondary(fieldPath);
+  if (!secondary || !isSecondaryVisible({ fieldPath, secondary, primary, currentValue })) return null;
+  return (
+    <ChipView
+      entry={secondary}
+      fieldPath={fieldPath}
+      readOnly={readOnly}
+      slot="secondary-suggestion-chip"
+      dismissLabel="Dismiss Workiz suggestion"
+      onAccept={() => acceptSecondary(fieldPath)}
+      onDismiss={() => dismissSecondary(fieldPath)}
+    />
   );
 }

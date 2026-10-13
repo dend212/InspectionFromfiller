@@ -10,6 +10,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(__dirname, "./src"),
+      // `import "server-only"` throws outside a react-server bundle; tests import server modules directly
+      "server-only": resolve(__dirname, "./src/test/server-only-stub.ts"),
     },
   },
 });

@@ -15,14 +15,17 @@ const sourceUrlSchema = z
     message: "sourceUrl must start with https:// or /api/",
   });
 
+/** Max length of a string provenance value; the whole-map PATCH rejects anything longer */
+export const PROVENANCE_VALUE_MAX_CHARS = 5000;
+
 export const provenanceValueSchema = z.union([
-  z.string().max(5000),
+  z.string().max(PROVENANCE_VALUE_MAX_CHARS),
   z.boolean(),
   z.array(z.string().max(500)).max(100),
 ]);
 
 const provenanceEntryBaseSchema = z.object({
-  source: z.enum(["assessor", "permit", "listing", "scan"]),
+  source: z.enum(["assessor", "permit", "listing", "scan", "workiz"]),
   state: z.enum(["prefilled", "suggested", "edited", "verified"]),
   kind: z.enum(["fill", "warning"]),
   value: provenanceValueSchema,

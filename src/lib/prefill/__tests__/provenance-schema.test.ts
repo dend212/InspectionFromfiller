@@ -127,3 +127,31 @@ describe("provenancePatchBodySchema", () => {
     expect(provenancePatchBodySchema.safeParse({ fieldProvenance: {} }).success).toBe(true);
   });
 });
+
+describe("Workiz entries (Import from Workiz)", () => {
+  const WORKIZ = {
+    source: "workiz",
+    state: "suggested",
+    kind: "fill",
+    value: "Test Client",
+    confidence: 0.6,
+    explanation: "Workiz client (job #4696)",
+    at: "2026-10-12T17:04:05.000Z",
+  };
+
+  it("accepts source workiz", () => {
+    expect(provenanceEntrySchema.safeParse(WORKIZ).success).toBe(true);
+  });
+
+  it("accepts secondary.* keys, including the longest one (50 chars)", () => {
+    const result = fieldProvenanceSchema.safeParse({
+      "secondary.facilityInfo.sellerName": WORKIZ,
+      "secondary.septicTank.tanks.0.effluentFilterPresent": { ...WORKIZ, value: "present" },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("still rejects an unknown source", () => {
+    expect(provenanceEntrySchema.safeParse({ ...WORKIZ, source: "zillow" }).success).toBe(false);
+  });
+});

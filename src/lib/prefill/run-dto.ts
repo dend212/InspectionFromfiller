@@ -3,7 +3,7 @@ import { emptyPermitFacts } from "@/lib/ai/permit-extraction-schema";
 import { isTransferRecord, permitDocDate } from "./map-facts-to-fields";
 import { isAbandonmentDocType, permitDocRank } from "./permits/doc-types";
 import type { InspectionRecordRow, PrefillRunRow } from "./run-store";
-import { listRecordRows, loadLatestRunRow, loadRunRow } from "./run-store";
+import { failStaleRuns, listRecordRows, loadLatestRunRow, loadRunRow } from "./run-store";
 import type {
   ExtractionStatus,
   InspectionRecordDTO,
@@ -117,12 +117,20 @@ export async function loadLatestRunDTO(inspectionId: string): Promise<PrefillRun
 /**
  * Used by the edit page to load the prefill panel's run without letting a DB error crash
  * the page. Non-draft inspections never show the panel, so the query is skipped entirely.
+ * Fails queued/running runs older than 5 minutes first (best-effort): a run whose after()
+ * job was dropped would otherwise poll as "running" forever, because POST /prefill — the
+ * only other sweep — is unreachable while the tile shows a run in progress (spec §10).
  */
 export async function loadLatestRunDTOForDraft(
   inspectionId: string,
   status: string,
 ): Promise<PrefillRunDTO | null> {
   if (status !== "draft") return null;
+  try {
+    await failStaleRuns(inspectionId);
+  } catch (err) {
+    console.error("[prefill] stale-run sweep failed", err);
+  }
   try {
     return await loadLatestRunDTO(inspectionId);
   } catch (err) {

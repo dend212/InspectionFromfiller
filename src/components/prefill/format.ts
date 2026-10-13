@@ -1,5 +1,6 @@
 import {
   CAPACITY_BASIS_OPTIONS,
+  CONDITION_OPTIONS,
   DESIGN_FLOW_BASIS,
   DISPOSAL_TYPES,
   FACILITY_SYSTEM_TYPES,
@@ -36,6 +37,17 @@ const GP402_CHIP_LABELS: readonly LabelOption[] = GP402_SYSTEM_TYPES.map((option
   option.value === "gp402_conventional" ? { value: option.value, label: "GP 4.02 Conventional" } : option,
 );
 
+/** Effluent filter is a two-button group in the wizard; the form stores these tokens */
+const EFFLUENT_FILTER_LABELS: readonly LabelOption[] = [
+  { value: "present", label: "Present" },
+  { value: "not_present", label: "Not Present" },
+];
+
+const YES_NO_LABELS: readonly LabelOption[] = [
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
+];
+
 /**
  * Enum/checkbox-array prefill fields, keyed by the exact react-hook-form dotted path (numeric
  * array-index segments normalised to `*` — see `normaliseFieldPath`), mapped to the option list
@@ -52,6 +64,10 @@ const FIELD_VALUE_LABELS: Record<string, readonly LabelOption[]> = {
   "designFlow.designFlowBasis": DESIGN_FLOW_BASIS,
   "septicTank.tanks.*.tankMaterial": TANK_MATERIALS,
   "septicTank.tanks.*.capacityBasis": CAPACITY_BASIS_OPTIONS,
+  "facilityInfo.septicTankCondition": CONDITION_OPTIONS,
+  "facilityInfo.disposalWorksCondition": CONDITION_OPTIONS,
+  "septicTank.tanks.*.effluentFilterPresent": EFFLUENT_FILTER_LABELS,
+  "disposalWorks.hydraulicLoadTestPerformed": YES_NO_LABELS,
 };
 
 /** Replaces every numeric array-index segment (e.g. the `<i>` in `septicTank.tanks.<i>.*`) with `*`. */

@@ -36,9 +36,11 @@ function makeWrapper(opts: {
   readOnly?: boolean;
   facility?: Partial<InspectionFormData["facilityInfo"]>;
   tanks?: Tank[];
+  patch?: (f: InspectionFormData) => void;
 }) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     const defaults = getDefaultFormValues("Tech") as unknown as InspectionFormData;
+    opts.patch?.(defaults);
     const form = useForm<InspectionFormData>({
       defaultValues: {
         ...defaults,
@@ -544,5 +546,186 @@ describe("ProvenanceProvider", () => {
     });
     expect(errorSpy).toHaveBeenCalledWith("[provenance] save failed", expect.any(Error));
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("secondary (Workiz) slot — spec §6.3 / §6.4", () => {
+  const AT = "2026-10-12T17:04:05.000Z";
+  const workiz = (value: ProvenanceEntry["value"], over: Partial<ProvenanceEntry> = {}): ProvenanceEntry => ({
+    source: "workiz",
+    state: "suggested",
+    kind: "fill",
+    value,
+    confidence: 0.6,
+    explanation: "Workiz client (job #4696)",
+    at: AT,
+    ...over,
+  });
+
+  it("getSecondary reads the secondary key; get() still reads the primary", () => {
+    const formRef: FormRef = { current: null };
+    const { result } = renderHook(() => useProvenance("facilityInfo.sellerName"), {
+      wrapper: makeWrapper({
+        formRef,
+        initial: {
+          "facilityInfo.sellerName": entry({ value: "OWNER OF RECORD" }),
+          "secondary.facilityInfo.sellerName": workiz("Test Client"),
+        },
+      }),
+    });
+    expect(result.current.getSecondary("facilityInfo.sellerName")?.value).toBe("Test Client");
+    expect(result.current.entry?.value).toBe("OWNER OF RECORD");
+  });
+
+  it("acceptSecondary writes the value, makes the primary an edited Workiz entry (keeping a warning, dropping prior), keeps the secondary and persists", async () => {
+    const formRef: FormRef = { current: null };
+    const prior = entry({ state: "edited", value: "Typed" });
+    const { result } = renderHook(() => useProvenance("facilityInfo.sellerName"), {
+      wrapper: makeWrapper({
+        formRef,
+        facility: { sellerName: "OWNER OF RECORD" },
+        initial: {
+          "facilityInfo.sellerName": entry({ value: "OWNER OF RECORD", warning: "Check owner", prior }),
+          "secondary.facilityInfo.sellerName": workiz("Test Client"),
+        },
+      }),
+    });
+    act(() => result.current.acceptSecondary("facilityInfo.sellerName"));
+    expect(formRef.current?.getValues("facilityInfo.sellerName")).toBe("Test Client");
+    const primary = result.current.get("facilityInfo.sellerName");
+    expect(primary).toMatchObject({ source: "workiz", state: "edited", value: "Test Client", warning: "Check owner" });
+    expect(primary?.prior).toBeUndefined();
+    expect(result.current.getSecondary("facilityInfo.sellerName")).toEqual(workiz("Test Client"));
+    await act(async () => {
+      vi.advanceTimersByTime(PROVENANCE_SAVE_DEBOUNCE_MS);
+    });
+    const body = lastPatchBody();
+    expect(body.fieldProvenance["facilityInfo.sellerName"].state).toBe("edited");
+    expect(body.fieldProvenance["secondary.facilityInfo.sellerName"]).toBeDefined();
+  });
+
+  it("grows the tanks array for a tanks.0 path", () => {
+    const formRef: FormRef = { current: null };
+    const { result } = renderHook(() => useProvenance("septicTank.tanks.0.tankCapacity"), {
+      wrapper: makeWrapper({
+        formRef,
+        tanks: [],
+        initial: { "secondary.septicTank.tanks.0.tankCapacity": workiz("1500", { confidence: 0.85 }) },
+      }),
+    });
+    act(() => result.current.acceptSecondary("septicTank.tanks.0.tankCapacity"));
+    expect(formRef.current?.getValues("septicTank.tanks.0.tankCapacity")).toBe("1500");
+  });
+
+  it.each(["septicTank.septicTankComments", "disposalWorks.disposalWorksComments"] as const)(
+    "%s: appends to existing text and replaces only when empty",
+    (path) => {
+      const [section, field] = path.split(".") as ["septicTank" | "disposalWorks", string];
+      const formRef: FormRef = { current: null };
+      const { result } = renderHook(() => useProvenance(path), {
+        wrapper: makeWrapper({
+          formRef,
+          patch: (f) => {
+            (f[section] as Record<string, unknown>)[field] = "Baffle cracked.  ";
+          },
+          initial: { [`secondary.${path}`]: workiz("Roots at outlet.", { confidence: 0.8 }) },
+        }),
+      });
+      act(() => result.current.acceptSecondary(path));
+      expect(formRef.current?.getValues(path)).toBe("Baffle cracked.\n\nRoots at outlet.");
+      expect(result.current.get(path)?.value).toBe("Baffle cracked.\n\nRoots at outlet.");
+
+      act(() => formRef.current?.setValue(path, ""));
+      act(() => result.current.acceptSecondary(path));
+      expect(formRef.current?.getValues(path)).toBe("Roots at outlet.");
+    },
+  );
+
+  it("accepting a comments secondary marks it accepted, so editing the text never re-offers it, and a second accept appends nothing", () => {
+    const formRef: FormRef = { current: null };
+    const path = "septicTank.septicTankComments";
+    const { result } = renderHook(() => useProvenance(path), {
+      wrapper: makeWrapper({
+        formRef,
+        patch: (f) => {
+          f.septicTank.septicTankComments = "Baffle cracked.";
+        },
+        initial: { [`secondary.${path}`]: workiz("Roots at outlet.") },
+      }),
+    });
+    act(() => result.current.acceptSecondary(path));
+    expect(result.current.getSecondary(path)?.state).toBe("edited");
+    // Edited text no longer contains the Workiz text; forcing another accept must not append it twice
+    act(() => formRef.current?.setValue(path, "Baffle cracked.\n\nRoots at outlet."));
+    act(() => result.current.acceptSecondary(path));
+    expect(formRef.current?.getValues(path)).toBe("Baffle cracked.\n\nRoots at outlet.");
+  });
+
+  it("an append longer than the provenance value cap stores the Workiz text in the primary", () => {
+    const formRef: FormRef = { current: null };
+    const path = "septicTank.septicTankComments";
+    const { result } = renderHook(() => useProvenance(path), {
+      wrapper: makeWrapper({
+        formRef,
+        patch: (f) => {
+          f.septicTank.septicTankComments = "x".repeat(4990);
+        },
+        initial: { [`secondary.${path}`]: workiz("Roots at outlet.") },
+      }),
+    });
+    act(() => result.current.acceptSecondary(path));
+    expect((formRef.current?.getValues(path) as string).length).toBe(4990 + 2 + 16);
+    expect(result.current.get(path)?.value).toBe("Roots at outlet.");
+  });
+
+  it("dismissSecondary removes only the secondary key and persists", async () => {
+    const formRef: FormRef = { current: null };
+    const { result } = renderHook(() => useProvenance("facilityInfo.sellerName"), {
+      wrapper: makeWrapper({
+        formRef,
+        initial: {
+          "facilityInfo.sellerName": entry(),
+          "secondary.facilityInfo.sellerName": workiz("Test Client"),
+        },
+      }),
+    });
+    act(() => result.current.dismissSecondary("facilityInfo.sellerName"));
+    expect(result.current.getSecondary("facilityInfo.sellerName")).toBeUndefined();
+    expect(result.current.entry).toBeDefined();
+    await act(async () => {
+      vi.advanceTimersByTime(PROVENANCE_SAVE_DEBOUNCE_MS);
+    });
+    expect(lastPatchBody().fieldProvenance["secondary.facilityInfo.sellerName"]).toBeUndefined();
+  });
+
+  it("read-only: accept and dismiss are no-ops", () => {
+    const formRef: FormRef = { current: null };
+    const { result } = renderHook(() => useProvenance("facilityInfo.sellerName"), {
+      wrapper: makeWrapper({
+        formRef,
+        readOnly: true,
+        initial: { "secondary.facilityInfo.sellerName": workiz("Test Client") },
+      }),
+    });
+    act(() => result.current.acceptSecondary("facilityInfo.sellerName"));
+    act(() => result.current.dismissSecondary("facilityInfo.sellerName"));
+    expect(formRef.current?.getValues("facilityInfo.sellerName")).toBe("");
+    expect(result.current.getSecondary("facilityInfo.sellerName")).toBeDefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("acceptSecondary without a secondary does nothing", () => {
+    const formRef: FormRef = { current: null };
+    const { result } = renderHook(() => useProvenance("facilityInfo.sellerName"), {
+      wrapper: makeWrapper({ formRef }),
+    });
+    act(() => result.current.acceptSecondary("facilityInfo.sellerName"));
+    expect(result.current.entry).toBeUndefined();
+  });
+
+  it("the no-op context exposes the three methods", () => {
+    expect(NOOP_PROVENANCE.getSecondary("facilityInfo.sellerName")).toBeUndefined();
+    expect(() => NOOP_PROVENANCE.acceptSecondary("x")).not.toThrow();
+    expect(() => NOOP_PROVENANCE.dismissSecondary("x")).not.toThrow();
   });
 });

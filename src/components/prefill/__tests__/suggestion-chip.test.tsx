@@ -1,10 +1,11 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 import { FormProvider, type UseFormReturn, useForm, useFormContext } from "react-hook-form";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProvenanceProvider } from "@/components/prefill/provenance-context";
 import {
+  SecondarySuggestionChip,
   SuggestionChip,
   suggestionDisplayText,
   suggestionText,
@@ -421,5 +422,86 @@ describe("SuggestionChip", () => {
     );
     expect(screen.getByRole("button", { name: /accept suggestion/i })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Dismiss suggestion" })).toBeNull();
+  });
+});
+
+describe("SecondarySuggestionChip (Workiz)", () => {
+  const WATER = "facilityInfo.waterSource";
+  const SECONDARY: ProvenanceEntry = {
+    source: "workiz",
+    state: "suggested",
+    kind: "fill",
+    value: "private_well",
+    confidence: 0.85,
+    explanation: "Workiz job #4696 · Water Source",
+    evidence: 'Water Source: "Private Well"',
+    at: "2026-10-12T17:04:05.000Z",
+  };
+
+  function WaterInput() {
+    const { register } = useFormContext<InspectionFormData>();
+    return <input aria-label="Water source" {...register(WATER)} />;
+  }
+
+  it("renders a pink chip that reads like a permit chip, and hides once accepted", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness initial={{ [`secondary.${WATER}`]: SECONDARY }} withFormProvider>
+        <WaterInput />
+        <SecondarySuggestionChip fieldPath={WATER} />
+      </Harness>,
+    );
+    const chip = document.querySelector('[data-slot="secondary-suggestion-chip"]') as HTMLElement;
+    expect(chip).not.toBeNull();
+    expect(chip.className).toContain("border-pink-300");
+    expect(within(chip).getByText("Suggested: Private Well · 85% · Workiz job #4696 · Water Source")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Accept suggestion from Workiz: Private Well" }));
+    expect(formRef.current?.getValues(WATER)).toBe("private_well");
+    expect(document.querySelector('[data-slot="secondary-suggestion-chip"]')).toBeNull();
+  });
+
+  it("is hidden while the field already holds the value", () => {
+    render(
+      <Harness
+        initial={{ [`secondary.${WATER}`]: SECONDARY }}
+        values={(f) => {
+          f.facilityInfo.waterSource = "private_well";
+        }}
+        withFormProvider
+      >
+        <SecondarySuggestionChip fieldPath={WATER} />
+      </Harness>,
+    );
+    expect(document.querySelector('[data-slot="secondary-suggestion-chip"]')).toBeNull();
+  });
+
+  it("× dismisses it", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness initial={{ [`secondary.${WATER}`]: SECONDARY }} withFormProvider>
+        <SecondarySuggestionChip fieldPath={WATER} />
+      </Harness>,
+    );
+    await user.click(screen.getByRole("button", { name: "Dismiss Workiz suggestion" }));
+    expect(document.querySelector('[data-slot="secondary-suggestion-chip"]')).toBeNull();
+  });
+
+  it("read-only: accept disabled, no dismiss", () => {
+    render(
+      <Harness initial={{ [`secondary.${WATER}`]: SECONDARY }} readOnly withFormProvider>
+        <SecondarySuggestionChip fieldPath={WATER} />
+      </Harness>,
+    );
+    expect(screen.getByRole("button", { name: /Accept suggestion from Workiz/ })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Dismiss Workiz suggestion" })).toBeNull();
+  });
+
+  it("renders nothing without a secondary entry", () => {
+    const { container } = render(
+      <Harness initial={{}} withFormProvider>
+        <SecondarySuggestionChip fieldPath={WATER} />
+      </Harness>,
+    );
+    expect(container.querySelector('[data-slot="secondary-suggestion-chip"]')).toBeNull();
   });
 });

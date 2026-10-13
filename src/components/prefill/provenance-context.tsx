@@ -3,6 +3,8 @@
 import * as React from "react";
 import type { FieldPath, UseFormReturn } from "react-hook-form";
 import { getPath, normalizeFieldPath, valuesEqual } from "@/lib/prefill/merge";
+import { PROVENANCE_VALUE_MAX_CHARS } from "@/lib/prefill/provenance-schema";
+import { appendSecondaryText, SECONDARY_APPEND_PATHS, secondaryKey } from "@/lib/prefill/secondary";
 import { ensureTankArrayCapacity } from "@/lib/prefill/tank-capacity";
 import type { FieldProvenance, ProvenanceEntry } from "@/lib/prefill/types";
 import type { InspectionFormData } from "@/types/inspection";
@@ -22,6 +24,17 @@ export interface ProvenanceContextValue {
   dismissWarning(fieldPath: string): void;
   /** Merge entries in — used by the prefill hook, the APN lookup and the scan flow */
   setMany(entries: FieldProvenance): void;
+  /** Import from Workiz: the `secondary.<path>` entry (a pink chip), never written to the form until accepted */
+  getSecondary(fieldPath: string): ProvenanceEntry | undefined;
+  /**
+   * Writes the Workiz value into the form (the two comments paths append to existing text), then
+   * makes the primary an `edited` Workiz entry so later runs never silently replace the user's
+   * choice (spec §6.3). The secondary key is kept; it hides while the field equals it, and for the
+   * comments paths it is marked `edited` so it never reappears for that path.
+   */
+  acceptSecondary(fieldPath: string): void;
+  /** Deletes the secondary key — permanently for this inspection */
+  dismissSecondary(fieldPath: string): void;
 }
 
 const noop = (): void => {};
@@ -37,6 +50,9 @@ export const NOOP_PROVENANCE: ProvenanceContextValue = {
   dismissSuggestion: noop,
   dismissWarning: noop,
   setMany: noop,
+  getSecondary: () => undefined,
+  acceptSecondary: noop,
+  dismissSecondary: noop,
 };
 
 const ProvenanceContext = React.createContext<ProvenanceContextValue>(NOOP_PROVENANCE);
@@ -246,6 +262,71 @@ export function ProvenanceProvider({
     [update],
   );
 
+  const getSecondary = React.useCallback(
+    (fieldPath: string) => provenance[secondaryKey(fieldPath)],
+    [provenance],
+  );
+
+  const acceptSecondary = React.useCallback(
+    (fieldPath: string) => {
+      if (readOnly) return;
+      const key = normalizeFieldPath(fieldPath);
+      const sKey = secondaryKey(key);
+      const secondary = provenanceRef.current[sKey];
+      if (!secondary || secondary.kind !== "fill") return;
+      ensureTankArrayCapacity(form, [key]);
+      const formPath = key as FieldPath<InspectionFormData>;
+      const newValue =
+        SECONDARY_APPEND_PATHS.has(key) && typeof secondary.value === "string"
+          ? appendSecondaryText(form.getValues(formPath), secondary.value)
+          : secondary.value;
+      form.setValue(formPath, newValue as never, { shouldDirty: true, shouldValidate: true });
+      // An appended comment can outgrow the per-value cap; the whole-map PATCH would then reject
+      // EVERY entry, so the primary records the Workiz text instead (the form keeps the full text)
+      const storedValue =
+        typeof newValue === "string" && newValue.length > PROVENANCE_VALUE_MAX_CHARS
+          ? secondary.value
+          : newValue;
+      const appends = SECONDARY_APPEND_PATHS.has(key);
+      update((prev) => {
+        const latest = prev[sKey];
+        if (!latest) return prev;
+        const old = prev[key];
+        const { prior: _prior, warning: _warning, ...base } = latest;
+        const at = new Date().toISOString();
+        const primary: ProvenanceEntry = {
+          ...base,
+          value: storedValue,
+          state: "edited",
+          at,
+          ...(old?.warning !== undefined ? { warning: old.warning } : {}),
+        };
+        // An accepted comments secondary is marked `edited` so its chip stays hidden even after
+        // the user edits the appended text; only a new Workiz suggestion would re-offer it
+        return {
+          ...prev,
+          [key]: primary,
+          ...(appends ? { [sKey]: { ...latest, state: "edited" as const, at } } : {}),
+        };
+      });
+    },
+    [form, readOnly, update],
+  );
+
+  const dismissSecondary = React.useCallback(
+    (fieldPath: string) => {
+      if (readOnly) return;
+      const sKey = secondaryKey(fieldPath);
+      if (!(sKey in provenanceRef.current)) return;
+      update((prev) => {
+        if (!(sKey in prev)) return prev;
+        const { [sKey]: _removed, ...rest } = prev;
+        return rest;
+      });
+    },
+    [readOnly, update],
+  );
+
   // prefilled → edited when the form value diverges from what we proposed.
   // Also checks entries nested under the changed path (the scan flow replaces whole tank arrays).
   React.useEffect(() => {
@@ -282,8 +363,24 @@ export function ProvenanceProvider({
       dismissSuggestion,
       dismissWarning,
       setMany,
+      getSecondary,
+      acceptSecondary,
+      dismissSecondary,
     }),
-    [provenance, readOnly, get, verify, clear, acceptSuggestion, dismissSuggestion, dismissWarning, setMany],
+    [
+      provenance,
+      readOnly,
+      get,
+      verify,
+      clear,
+      acceptSuggestion,
+      dismissSuggestion,
+      dismissWarning,
+      setMany,
+      getSecondary,
+      acceptSecondary,
+      dismissSecondary,
+    ],
   );
 
   return <ProvenanceContext.Provider value={value}>{children}</ProvenanceContext.Provider>;
