@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGetUser, mockGetUserRole, mockList, mockFind, mockLoadName } = vi.hoisted(() => ({
+const { mockGetUser, mockGetUserRole, mockList, mockFind, mockLoadName, mockBatch } = vi.hoisted(() => ({
   mockGetUser: vi.fn(),
   mockGetUserRole: vi.fn(),
   mockList: vi.fn(),
   mockFind: vi.fn(),
   mockLoadName: vi.fn(),
+  mockBatch: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -14,6 +15,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/supabase/auth-helpers", () => ({ getUserRole: mockGetUserRole }));
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/workiz/adeq-jobs", () => ({ listImportableAdeqJobs: mockList }));
+vi.mock("@/lib/inspection-matches/find", () => ({ findPossibleDuplicatesBatch: mockBatch }));
 vi.mock("@/lib/workiz/import-store", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/workiz/import-store")>();
   return { ...actual, findInspectionsByWorkizIds: mockFind, loadProfileFullName: mockLoadName };
@@ -21,8 +23,9 @@ vi.mock("@/lib/workiz/import-store", async (importOriginal) => {
 
 import { toJobSummary } from "@/lib/workiz/adeq";
 import { WorkizError, type WorkizErrorCode } from "@/lib/workiz/client";
-import { fixtures, job } from "@/lib/workiz/__tests__/fixtures/jobs";
+import { CF_IDS, cf, fixtures, job, withAddress } from "@/lib/workiz/__tests__/fixtures/jobs";
 import { workizJobSchema } from "@/lib/workiz/schema";
+import type { InspectionMatchResult } from "@/types/inspection-matches";
 import { GET, maxDuration } from "../route";
 
 const USER = { id: "user-1", email: "tech@example.com" };
@@ -42,6 +45,7 @@ beforeEach(() => {
   mockList.mockResolvedValue({ rows: [ROW_A, ROW_B, ROW_C], fetchedAt: FETCHED_AT });
   mockFind.mockResolvedValue([]);
   mockLoadName.mockResolvedValue("Sam Sample");
+  mockBatch.mockResolvedValue(new Map());
   errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -154,5 +158,101 @@ describe("GET /api/workiz/jobs", () => {
       "[workiz-import] db error scope=jobs_existing_lookup job=- code=08006 constraint=-",
     );
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("Failed query");
+  });
+
+  describe("possible duplicates", () => {
+    const MATCH: InspectionMatchResult = {
+      matches: [
+        {
+          inspectionId: "6f1c2a9e-0000-4000-8000-000000000001",
+          href: "/inspections/6f1c2a9e-0000-4000-8000-000000000001",
+          status: "completed",
+          facilityAddress: "100 E Example Rd",
+          facilityCity: "Cave Creek",
+          inspectionDate: "2026-10-06",
+          createdAt: "2026-10-06T19:12:00.000Z",
+          inspectorName: "Sam Sample",
+          isOwn: true,
+          reasons: ["address"],
+        },
+      ],
+      hiddenCount: 0,
+      truncated: false,
+    };
+    const EMPTY: InspectionMatchResult = { matches: [], hiddenCount: 0, truncated: false };
+
+    it("makes one batch call with street + #unit, city, zip, apnHint and both Workiz ids excluded", async () => {
+      const unitRow = toJobSummary(
+        workizJobSchema.parse(
+          withAddress({ unit: "12" }, { customFields: [cf(CF_IDS.apn, "12345670")] }),
+        ),
+      );
+      mockList.mockResolvedValue({ rows: [unitRow, ROW_C], fetchedAt: FETCHED_AT });
+      await GET(request());
+      expect(mockBatch).toHaveBeenCalledTimes(1);
+      const [items, viewer, opts] = mockBatch.mock.calls[0];
+      expect(viewer).toEqual({ userId: "user-1", privileged: false });
+      expect(opts).toEqual({ limit: 3 });
+      expect(items[0]).toEqual({
+        key: "JOB-AbCdEfGhIjKlMnOp",
+        query: {
+          address: { number: "100", dir: "E", street: "EXAMPLE", suffix: "RD", unit: "12" },
+          zip5: "85331",
+          city: "cave creek",
+          apnKey: "12345670",
+        },
+        excludeWorkizJobIds: ["AB12CD", "JOB-AbCdEfGhIjKlMnOp"],
+      });
+      expect(items[1]).toMatchObject({ key: "JOB-Unscheduled000001", excludeWorkizJobIds: ["UN12CD", "JOB-Unscheduled000001"] });
+    });
+
+    it("admins are privileged viewers", async () => {
+      mockGetUserRole.mockResolvedValue("admin");
+      await GET(request());
+      expect(mockBatch.mock.calls[0][1]).toEqual({ userId: "user-1", privileged: true });
+    });
+
+    it("a row with matches carries possibleMatches; rows with an empty result do not", async () => {
+      mockBatch.mockResolvedValue(new Map([["JOB-AbCdEfGhIjKlMnOp", MATCH], ["JOB-OnlineBooking00001", EMPTY]]));
+      const body = await (await GET(request())).json();
+      expect(body.jobs[0].possibleMatches).toEqual(MATCH);
+      expect("possibleMatches" in body.jobs[1]).toBe(false);
+      expect("possibleMatches" in body.jobs[2]).toBe(false);
+      expect(body.matchCheckFailed).toBeUndefined();
+    });
+
+    it("a hidden-only result (field tech) is passed through as a count", async () => {
+      mockBatch.mockResolvedValue(new Map([["JOB-AbCdEfGhIjKlMnOp", { matches: [], hiddenCount: 2, truncated: false }]]));
+      const body = await (await GET(request())).json();
+      expect(body.jobs[0].possibleMatches).toEqual({ matches: [], hiddenCount: 2, truncated: false });
+    });
+
+    it("a failed lookup → 200 with the jobs, matchCheckFailed: true and only the fixed log line", async () => {
+      const err = Object.assign(new Error("Failed query: select … params: 100,12345670"), { cause: { code: "57014" } });
+      mockBatch.mockRejectedValue(err);
+      const res = await GET(request());
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.jobs).toHaveLength(3);
+      expect(body.matchCheckFailed).toBe(true);
+      expect(body.jobs.some((j: Record<string, unknown>) => "possibleMatches" in j)).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith(
+        "[workiz-import] db error scope=jobs_match_lookup job=- code=57014 constraint=-",
+      );
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("Failed query");
+    });
+
+    it("matches are recomputed on every request, refresh=1 included (never cached)", async () => {
+      await GET(request());
+      await GET(request("?refresh=1"));
+      expect(mockBatch).toHaveBeenCalledTimes(2);
+      expect(mockList).toHaveBeenLastCalledWith({ refresh: true });
+    });
+
+    it("the lookup never runs when the Workiz listing fails", async () => {
+      mockList.mockRejectedValue(new WorkizError("unavailable"));
+      await GET(request());
+      expect(mockBatch).not.toHaveBeenCalled();
+    });
   });
 });
