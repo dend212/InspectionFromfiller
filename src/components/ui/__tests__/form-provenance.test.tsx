@@ -376,3 +376,63 @@ describe("FormCheckboxRow (boolean checkbox row)", () => {
     expect(screen.getByRole("button", { name: "Clear" })).toBeInTheDocument();
   });
 });
+
+describe("FormItem / FormFieldGroup — Workiz secondary chip", () => {
+  const SECONDARY: ProvenanceEntry = {
+    source: "workiz",
+    state: "suggested",
+    kind: "fill",
+    value: "Test Client",
+    confidence: 0.6,
+    explanation: "Workiz client (job #4696)",
+    at: "2026-10-12T17:04:05.000Z",
+  };
+  const KEY = "secondary.facilityInfo.facilityName";
+  const secondaryChip = () => document.querySelector('[data-slot="secondary-suggestion-chip"]');
+
+  it.each([
+    ["absent", {}],
+    ["prefilled", { "facilityInfo.facilityName": { ...ENTRY, value: "" } }],
+    ["edited", { "facilityInfo.facilityName": { ...ENTRY, state: "edited" as const, value: "" } }],
+  ])("FormItem renders it when the primary is %s", (_label, primary) => {
+    render(<WithProvenance initial={{ ...primary, [KEY]: SECONDARY }} />);
+    expect(secondaryChip()).not.toBeNull();
+    expect(screen.getByText("Suggested: Test Client · 60% · Workiz client (job #4696)")).toBeInTheDocument();
+  });
+
+  it("FormItem renders it alongside a suggested primary chip", () => {
+    render(
+      <WithProvenance
+        initial={{
+          "facilityInfo.facilityName": { ...ENTRY, state: "suggested", value: "OWNER OF RECORD" },
+          [KEY]: SECONDARY,
+        }}
+      />,
+    );
+    expect(document.querySelector('[data-slot="suggestion-chip"]')).not.toBeNull();
+    expect(secondaryChip()).not.toBeNull();
+  });
+
+  it("FormFieldGroup renders it once for the group path", () => {
+    function Group() {
+      const form = useForm<InspectionFormData>({
+        defaultValues: getDefaultFormValues("Tech") as unknown as InspectionFormData,
+      });
+      return (
+        <ProvenanceProvider
+          form={form}
+          inspectionId="insp-1"
+          initial={{ "secondary.facilityInfo.waterSource": { ...SECONDARY, value: "private_well", explanation: "Workiz job #4696 · Water Source" } }}
+        >
+          <Form {...form}>
+            <FormFieldGroup name="facilityInfo.waterSource" label="Water source">
+              <span>options</span>
+            </FormFieldGroup>
+          </Form>
+        </ProvenanceProvider>
+      );
+    }
+    render(<Group />);
+    expect(document.querySelectorAll('[data-slot="secondary-suggestion-chip"]')).toHaveLength(1);
+  });
+});

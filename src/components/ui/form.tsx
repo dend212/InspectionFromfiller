@@ -13,7 +13,7 @@ import {
   useFormState,
 } from "react-hook-form";
 import { ProvenanceBadge } from "@/components/prefill/provenance-badge";
-import { SuggestionChip } from "@/components/prefill/suggestion-chip";
+import { SecondarySuggestionChip, SuggestionChip } from "@/components/prefill/suggestion-chip";
 import { useProvenance } from "@/components/prefill/provenance-context";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -89,7 +89,7 @@ function FormItem({ className, children, ...props }: React.ComponentProps<"div">
   // FormItem is normally rendered inside a FormField; outside one the context is empty
   const fieldContext = React.useContext(FormFieldContext);
   const fieldName = fieldContext?.name;
-  const { entry } = useProvenance(fieldName);
+  const { entry, getSecondary } = useProvenance(fieldName);
   // A checkbox group renders one FormItem per option for the same path — the group owns the chip
   const inGroup = useIsGroupMember(fieldName);
 
@@ -106,6 +106,9 @@ function FormItem({ className, children, ...props }: React.ComponentProps<"div">
         {children}
         {fieldName && !inGroup && (entry?.state === "suggested" || entry?.warning) ? (
           <SuggestionChip fieldPath={fieldName} />
+        ) : null}
+        {fieldName && !inGroup && getSecondary(fieldName) ? (
+          <SecondarySuggestionChip fieldPath={fieldName} />
         ) : null}
       </div>
     </FormItemContext.Provider>
@@ -168,7 +171,7 @@ function FormFieldGroup({
   ...props
 }: FormFieldGroupProps) {
   const labelId = React.useId();
-  const { entry } = useProvenance(name);
+  const { entry, getSecondary } = useProvenance(name);
 
   return (
     <FormFieldGroupContext.Provider value={{ name }}>
@@ -194,6 +197,7 @@ function FormFieldGroup({
         {description}
         {children}
         {entry?.state === "suggested" || entry?.warning ? <SuggestionChip fieldPath={name} /> : null}
+        {getSecondary(name) ? <SecondarySuggestionChip fieldPath={name} /> : null}
       </div>
     </FormFieldGroupContext.Provider>
   );
