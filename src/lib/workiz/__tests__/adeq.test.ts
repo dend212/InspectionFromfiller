@@ -10,7 +10,8 @@ import {
   toJobSummary,
   WORKIZ_CF,
 } from "@/lib/workiz/adeq";
-import { fixtures, job } from "./fixtures/jobs";
+import { WORKIZ_CF as LEAF_WORKIZ_CF } from "@/lib/workiz/custom-field-ids";
+import { BOT_NOTES, cf, fixtures, job, withAddress } from "./fixtures/jobs";
 import { workizJobSchema } from "@/lib/workiz/schema";
 
 const parse = (raw: Record<string, unknown>) => workizJobSchema.parse(raw);
@@ -87,10 +88,31 @@ describe("summary helpers", () => {
       scheduledDate: "2026-10-06",
       subStatus: "Job Complete - Reports Required",
       teamFirstNames: ["Alex", "Sam"],
+      zip: "85331",
+      apnHint: null,
     });
     const lower = toJobSummary(parse(fixtures.lowercaseCity()));
     expect(lower.city).toBe("Laveen");
     expect(toJobSummary(parse(fixtures.noSubStatus())).subStatus).toBeNull();
     expect(JSON.stringify(toJobSummary(job()))).not.toMatch(/Test Client|example\.com|555-01/);
+  });
+
+  it("toJobSummary adds the server-side zip (5 digits, ZIP+4 → first 5, invalid → null)", () => {
+    expect(toJobSummary(job()).zip).toBe("85331");
+    expect(toJobSummary(parse(withAddress({ zipCode: "85331-1234" }))).zip).toBe("85331");
+    expect(toJobSummary(parse(withAddress({ zipCode: "8533" }))).zip).toBeNull();
+    expect(toJobSummary(parse(withAddress({ zipCode: "" }))).zip).toBeNull();
+  });
+
+  it("toJobSummary adds the apnHint: custom field, else newest bot note, else null", () => {
+    expect(toJobSummary(job({ customFields: [cf(WORKIZ_CF.apn, "12345670")] })).apnHint).toBe("123-45-670");
+    expect(toJobSummary(job({ notes: [BOT_NOTES.grokHigh, BOT_NOTES.noConfidence] })).apnHint).toBe("123-45-679");
+    expect(toJobSummary(job()).apnHint).toBeNull();
+  });
+});
+
+describe("WORKIZ_CF leaf module", () => {
+  it("adeq re-exports the very same object", () => {
+    expect(WORKIZ_CF).toBe(LEAF_WORKIZ_CF);
   });
 });

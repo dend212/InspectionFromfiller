@@ -1,4 +1,5 @@
-import { formatWorkizCity, formatWorkizStreet } from "./custom-fields";
+import { findApnHint } from "./apn-hint";
+import { formatWorkizCity, formatWorkizStreet, formatWorkizZip } from "./custom-fields";
 import type { WorkizJob } from "./schema";
 
 /** Exact, lowercase, top-level Workiz status (spec §7.4) — a rename would empty the picker */
@@ -15,18 +16,7 @@ export const IMPORT_ALLOWED_STATUSES: ReadonlySet<string> = new Set([
   "Done",
 ]);
 
-/** Custom fields are matched by id, never by fieldName (several names carry trailing spaces) */
-export const WORKIZ_CF = {
-  apn: "CF-nXNayb3y6x56kpwZ",
-  waterSource: "CF-ypkPZr3dojlD9KnE",
-  tankSize: "CF-mw5dG83Z9joVbYXE",
-  effluentFilter: "CF-eWzopvxv6xPQglna",
-  flowTestCompleted: "CF-JBDeg6xJWMlYV85W",
-  tankRecommendation: "CF-p2ErD5xbe36Jl1XO",
-  drainfieldRecommendation: "CF-y5W6qQMr9x1Rvld9",
-  notableConcerns: "CF-2AblKqxDG3YeDga1",
-  flowTestDescription: "CF-wlovONMYrjKBp4GE",
-} as const;
+export { WORKIZ_CF } from "./custom-field-ids";
 
 export const isAdeqJob = (job: WorkizJob): boolean =>
   ADEQ_JOB_TYPE_IDS.has(job.jobType?.id ?? "") || (job.jobType?.name ?? "").trim().startsWith("ADEQ");
@@ -74,6 +64,10 @@ export interface WorkizJobSummary {
   scheduledDate: string | null;
   subStatus: string | null;
   teamFirstNames: string[];
+  /** 5-digit ZIP or null; server-side only (feeds the possible-duplicate check, never the wire) */
+  zip: string | null;
+  /** Formatted APN from the custom field or the newest permit-bot note; server-side only */
+  apnHint: string | null;
 }
 
 export function toJobSummary(job: WorkizJob): WorkizJobSummary {
@@ -87,5 +81,7 @@ export function toJobSummary(job: WorkizJob): WorkizJobSummary {
     scheduledDate: scheduledDateOf(job),
     subStatus: job.subStatus?.name.trim() || null,
     teamFirstNames: teamFirstNames(job),
+    zip: formatWorkizZip(address.zipCode),
+    apnHint: findApnHint(job).hint?.apn ?? null,
   };
 }
