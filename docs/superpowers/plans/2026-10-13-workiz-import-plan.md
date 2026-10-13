@@ -17,7 +17,7 @@ Every task's requirements include these:
 - **Read-only Workiz.** `client.ts` exports GET only. Nothing ever POSTs, PUTs, PATCHes or DELETEs to Workiz.
 - **No migration, no new DB column.** `inspection_prefill_runs.trigger` is free text and `PrefillInput.zipMustMatch` lives in the existing `input` jsonb.
 - **No push, PR, deploy, branch switch or env setting.** Stay on `feature/workiz-import`. The orchestrator handles push, PR, deploy, `.env.local` and the Vercel env vars, with the user's permission. Implementers only edit `.env.example`.
-- **No reformatting.** Never run `npm run lint`, `npm run format` or `biome … --write`, because the repo is not Biome-formatted. `npx biome check` reports formatter diffs on almost every existing file (verified on `input.ts`, `assessor.ts`, `suggestion-chip.tsx`), so **the gate is `npx biome lint <files>`, which must report no new diagnostics**. Formatter output is informational only. Lint diagnostics that already exist on `main` are not yours: `noExplicitAny`/`useLiteralKeys` in `src/app/api/webhooks/workiz/__tests__/route.test.ts` (around lines 108, 122, 257, 335) and a `useExhaustiveDependencies` warning in `src/components/prefill/provenance-context.tsx` (the debounce effect, around line 135). Ignore those and fix anything else. Make edits by hand in the surrounding style: 2-space indent, double quotes, semicolons, trailing commas where the file uses them.
+- **No reformatting.** Never run `npm run lint`, `npm run format` or `biome … --write`, because the repo is not Biome-formatted. `npx biome check` reports formatter diffs on almost every existing file (verified on `input.ts`, `assessor.ts`, `suggestion-chip.tsx`), so **the gate is `npx biome lint <files>`, which must report no new diagnostics**. Formatter output is informational only. Lint diagnostics that already exist on `main` are not yours: `noExplicitAny`/`useLiteralKeys` in `src/app/api/webhooks/workiz/__tests__/route.test.ts` (around lines 108, 122, 257, 335) and a `useExhaustiveDependencies` warning in `src/components/prefill/provenance-context.tsx` (the debounce effect, around line 120). Ignore those and fix anything else. `biome.json` only includes `*.ts/tsx/js/jsx/json` and excludes `src/components/ui/**`, so Biome silently skips `src/components/ui/form.tsx`, `src/components/ui/__tests__/*` and `scripts/*.mts` when they are listed beside other files, and **fails with "No files were processed" (exit 1) when they are the only paths given**. Those files are covered by `tsc` (which includes `**/*.mts`) and the tests instead. Make edits by hand in the surrounding style: 2-space indent, double quotes, semicolons, trailing commas where the file uses them.
 - **Synthetic fixtures only.** Use `Test Client`, `test.client@example.com`, `555-0100`/`555-0101`, `100 E Example Rd`, `123-45-678` APNs, fake team names (`Alex Tester`, `Sam Sample`). Never copy anything from the scratchpad `adeq_dpa.json`, the Workiz backup or the live API into a repo file.
 - **PII-safe logging.** Never log the token, client names, emails, phones, addresses, note text or custom-field values. Workiz logs carry path templates, status codes, serial ids and reason codes only. Every DB catch in `src/lib/workiz/*` and the two new routes goes through `logDbError(scope, err, { serialId })`. None of them may `console.*` the error object, `err.message`, `query` or `params`, and none returns `err.message` to the client.
 - **Token handling.** `WORKIZ_API_V2_TOKEN` is read only in `src/lib/workiz/client.ts`, trimmed, never `NEXT_PUBLIC_`, never logged or returned. `client.ts` starts with `import "server-only"`. `WORKIZ_API_V2_BASE` must start with `https://`, otherwise the config is `null`.
@@ -45,7 +45,7 @@ Every task's requirements include these:
 | `.env.example` | M | `WORKIZ_API_V2_TOKEN`, `WORKIZ_API_V2_BASE` | T1 |
 | `src/lib/prefill/types.ts` | M | `PrefillSource += "workiz"`, `PrefillTrigger += "workiz_import"`, `PrefillInput.zipMustMatch` | T2 |
 | `src/lib/prefill/sources.ts` | M | `SOURCE_META.workiz` (pink) | T2 |
-| `src/lib/prefill/provenance-schema.ts` | M | source enum `+= "workiz"` | T2 |
+| `src/lib/prefill/provenance-schema.ts` | M | source enum `+= "workiz"` (T2); export `PROVENANCE_VALUE_MAX_CHARS` (T15) | T2, T15 |
 | `src/lib/prefill/map-facts-to-fields.ts` | M | `workiz: -1` ranks (type completeness) | T2 |
 | `src/components/prefill/format.ts` | M | condition / effluent / hydraulic-test labels | T2 |
 | `src/lib/prefill/run-dto.ts` | M | `loadLatestRunDTOForDraft` sweeps stale runs first | T3 |
@@ -81,15 +81,19 @@ Every task's requirements include these:
 
 Tasks inside one wave touch **disjoint files** and may run in parallel. A wave starts only after every task it depends on has been committed. If parallel tasks share one checkout, run their `git commit` steps one at a time, because two commits at once collide on the git index lock.
 
+Two shared-checkout rules:
+- **T1 first inside Wave 1.** Dispatch T1 alone and start T2–T7 only after T1's Step 3 (`npm install server-only@0.0.1`) has finished, so no parallel task runs vitest or tsc while `node_modules` is being rewritten.
+- **Other in-flight tasks' files are not yours.** In a shared checkout, the tsc filter or a test run can report errors in a file another parallel task is still writing (see the File map for ownership). Ignore those, and re-run your check after that task commits. Only errors in your own task's files, or in pre-existing files your change affects, block your commit. Per-task git worktrees avoid this entirely.
+
 | Wave | Task | Title | Depends on | Parallel within wave? |
 |---|---|---|---|---|
-| 1 | T1 | Tooling + env: `server-only`, vitest alias, `.env.example` | — | yes |
-| 1 | T2 | Prefill types: `workiz` source, `workiz_import` trigger, `zipMustMatch`, labels | — | yes |
-| 1 | T3 | Edit-page loader fails stale runs first | — | yes |
-| 1 | T4 | Mount `<Toaster />` in the dashboard layout | — | yes |
-| 1 | T5 | PII-safe `logDbError` | — | yes |
-| 1 | T6 | Custom-field value maps + address formatters | — | yes |
-| 1 | T7 | Webhook regression test (shared uuid key) | — | yes |
+| 1 | T1 | Tooling + env: `server-only`, vitest alias, `.env.example` | — | yes (dispatch first; see the rules above) |
+| 1 | T2 | Prefill types: `workiz` source, `workiz_import` trigger, `zipMustMatch`, labels | — | yes (after T1's `npm install`) |
+| 1 | T3 | Edit-page loader fails stale runs first | — | yes (after T1's `npm install`) |
+| 1 | T4 | Mount `<Toaster />` in the dashboard layout | — | yes (after T1's `npm install`) |
+| 1 | T5 | PII-safe `logDbError` | — | yes (after T1's `npm install`) |
+| 1 | T6 | Custom-field value maps + address formatters | — | yes (after T1's `npm install`) |
+| 1 | T7 | Webhook regression test (shared uuid key) | — | yes (after T1's `npm install`) |
 | 2 | T8 | Assessor opt-in `requireZipMatch` | T2 | yes |
 | 2 | T9 | `secondary.ts` + merge pin tests | T2 | yes |
 | 2 | T10 | Workiz HTTP client + boundary test | T1 | yes |
@@ -209,9 +213,9 @@ EOF
 ### Task T2: Prefill types — `workiz` source, `workiz_import` trigger, `zipMustMatch`, chip labels
 
 **Files:**
-- Modify: `src/lib/prefill/types.ts` (`PrefillSource` line 4, `PrefillTrigger` line 76, `PrefillInput` lines 115-120)
+- Modify: `src/lib/prefill/types.ts` (`PrefillSource` line 4, `PrefillTrigger` line 76, `PrefillInput` lines 111-116)
 - Modify: `src/lib/prefill/sources.ts`
-- Modify: `src/lib/prefill/provenance-schema.ts` (source enum, line 28)
+- Modify: `src/lib/prefill/provenance-schema.ts` (source enum, line 25)
 - Modify: `src/lib/prefill/map-facts-to-fields.ts` (lines 369-380)
 - Modify: `src/components/prefill/format.ts`
 - Test: `src/lib/prefill/__tests__/sources.test.ts`, `src/lib/prefill/__tests__/provenance-schema.test.ts`, `src/components/prefill/__tests__/format.test.ts`
@@ -5064,7 +5068,8 @@ Expected: PASS. All existing chip tests are unchanged.
 
 Run the TypeScript baseline filter command (expected: no output), then:
 ```bash
-npx biome lint src/components/prefill/suggestion-chip.tsx src/components/ui/form.tsx
+# biome.json excludes src/components/ui/**, so only suggestion-chip.tsx is actually linted here (expected)
+npx biome lint src/components/prefill/suggestion-chip.tsx src/components/ui/form.tsx src/components/prefill/__tests__/suggestion-chip.test.tsx
 git add src/components/prefill/suggestion-chip.tsx src/components/ui/form.tsx src/components/prefill/__tests__/suggestion-chip.test.tsx src/components/ui/__tests__/form-provenance.test.tsx
 git commit -F - <<'EOF'
 feat(prefill): render Workiz secondary suggestion chips under form fields
@@ -5307,7 +5312,9 @@ export async function GET(request: Request) {
     list = await listImportableAdeqJobs({ refresh });
   } catch (err) {
     if (err instanceof WorkizError) return workizErrorResponse(err, "list");
-    console.error(`[workiz] job list failed: ${err instanceof Error ? err.name : "unknown"}`);
+    // Only the error's class name — and kept out of the console call so T23's `\berr\b` grep stays clean
+    const errorName = err instanceof Error ? err.name : "unknown";
+    console.error(`[workiz] job list failed: ${errorName}`);
     return internalErrorResponse();
   }
 
@@ -6296,6 +6303,9 @@ describe("DB failures stay PII-safe (spec §12)", () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body).toEqual({ error: "Something went wrong", code: "internal" });
+    expect(consoleText()).toContain(
+      "[workiz-import] db error scope=insert job=4696 code=23502 constraint=inspections_inspector_id_not_null",
+    );
     expectNoPiiLogged();
   });
 
@@ -6690,10 +6700,11 @@ EOF
 
 - [ ] **Step 1: Add the npm script**
 
-In `package.json` `scripts`, after `"smoke:permits": …,`:
+In `package.json` `scripts`, after `"smoke:permits": "tsx scripts/prefill-permits-smoke.mts"` (today the last entry, with no trailing comma, so add a `,` to that line):
 ```json
     "smoke:workiz": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.local scripts/workiz-adeq-smoke.mts"
 ```
+Verify the JSON still parses: `node -e "require('./package.json')"` (no output = OK).
 (`--conditions=react-server` makes `import "server-only"` resolve to the package's empty export.)
 
 - [ ] **Step 2: Write the script**
@@ -6772,9 +6783,8 @@ The plan's code was dry-run against live Workiz on 2026-10-13 (read-only, before
 
 - [ ] **Step 4: Type check and commit**
 
-Run the TypeScript baseline filter command (expected: no output), then:
+Run the TypeScript baseline filter command (expected: no output; `tsconfig.json` includes `**/*.mts`, so this is the script's static check). **Do not** run `npx biome lint scripts/workiz-adeq-smoke.mts`: `biome.json` does not include `.mts`, so Biome exits 1 with "No files were processed in the specified paths" (verified on `scripts/prefill-permits-smoke.mts`). Then:
 ```bash
-npx biome lint scripts/workiz-adeq-smoke.mts
 git add scripts/workiz-adeq-smoke.mts package.json
 git commit -F - <<'EOF'
 chore(workiz-import): add read-only live smoke script (npm run smoke:workiz)
@@ -6805,7 +6815,7 @@ Run the TypeScript baseline filter command. Expected: no output (only the 67 pre
 ```bash
 npx biome lint $(git diff --name-only --diff-filter=AM "$(git merge-base main HEAD)" -- '*.ts' '*.tsx' '*.mts')
 ```
-Expected: no diagnostics except the pre-existing ones named in Global Constraints (webhook route test, provenance-context debounce effect). Optionally run `npx biome check` on the **new** files only to see formatter suggestions. They are informational and must not be applied with `--write`.
+Expected: no diagnostics except the pre-existing ones named in Global Constraints (webhook route test, provenance-context debounce effect). Biome silently skips the paths its config excludes (`scripts/*.mts`, `src/components/ui/**`); that is expected, and `tsc` covers them. Optionally run `npx biome check` on the **new** files only to see formatter suggestions. They are informational and must not be applied with `--write`.
 
 - [ ] **Step 4: Production build**
 
@@ -6817,15 +6827,16 @@ Expected: exit 0, and the route list includes `ƒ /api/workiz/import` and `ƒ /a
 - [ ] **Step 5: Security spot checks**
 
 ```bash
-git grep -n "WORKIZ_API_V2_TOKEN" -- src scripts
+git grep -nE "process\.env(\.|\[\")WORKIZ_API_V2_(TOKEN|BASE)" -- src scripts
+git grep -n "NEXT_PUBLIC_WORKIZ" -- src scripts .env.example
 git grep -nE "dangerouslySetInnerHTML" -- src/components/inspection/workiz-import-picker.tsx
 git grep -nE "console\.(error|warn|info|log)\([^)]*\berr\b" -- src/lib/workiz src/app/api/workiz
 git grep -nE "method: \"(POST|PUT|PATCH|DELETE)\"" -- src/lib/workiz
 ```
 Expected:
-- Line 1 matches only `src/lib/workiz/client.ts` and `src/lib/workiz/__tests__/client.test.ts`.
-- Lines 2 and 4 print nothing.
-- Line 3 prints nothing (no error object is logged directly). `logDbError(…, err, …)` calls do not match this pattern.
+- Line 1 matches only `src/lib/workiz/client.ts` (the token and base are read from `process.env` nowhere else; the smoke script and tests only mention the variable name in messages or `vi.stubEnv`).
+- Lines 2, 3 and 5 print nothing.
+- Line 4 prints nothing (no error object is logged directly). `logDbError(…, err, …)` calls do not match this pattern, and the jobs route computes `errorName` outside its `console.error` call for this reason.
 
 - [ ] **Step 6: Live smoke (read-only)**
 
@@ -6835,13 +6846,13 @@ Expected: as in T22 Step 3. Paste the output into the handoff. It contains no PI
 - [ ] **Step 7: Confirm the tree**
 
 Run: `git status --short && git log --oneline "$(git merge-base main HEAD)"..HEAD`
-Expected: only the unrelated ` M CLAUDE.md` is left uncommitted. The log shows the plan commit plus T1–T22, and any T23 fixes, each with the trailer. **Do not push.** Hand back to the orchestrator.
+Expected: only the unrelated ` M CLAUDE.md` is left uncommitted. The log shows the spec, plan and plan-review commits, then T1–T22 and any T23 fixes, each with the trailer. **Do not push.** Hand back to the orchestrator.
 
 ---
 
 ## Orchestrator handoff (not implementer tasks)
 
-These need the user's permission and are done by the orchestrator, not by implementers:
+Nothing in this section is part of plan execution. Each item needs the user's explicit permission and is done by the orchestrator, never by an implementer:
 
 1. **Env vars:** check that `WORKIZ_API_V2_TOKEN` exists in `.env.local`. Set it in Vercel **Production + Preview** as `type: "sensitive"` through the REST API (`POST /v10/projects/{project}/env`), with no trailing newline. `WORKIZ_API_V2_BASE` is optional. Verify through a preview call to `GET /api/workiz/jobs` (spec §14.1).
 2. **Push → PR → preview deploy.**
@@ -6854,7 +6865,7 @@ These need the user's permission and are done by the orchestrator, not by implem
 Every code block in this plan was extracted into a throwaway worktree at `e75e699` and run there. Nothing was committed from it.
 - Whole plan applied: `npx vitest run` gave **12 failed (exactly the baseline set) / 3007 passed**, 176 files.
 - The TypeScript baseline filter printed nothing.
-- `npx biome lint` on every new or changed file showed no new diagnostics.
+- `npx biome lint` on every new or changed file that `biome.json` includes showed no new diagnostics. (Biome's config excludes `scripts/*.mts` and `src/components/ui/**`; T22's original `biome lint scripts/…mts` step would have exited 1 and was removed in review on 2026-10-13.)
 - `next build` exited 0 with `ƒ /api/workiz/import` and `ƒ /api/workiz/jobs` listed.
 - `smoke:workiz` ran live and read-only, with the output shown in T22.
 
@@ -6898,3 +6909,4 @@ The test and expected-value snippets are therefore known-good as written. If one
 5. `getJob` accepts a bare job or a `{ data: job | [job] }` wrapper (the single-job envelope was not pinned in the spec). The smoke script confirms which one is live.
 6. The lint gate is `npx biome lint` because `biome check` fails on formatting repo-wide.
 7. Tank-0 chips (`tankCapacity`, `effluentFilterPresent`) render once the wizard shows a tank section. The form defaults to `tanks: []`, which is existing wizard behaviour. `acceptSecondary` still grows the array.
+8. A fully populated job yields **15** `secondary.*` keys (11 record-type chips — date, seller, APN, water source, tank size, effluent filter, flow test, two conditions, two comments — plus 3 address chips and the team chip). Spec §6.2 still says "fourteen" from before the comment split; T16's whole-plan test pins 15. Either way it is far below `MAX_PROVENANCE_ENTRIES` (500).
