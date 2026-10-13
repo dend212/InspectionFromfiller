@@ -3,6 +3,8 @@
  * src/lib/workiz) so the client-side picker can import it without touching server modules.
  */
 
+import type { InspectionMatchResult } from "./inspection-matches";
+
 export type WorkizImporterRole = "admin" | "field_tech";
 
 /** `canOpen: false` is exactly that — no inspection id or status leaks to a field tech */
@@ -18,6 +20,8 @@ export interface WorkizJobRow {
   subStatus: string | null;
   teamFirstNames: string[];
   existing: WorkizExisting | null;
+  /** Present only when the row has at least one possible duplicate (other than its own import) */
+  possibleMatches?: InspectionMatchResult;
 }
 
 export interface WorkizJobsResponse {
@@ -28,6 +32,8 @@ export interface WorkizJobsResponse {
   currentUserFirstName: string | null;
   /** Present (true) only when the Workiz listing hit the server's page cap — more jobs may exist */
   truncated?: boolean;
+  /** Present (true) only when the possible-duplicate lookup failed; the jobs are still listed */
+  matchCheckFailed?: true;
 }
 
 export type WorkizRouteErrorCode =

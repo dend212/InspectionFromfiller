@@ -13,7 +13,7 @@ export function isValidApn(apn: string): boolean {
   );
 }
 
-const STREET_SUFFIXES = new Set([
+export const STREET_SUFFIXES = new Set([
   "RD", "ROAD", "DR", "DRIVE", "ST", "STREET", "AVE", "AVENUE", "LN", "LANE", "BLVD",
   "BOULEVARD", "WAY", "CT", "COURT", "PL", "PLACE", "CIR", "CIRCLE", "TRL", "TRAIL",
   "PKWY", "PARKWAY", "HWY", "HIGHWAY", "TER", "TERRACE", "LOOP",

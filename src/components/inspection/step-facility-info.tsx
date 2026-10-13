@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
 import { MediaGallery, type MediaRecord } from "@/components/inspection/media-gallery";
 import { PhotoCapture } from "@/components/inspection/photo-capture";
+import { PossibleDuplicateWarning } from "@/components/inspection/possible-duplicate-warning";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -149,6 +150,8 @@ export function StepFacilityInfo({ inspectionId, readOnly = false }: StepFacilit
               </FormItem>
             )}
           />
+
+          <PossibleDuplicateWarning inspectionId={inspectionId} />
 
           <FormField
             control={form.control}

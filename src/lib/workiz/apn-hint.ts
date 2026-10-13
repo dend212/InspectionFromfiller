@@ -1,5 +1,5 @@
 import { formatApn } from "@/lib/prefill/apn";
-import { WORKIZ_CF } from "./adeq";
+import { WORKIZ_CF } from "./custom-field-ids";
 import type { WorkizJob } from "./schema";
 
 /**
