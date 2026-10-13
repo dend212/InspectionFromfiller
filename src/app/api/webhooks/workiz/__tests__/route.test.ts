@@ -366,6 +366,24 @@ describe("POST /api/webhooks/workiz", () => {
       expect(json).not.toHaveProperty("duplicate");
     });
 
+    it("regression (Import from Workiz): finds an inspection the import stored under the job's 6-char uuid", async () => {
+      // POST /api/workiz/import stores workiz_job_id = job.uuid (e.g. "AB12CD"); the n8n flow
+      // maps job.jobId from the v1 UUID — the same 6-character identifier.
+      const { db } = await import("@/lib/db");
+      const { eq } = await import("drizzle-orm");
+      mockDbSelect.mockResolvedValueOnce([{ id: "imported-uuid", status: "draft" }]);
+
+      const res = await POST(
+        makeRequest(validPayload({ job: { jobId: "AB12CD", jobType: "ADEQ Inspection", serviceType: "", scheduledDate: "2026-10-06" } }), VALID_SECRET),
+      );
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json).toMatchObject({ inspectionId: "imported-uuid", duplicate: true });
+      expect(eq).toHaveBeenCalledWith("workiz_job_id", "AB12CD");
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+
     it("skips idempotency check when jobId is empty string", async () => {
       const payload = validPayload({
         job: { jobId: "", jobType: "ADEQ Inspection", serviceType: "", scheduledDate: "" },
