@@ -638,3 +638,76 @@ describe("mergeProposals", () => {
     expect(provenance["designFlow.numberOfBedrooms"].runId).toBe("run-2");
   });
 });
+
+describe("secondary (Workiz) slots — spec §6.2 / §6.3", () => {
+  const SECONDARY_SELLER: ProvenanceEntry = {
+    source: "workiz",
+    state: "suggested",
+    kind: "fill",
+    value: "Test Client",
+    confidence: 0.6,
+    explanation: "Workiz client (job #4696)",
+    at: "2026-10-12T17:04:05.000Z",
+  };
+  const ASSESSOR_OWNER: ProposedField = {
+    fieldPath: "facilityInfo.sellerName",
+    value: "OWNER OF RECORD",
+    kind: "fill",
+    provenance: { source: "assessor", confidence: 1, explanation: "Maricopa County Assessor · parcel 123-45-678" },
+  };
+
+  it("passes secondary.* entries through byte-for-byte whether the primary is filled, suggested or edited", () => {
+    const secondaries: FieldProvenance = {
+      "secondary.facilityInfo.sellerName": SECONDARY_SELLER,
+      "secondary.facilityInfo.waterSource": { ...SECONDARY_SELLER, value: "private_well", confidence: 0.85 },
+    };
+    // filled (empty field → fill)
+    const filled = mergeProposals(form(), { ...secondaries }, [ASSESSOR_OWNER], OPTS);
+    // suggested (field holds another value)
+    const suggested = mergeProposals(
+      form((f) => {
+        f.facilityInfo.sellerName = "Someone Else";
+      }),
+      { ...secondaries },
+      [ASSESSOR_OWNER],
+      OPTS,
+    );
+    // edited
+    const edited = mergeProposals(
+      form((f) => {
+        f.facilityInfo.sellerName = "Typed Name";
+      }),
+      { ...secondaries, "facilityInfo.sellerName": entry({ state: "edited", value: "Typed Name" }) },
+      [ASSESSOR_OWNER],
+      OPTS,
+    );
+    for (const result of [filled, suggested, edited]) {
+      expect(result.provenance["secondary.facilityInfo.sellerName"]).toBe(secondaries["secondary.facilityInfo.sellerName"]);
+      expect(result.provenance["secondary.facilityInfo.waterSource"]).toBe(secondaries["secondary.facilityInfo.waterSource"]);
+      expect(result.fills.some((f) => f.fieldPath.startsWith("secondary."))).toBe(false);
+    }
+    expect(filled.provenance["facilityInfo.sellerName"].state).toBe("prefilled");
+    expect(suggested.provenance["facilityInfo.sellerName"].state).toBe("suggested");
+    expect(edited.provenance["facilityInfo.sellerName"].state).toBe("suggested");
+  });
+
+  it("regression: an accepted Workiz seller name (edited, source workiz) survives the assessor owner at 1.0", () => {
+    const accepted: ProvenanceEntry = { ...SECONDARY_SELLER, state: "edited" };
+    const { fills, provenance } = mergeProposals(
+      form((f) => {
+        f.facilityInfo.sellerName = "Test Client";
+      }),
+      { "facilityInfo.sellerName": accepted, "secondary.facilityInfo.sellerName": SECONDARY_SELLER },
+      [ASSESSOR_OWNER],
+      OPTS,
+    );
+    expect(fills).toEqual([]);
+    expect(provenance["facilityInfo.sellerName"]).toMatchObject({
+      source: "assessor",
+      state: "suggested",
+      value: "OWNER OF RECORD",
+      prior: accepted,
+    });
+    expect(provenance["secondary.facilityInfo.sellerName"]).toBe(SECONDARY_SELLER);
+  });
+});
