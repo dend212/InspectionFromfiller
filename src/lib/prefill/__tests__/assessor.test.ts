@@ -342,3 +342,70 @@ describe("runAssessorStage", () => {
     expect(result.stage.error).toBe("Assessor lookup timed out");
   });
 });
+
+describe("requireZipMatch (Import from Workiz, spec §5.4)", () => {
+  // A same-number, same-street parcel on the Maricopa layer in another ZIP
+  const OTHER_ZIP = {
+    ...FEATURE,
+    APN_DASH: "500-01-001",
+    PHYSICAL_ADDRESS: "123 W MAIN ST   MESA  85201",
+    PHYSICAL_STREET_DIR: "W",
+    PHYSICAL_CITY: "MESA",
+    PHYSICAL_ZIP: "85201",
+  };
+  const IN_ZIP = { ...OTHER_ZIP, APN_DASH: "500-01-002", PHYSICAL_ZIP: "85132" };
+
+  it("returns null when every row is in another ZIP", async () => {
+    mockFetch.mockResolvedValue(arcgis([OTHER_ZIP]));
+    const feature = await findParcelByAddress("123", "Main St", undefined, {
+      streetDir: "W",
+      zip: "85132",
+      requireZipMatch: true,
+    });
+    expect(feature).toBeNull();
+  });
+
+  it("returns the row in the hinted ZIP", async () => {
+    mockFetch.mockResolvedValue(arcgis([OTHER_ZIP, IN_ZIP]));
+    const feature = await findParcelByAddress("123", "Main St", undefined, {
+      zip: "85132",
+      requireZipMatch: true,
+    });
+    expect(feature?.APN_DASH).toBe("500-01-002");
+  });
+
+  it("without the flag keeps today's first-row fallback", async () => {
+    mockFetch.mockResolvedValue(arcgis([OTHER_ZIP]));
+    const feature = await findParcelByAddress("123", "Main St", undefined, { zip: "85132" });
+    expect(feature?.APN_DASH).toBe("500-01-001");
+  });
+
+  it("with the flag but no ZIP hint behaves as today", async () => {
+    mockFetch.mockResolvedValue(arcgis([OTHER_ZIP]));
+    const feature = await findParcelByAddress("123", "Main St", undefined, { requireZipMatch: true });
+    expect(feature?.APN_DASH).toBe("500-01-001");
+  });
+
+  it("runAssessorStage with input.zipMustMatch reports not_found and names the ZIP", async () => {
+    mockFetch.mockResolvedValue(arcgis([OTHER_ZIP]));
+    const result = await runAssessorStage(
+      {
+        address: { streetNumber: "123", streetDir: "W", streetName: "Main St", city: "Florence", zip: "85132" },
+        zipMustMatch: true,
+      },
+      makeCtx(),
+    );
+    expect(result.stage.status).toBe("not_found");
+    expect(result.stage.summary).toBe("No parcel found (searched 123 Main St (ZIP 85132))");
+    expect(result.proposals).toEqual([]);
+  });
+
+  it("runAssessorStage without zipMustMatch still matches the first row (manual runs unchanged)", async () => {
+    mockFetch.mockResolvedValue(arcgis([OTHER_ZIP]));
+    const result = await runAssessorStage(
+      { address: { streetNumber: "123", streetDir: "W", streetName: "Main St", city: "Florence", zip: "85132" } },
+      makeCtx(),
+    );
+    expect(result.stage.status).toBe("done");
+  });
+});

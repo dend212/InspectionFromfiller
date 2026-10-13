@@ -128,6 +128,12 @@ export interface AddressHints {
   streetDir?: string;
   /** Input ZIP; compared on its first five digits against the layer's `PHYSICAL_ZIP` */
   zip?: string;
+  /**
+   * Opt-in (Import from Workiz only): with a ZIP hint, never fall back to a row in another ZIP —
+   * return null instead. A Florence "123 W Main St" must not resolve to a Maricopa-layer
+   * "123 W MAIN ST" elsewhere at confidence 1.0 (spec §5.4). Without a ZIP hint it has no effect.
+   */
+  requireZipMatch?: boolean;
 }
 
 /** "e" → "E"; undefined for anything that is not a compass direction (the only form safe in a `where`) */
@@ -147,7 +153,7 @@ function zip5(zip: string | number | null | undefined): string {
  * unusable input, without a request. Phoenix streets repeat on both sides of Central
  * (3402 E Sells Dr ≠ 3402 W Sells Dr), so when the input carries a direction the layer is
  * asked for that side first and the undirected query is only the fallback; a ZIP hint then
- * picks among the rows, else the first row wins as before.
+ * picks among the rows, else the first row wins as before (unless `requireZipMatch`, see AddressHints).
  */
 export async function findParcelByAddress(
   streetNumber: string,
@@ -167,6 +173,7 @@ export async function findParcelByAddress(
 
   const zip = zip5(hints.zip);
   const inZip = zip ? rows.find((row) => zip5(row.PHYSICAL_ZIP) === zip) : undefined;
+  if (zip && hints.requireZipMatch) return inZip ?? null;
   return inZip ?? rows[0] ?? null;
 }
 
@@ -242,12 +249,20 @@ export async function runAssessorStage(
       feature = await queryParcelByApn(input.apn, { signal: ctx.signal });
     }
     if (!feature && input.address) {
-      searched.push(`${input.address.streetNumber} ${input.address.streetName}`.trim());
+      const zipHint = input.zipMustMatch ? zip5(input.address.zip) : "";
+      searched.push(
+        `${input.address.streetNumber} ${input.address.streetName}`.trim() +
+          (zipHint ? ` (ZIP ${zipHint})` : ""),
+      );
       feature = await findParcelByAddress(
         input.address.streetNumber,
         input.address.streetName,
         { signal: ctx.signal },
-        { streetDir: input.address.streetDir, zip: input.address.zip },
+        {
+          streetDir: input.address.streetDir,
+          zip: input.address.zip,
+          ...(input.zipMustMatch ? { requireZipMatch: true } : {}),
+        },
       );
     }
 
