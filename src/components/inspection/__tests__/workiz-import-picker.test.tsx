@@ -246,6 +246,55 @@ describe("WorkizImportPicker", () => {
     expect(await screen.findByText("#4696")).toBeInTheDocument();
   });
 
+  it.each([
+    [401, "Your session expired — sign in again."],
+    [403, "Your role can't import from Workiz."],
+  ])("list HTTP %s (route-auth body, no code) shows a specific message", async (status, copy) => {
+    render(<WorkizImportPicker />);
+    await openPanel(reply(status, { error: status === 401 ? "Unauthorized" : "Forbidden" }));
+    expect(await screen.findByText(copy)).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't reach Workiz — try again.")).toBeNull();
+  });
+
+  it.each([
+    [401, "Your session expired — sign in again."],
+    [403, "Your role can't import from Workiz."],
+  ])("import HTTP %s shows a specific message", async (status, copy) => {
+    render(<WorkizImportPicker />);
+    const user = await openPanel();
+    fetchMock.mockResolvedValueOnce(reply(status, { error: "Unauthorized" }));
+    await user.click(await screen.findByRole("button", { name: /Import Workiz job 4696/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(copy);
+  });
+
+  it("the open button is a toggle: second click closes the panel and aria-expanded follows", async () => {
+    render(<WorkizImportPicker />);
+    const user = await openPanel();
+    await screen.findByText("#4696");
+    const toggle = screen.getByRole("button", { name: "Import from Workiz" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await user.click(toggle);
+    expect(screen.queryByText("#4696")).toBeNull();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fetchMock.mockResolvedValueOnce(reply(200, jobs()));
+    await user.click(toggle);
+    expect(await screen.findByText("#4696")).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("notes when the list was truncated at the page cap", async () => {
+    render(<WorkizImportPicker />);
+    await openPanel(reply(200, jobs({ truncated: true })));
+    expect(await screen.findByText("Showing the first 1 jobs — refresh later for more.")).toBeInTheDocument();
+  });
+
+  it("no truncation note by default", async () => {
+    render(<WorkizImportPicker />);
+    await openPanel();
+    await screen.findByText("#4696");
+    expect(screen.queryByText(/Showing the first/)).toBeNull();
+  });
+
   it("empty state", async () => {
     render(<WorkizImportPicker />);
     await openPanel(reply(200, jobs({ jobs: [] })));

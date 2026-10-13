@@ -87,6 +87,7 @@ export async function GET(request: Request) {
     fetchedAt: new Date(list.fetchedAt).toISOString(),
     role: auth.role,
     currentUserFirstName: firstNameOf(fullName),
+    ...(list.truncated ? { truncated: true } : {}),
   };
   return NextResponse.json(body);
 }

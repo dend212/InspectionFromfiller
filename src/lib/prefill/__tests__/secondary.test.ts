@@ -69,6 +69,17 @@ describe("appendSecondaryText", () => {
   });
 });
 
+describe("appendSecondaryText duplicates", () => {
+  it("never appends text already present (whitespace-normalised)", () => {
+    expect(appendSecondaryText("Baffle cracked.\n\nRoots at  outlet.", "Roots at outlet.")).toBe(
+      "Baffle cracked.\n\nRoots at  outlet.",
+    );
+    expect(appendSecondaryText("Roots at outlet. Baffle cracked.", "Roots at\noutlet.")).toBe(
+      "Roots at outlet. Baffle cracked.",
+    );
+  });
+});
+
 describe("secondaryValuesEqual", () => {
   it("APN: dashes and case normalised", () => {
     expect(secondaryValuesEqual("facilityInfo.taxParcelNumber", "12345678a", "123-45-678A")).toBe(true);
@@ -175,6 +186,20 @@ describe("isSecondaryVisible (spec §6.3 truth table)", () => {
       expect(isSecondaryVisible({ fieldPath: path, secondary, currentValue: "Baffle cracked." })).toBe(true);
     },
   );
+
+  it.each(["septicTank.septicTankComments", "disposalWorks.disposalWorksComments"])(
+    "%s: hidden once accepted (secondary state edited) even after the appended text is edited; shown again for a fresh suggestion",
+    (path) => {
+      const accepted = { ...workiz("Roots at outlet."), state: "edited" as const };
+      expect(isSecondaryVisible({ fieldPath: path, secondary: accepted, currentValue: "Baffle cracked. Roots gone." })).toBe(false);
+      expect(isSecondaryVisible({ fieldPath: path, secondary: workiz("Roots at outlet."), currentValue: "Baffle cracked. Roots gone." })).toBe(true);
+    },
+  );
+
+  it("hides when the field contains the text with different whitespace", () => {
+    const path = "septicTank.septicTankComments";
+    expect(isSecondaryVisible({ fieldPath: path, secondary: workiz("Roots at outlet."), currentValue: "A.\nRoots at\n outlet." })).toBe(false);
+  });
 
   it("a warning-kind secondary never shows", () => {
     expect(

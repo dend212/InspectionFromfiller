@@ -90,6 +90,12 @@ describe("GET /api/workiz/jobs", () => {
     expect(mockList).toHaveBeenCalledWith({ refresh: false });
   });
 
+  it("includes truncated: true only when the listing was cut at the page cap", async () => {
+    expect((await (await GET(request())).json()).truncated).toBeUndefined();
+    mockList.mockResolvedValue({ rows: [ROW_A], fetchedAt: FETCHED_AT, truncated: true });
+    expect((await (await GET(request())).json()).truncated).toBe(true);
+  });
+
   it("looks existing inspections up by uuid ∪ JOB- id", async () => {
     await GET(request());
     const ids = mockFind.mock.calls[0][0] as string[];

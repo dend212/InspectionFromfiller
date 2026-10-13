@@ -23,6 +23,15 @@ export const LIST_ERROR_COPY: Partial<Record<WorkizRouteErrorCode, string>> = {
 };
 export const DEFAULT_LIST_ERROR = "Couldn't reach Workiz — try again.";
 const DEFAULT_IMPORT_ERROR = "Couldn't import this job — try again.";
+/** The routes' own 401/403 (route-auth) carry no `code`, so they are told apart by HTTP status */
+export const SESSION_EXPIRED_ERROR = "Your session expired — sign in again.";
+export const ROLE_FORBIDDEN_ERROR = "Your role can't import from Workiz.";
+
+function authErrorCopy(status: number): string | null {
+  if (status === 401) return SESSION_EXPIRED_ERROR;
+  if (status === 403) return ROLE_FORBIDDEN_ERROR;
+  return null;
+}
 export const PREFILL_SKIPPED_TOAST =
   "Imported — the street address couldn't be read, so records lookup didn't start. Enter an APN on the next screen.";
 export const PREFILL_FAILED_TOAST = "Imported — records lookup couldn't start; use Find records.";
@@ -81,7 +90,10 @@ export function WorkizImportPicker({ disabled = false, onBusyChange }: WorkizImp
       const body: unknown = await res.json().catch(() => null);
       if (!res.ok) {
         const code = (body as Partial<WorkizErrorBody> | null)?.code;
-        setPanel({ kind: "error", message: (code && LIST_ERROR_COPY[code]) || DEFAULT_LIST_ERROR });
+        setPanel({
+          kind: "error",
+          message: authErrorCopy(res.status) ?? ((code && LIST_ERROR_COPY[code]) || DEFAULT_LIST_ERROR),
+        });
         return;
       }
       setPanel({ kind: "ready", data: body as WorkizJobsResponse });
@@ -129,7 +141,8 @@ export function WorkizImportPicker({ disabled = false, onBusyChange }: WorkizImp
         router.push(`/inspections/${result.inspectionId}/edit`);
         return;
       }
-      const message = (body as Partial<WorkizErrorBody> | null)?.error || DEFAULT_IMPORT_ERROR;
+      const message =
+        authErrorCopy(res.status) ?? ((body as Partial<WorkizErrorBody> | null)?.error || DEFAULT_IMPORT_ERROR);
       if (res.status === 409) markImportedByOther(job.id);
       setRowErrors((prev) => ({ ...prev, [job.id]: message }));
       toast.error(message);
@@ -199,6 +212,7 @@ export function WorkizImportPicker({ disabled = false, onBusyChange }: WorkizImp
         aria-controls="workiz-import-panel"
         onClick={() => {
           if (panel.kind === "closed") void load(false);
+          else setPanel({ kind: "closed" });
         }}
       >
         <CloudDownload className="size-5" aria-hidden="true" />
@@ -241,6 +255,12 @@ export function WorkizImportPicker({ disabled = false, onBusyChange }: WorkizImp
                     You can still start a blank inspection with Create New Inspection.
                   </p>
                 </div>
+              )}
+
+              {panel.kind === "ready" && panel.data.truncated && (
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Showing the first {panel.data.jobs.length} jobs — refresh later for more.
+                </p>
               )}
 
               {panel.kind === "ready" && panel.data.jobs.length === 0 && (

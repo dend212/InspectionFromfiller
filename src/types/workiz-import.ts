@@ -26,6 +26,8 @@ export interface WorkizJobsResponse {
   role: WorkizImporterRole;
   /** First token of profiles.fullName; null → the not-on-team warning is not shown */
   currentUserFirstName: string | null;
+  /** Present (true) only when the Workiz listing hit the server's page cap — more jobs may exist */
+  truncated?: boolean;
 }
 
 export type WorkizRouteErrorCode =

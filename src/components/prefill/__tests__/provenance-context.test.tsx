@@ -641,6 +641,26 @@ describe("secondary (Workiz) slot — spec §6.3 / §6.4", () => {
     },
   );
 
+  it("accepting a comments secondary marks it accepted, so editing the text never re-offers it, and a second accept appends nothing", () => {
+    const formRef: FormRef = { current: null };
+    const path = "septicTank.septicTankComments";
+    const { result } = renderHook(() => useProvenance(path), {
+      wrapper: makeWrapper({
+        formRef,
+        patch: (f) => {
+          f.septicTank.septicTankComments = "Baffle cracked.";
+        },
+        initial: { [`secondary.${path}`]: workiz("Roots at outlet.") },
+      }),
+    });
+    act(() => result.current.acceptSecondary(path));
+    expect(result.current.getSecondary(path)?.state).toBe("edited");
+    // Edited text no longer contains the Workiz text; forcing another accept must not append it twice
+    act(() => formRef.current?.setValue(path, "Baffle cracked.\n\nRoots at outlet."));
+    act(() => result.current.acceptSecondary(path));
+    expect(formRef.current?.getValues(path)).toBe("Baffle cracked.\n\nRoots at outlet.");
+  });
+
   it("an append longer than the provenance value cap stores the Workiz text in the primary", () => {
     const formRef: FormRef = { current: null };
     const path = "septicTank.septicTankComments";

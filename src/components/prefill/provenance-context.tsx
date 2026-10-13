@@ -29,7 +29,8 @@ export interface ProvenanceContextValue {
   /**
    * Writes the Workiz value into the form (the two comments paths append to existing text), then
    * makes the primary an `edited` Workiz entry so later runs never silently replace the user's
-   * choice (spec §6.3). The secondary key is kept; it hides while the field equals it.
+   * choice (spec §6.3). The secondary key is kept; it hides while the field equals it, and for the
+   * comments paths it is marked `edited` so it never reappears for that path.
    */
   acceptSecondary(fieldPath: string): void;
   /** Deletes the secondary key — permanently for this inspection */
@@ -286,19 +287,27 @@ export function ProvenanceProvider({
         typeof newValue === "string" && newValue.length > PROVENANCE_VALUE_MAX_CHARS
           ? secondary.value
           : newValue;
+      const appends = SECONDARY_APPEND_PATHS.has(key);
       update((prev) => {
         const latest = prev[sKey];
         if (!latest) return prev;
         const old = prev[key];
         const { prior: _prior, warning: _warning, ...base } = latest;
+        const at = new Date().toISOString();
         const primary: ProvenanceEntry = {
           ...base,
           value: storedValue,
           state: "edited",
-          at: new Date().toISOString(),
+          at,
           ...(old?.warning !== undefined ? { warning: old.warning } : {}),
         };
-        return { ...prev, [key]: primary };
+        // An accepted comments secondary is marked `edited` so its chip stays hidden even after
+        // the user edits the appended text; only a new Workiz suggestion would re-offer it
+        return {
+          ...prev,
+          [key]: primary,
+          ...(appends ? { [sKey]: { ...latest, state: "edited" as const, at } } : {}),
+        };
       });
     },
     [form, readOnly, update],

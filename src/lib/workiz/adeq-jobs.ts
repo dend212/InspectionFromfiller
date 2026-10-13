@@ -32,12 +32,13 @@ export function openJobsQuery(page: number): Record<string, string> {
 /** Every open job (≤ 10 pages, 500 ms apart) under one 25 s deadline covering pages and retries */
 export async function fetchOpenJobs(
   opts: { signal?: AbortSignal } = {},
-): Promise<{ jobs: WorkizJob[]; pages: number; dropped: number }> {
+): Promise<{ jobs: WorkizJob[]; pages: number; dropped: number; truncated: boolean }> {
   const deadline = combineSignals([opts.signal], LIST_DEADLINE_MS);
   try {
     const jobs: WorkizJob[] = [];
     let dropped = 0;
     let pages = 0;
+    let truncated = false;
     for (let page = 1; page <= MAX_LIST_PAGES; page++) {
       if (page > 1) await waitFor(PAGE_DELAY_MS, deadline.signal);
       const raw = await workizGet<unknown>("/jobs", openJobsQuery(page), { signal: deadline.signal });
@@ -54,8 +55,13 @@ export async function fetchOpenJobs(
         }
       }
       if (!parsed.data.hasMore || parsed.data.data.length === 0) break;
+      if (page === MAX_LIST_PAGES) {
+        // Page count only — no job data in the log
+        truncated = true;
+        console.warn(`[workiz] job list truncated at ${MAX_LIST_PAGES} pages`);
+      }
     }
-    return { jobs, pages, dropped };
+    return { jobs, pages, dropped, truncated };
   } catch (err) {
     if (err instanceof WorkizError) throw err;
     throw new WorkizError("unavailable");
@@ -78,6 +84,8 @@ function sortSummaries(rows: WorkizJobSummary[]): WorkizJobSummary[] {
 interface CacheEntry {
   at: number;
   rows: WorkizJobSummary[];
+  /** The open-job listing hit MAX_LIST_PAGES while Workiz still had more */
+  truncated: boolean;
 }
 
 let cache: CacheEntry | null = null;
@@ -85,17 +93,21 @@ let inflight: Promise<CacheEntry> | null = null;
 
 export async function listImportableAdeqJobs(
   opts: { refresh?: boolean } = {},
-): Promise<{ rows: WorkizJobSummary[]; fetchedAt: number }> {
+): Promise<{ rows: WorkizJobSummary[]; fetchedAt: number; truncated: boolean }> {
   if (cache) {
     const age = Date.now() - cache.at;
     if (age < LIST_CACHE_TTL_MS && (!opts.refresh || age < REFRESH_FLOOR_MS)) {
-      return { rows: cache.rows, fetchedAt: cache.at };
+      return { rows: cache.rows, fetchedAt: cache.at, truncated: cache.truncated };
     }
   }
   if (!inflight) {
     inflight = (async () => {
-      const { jobs } = await fetchOpenJobs();
-      const entry = { at: Date.now(), rows: sortSummaries(jobs.filter(isImportable).map(toJobSummary)) };
+      const { jobs, truncated } = await fetchOpenJobs();
+      const entry = {
+        at: Date.now(),
+        rows: sortSummaries(jobs.filter(isImportable).map(toJobSummary)),
+        truncated,
+      };
       cache = entry;
       return entry;
     })().finally(() => {
@@ -103,7 +115,7 @@ export async function listImportableAdeqJobs(
     });
   }
   const entry = await inflight;
-  return { rows: entry.rows, fetchedAt: entry.at };
+  return { rows: entry.rows, fetchedAt: entry.at, truncated: entry.truncated };
 }
 
 /** The cached summary for a JOB-… id, without any network call (import's uuid pre-check) */

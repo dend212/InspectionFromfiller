@@ -23,9 +23,21 @@ export const SECONDARY_APPEND_PATHS: ReadonlySet<string> = new Set([
   "disposalWorks.disposalWorksComments",
 ]);
 
-/** `current.trimEnd() + "\n\n" + addition`, or just `addition` when the field is empty */
+const collapseWhitespace = (value: string): string => value.replace(/\s+/g, " ").trim();
+
+/** True when `text` (whitespace-normalised, case-sensitive) already appears in `field` */
+const containsText = (field: string, text: string): boolean => {
+  const needle = collapseWhitespace(text);
+  return needle !== "" && collapseWhitespace(field).includes(needle);
+};
+
+/**
+ * `current.trimEnd() + "\n\n" + addition`, or just `addition` when the field is empty. Text the
+ * field already contains (whitespace-normalised) is never appended a second time.
+ */
 export function appendSecondaryText(current: unknown, addition: string): string {
   const existing = typeof current === "string" ? current : "";
+  if (containsText(existing, addition)) return existing;
   return existing.trim() ? `${existing.trimEnd()}\n\n${addition}` : addition;
 }
 
@@ -85,7 +97,9 @@ export function secondaryValuesEqual(fieldPath: string, a: unknown, b: unknown):
 /**
  * Chip visibility (spec §6.3): the secondary exists, the field's value differs from it, the
  * primary is not verified, the primary is not itself a visible suggested chip with an equal
- * value, and — for the two comments paths — the field does not already contain the text.
+ * value, and — for the two comments paths — the field does not already contain the text and the
+ * secondary has not been accepted (acceptSecondary marks it `edited`, so editing the appended
+ * text never re-offers it; a fresh Workiz suggestion arrives as `suggested` and shows again).
  */
 export function isSecondaryVisible(args: {
   fieldPath: string;
@@ -106,13 +120,15 @@ export function isSecondaryVisible(args: {
   ) {
     return false;
   }
-  if (
-    SECONDARY_APPEND_PATHS.has(fieldPath) &&
-    typeof currentValue === "string" &&
-    typeof secondary.value === "string" &&
-    currentValue.includes(secondary.value.trim())
-  ) {
-    return false;
+  if (SECONDARY_APPEND_PATHS.has(fieldPath)) {
+    if (secondary.state === "edited") return false;
+    if (
+      typeof currentValue === "string" &&
+      typeof secondary.value === "string" &&
+      containsText(currentValue, secondary.value)
+    ) {
+      return false;
+    }
   }
   return true;
 }

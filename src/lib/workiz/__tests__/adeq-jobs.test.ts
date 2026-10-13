@@ -154,6 +154,20 @@ describe("listImportableAdeqJobs", () => {
     expect(mockWorkizGet).toHaveBeenCalledTimes(10);
   });
 
+  it("flags truncated and warns with just the page count when hasMore is still true at the cap", async () => {
+    mockWorkizGet.mockImplementation(async () => page([rawJob()], true));
+    const result = (await settle(listImportableAdeqJobs())) as Awaited<ReturnType<typeof listImportableAdeqJobs>>;
+    expect(result.truncated).toBe(true);
+    const messages = warnSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(messages.filter((m: string) => m.includes("truncated"))).toEqual(["[workiz] job list truncated at 10 pages"]);
+  });
+
+  it("is not truncated when paging ends on its own", async () => {
+    mockWorkizGet.mockResolvedValueOnce(page([rawJob()], true)).mockResolvedValueOnce(page([rawJob()], false));
+    const result = (await settle(listImportableAdeqJobs())) as Awaited<ReturnType<typeof listImportableAdeqJobs>>;
+    expect(result.truncated).toBe(false);
+  });
+
   it("an empty page ends paging even when hasMore is true", async () => {
     mockWorkizGet.mockResolvedValueOnce(page([rawJob()], true)).mockResolvedValueOnce(page([], true));
     await settle(listImportableAdeqJobs());
