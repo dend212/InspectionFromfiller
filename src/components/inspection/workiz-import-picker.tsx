@@ -4,9 +4,11 @@ import { AlertTriangle, CloudDownload, Loader2, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { MATCH_CHECK_FAILED, PossibleDuplicateNotice } from "@/components/inspection/possible-duplicate-warning";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { inspectionPath } from "@/lib/inspection-path";
 import type {
   WorkizErrorBody,
   WorkizImporterRole,
@@ -50,8 +52,7 @@ export function formatScheduledDate(date: string | null): string {
 
 /** Same routing as handleRowClick in src/components/dashboard/inspections-table.tsx */
 export function inspectionHref(id: string, status: string, role: WorkizImporterRole): string {
-  if (status === "draft") return `/inspections/${id}/edit`;
-  return role === "admin" ? `/review/${id}` : `/inspections/${id}`;
+  return inspectionPath(id, status, role === "admin");
 }
 
 type Panel =
@@ -263,6 +264,10 @@ export function WorkizImportPicker({ disabled = false, onBusyChange }: WorkizImp
                 </p>
               )}
 
+              {panel.kind === "ready" && panel.data.matchCheckFailed && (
+                <p className="mb-2 text-xs text-muted-foreground">{MATCH_CHECK_FAILED}</p>
+              )}
+
               {panel.kind === "ready" && panel.data.jobs.length === 0 && (
                 <p aria-live="polite" className="text-sm text-muted-foreground">
                   No ADEQ jobs are waiting for reports in Workiz.
@@ -287,6 +292,9 @@ export function WorkizImportPicker({ disabled = false, onBusyChange }: WorkizImp
                           {job.subStatus && <Badge variant="secondary">{job.subStatus}</Badge>}
                           {job.teamFirstNames.length > 0 && (
                             <p className="text-xs text-muted-foreground">Team: {job.teamFirstNames.join(", ")}</p>
+                          )}
+                          {job.possibleMatches && (
+                            <PossibleDuplicateNotice result={job.possibleMatches} variant="compact" />
                           )}
                           {rowErrors[job.id] && (
                             <p role="alert" className="text-sm text-destructive">

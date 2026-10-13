@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { InspectionMatchResult, VisibleInspectionMatch } from "@/types/inspection-matches";
 import type { WorkizJobRow, WorkizJobsResponse } from "@/types/workiz-import";
 
 const { mockPush, mockToastError, mockToastWarning } = vi.hoisted(() => ({
@@ -12,6 +13,11 @@ const { mockPush, mockToastError, mockToastWarning } = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mockPush }) }));
 vi.mock("sonner", () => ({ toast: { error: mockToastError, warning: mockToastWarning, success: vi.fn() } }));
 
+import {
+  MATCH_CHECK_FAILED,
+  PICKER_HEADER_MULTIPLE,
+  PICKER_HEADER_SINGLE,
+} from "@/components/inspection/possible-duplicate-warning";
 import {
   formatScheduledDate,
   inspectionHref,
@@ -314,5 +320,95 @@ describe("WorkizImportPicker", () => {
   it("disabled (page is creating) disables the open button", () => {
     render(<WorkizImportPicker disabled />);
     expect(screen.getByRole("button", { name: "Import from Workiz" })).toBeDisabled();
+  });
+});
+
+describe("WorkizImportPicker possible duplicates", () => {
+  function match(over: Partial<VisibleInspectionMatch> = {}): VisibleInspectionMatch {
+    return {
+      inspectionId: "6f1c2a9e-0000-4000-8000-000000000001",
+      href: "/inspections/6f1c2a9e-0000-4000-8000-000000000001",
+      status: "completed",
+      facilityAddress: "100 E Example Rd",
+      facilityCity: "Cave Creek",
+      inspectionDate: "2026-10-06",
+      createdAt: "2026-10-06T19:12:00.000Z",
+      inspectorName: "Sam Sample",
+      isOwn: true,
+      reasons: ["address"],
+      ...over,
+    };
+  }
+  const matches = (over: Partial<InspectionMatchResult> = {}): InspectionMatchResult => ({
+    matches: [match()],
+    hiddenCount: 0,
+    truncated: false,
+    ...over,
+  });
+  const rowItem = async () => (await screen.findByText("#4696")).closest("li") as HTMLElement;
+
+  it("a row with one match shows the compact notice as a single new-tab link; Import stays enabled", async () => {
+    render(<WorkizImportPicker />);
+    await openPanel(reply(200, jobs({ jobs: [row({ possibleMatches: matches() })] })));
+    const item = within(await rowItem());
+    const link = item.getByRole("link", { name: new RegExp(PICKER_HEADER_SINGLE) });
+    expect(link).toHaveAttribute("href", "/inspections/6f1c2a9e-0000-4000-8000-000000000001");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(link).toHaveTextContent("Inspected Oct 6, 2026 · you · Same address");
+    expect(item.getByRole("button", { name: /^Import Workiz job 4696/ })).toBeEnabled();
+  });
+
+  it("several matches: the multiple header and one link each", async () => {
+    render(<WorkizImportPicker />);
+    await openPanel(
+      reply(200, jobs({ jobs: [row({ possibleMatches: matches({ matches: [match(), match({ inspectionId: "m2", href: "/inspections/m2" })] }) })] })),
+    );
+    const item = within(await rowItem());
+    expect(item.getByText(PICKER_HEADER_MULTIPLE)).toBeInTheDocument();
+    expect(item.getAllByRole("link")).toHaveLength(2);
+  });
+
+  it("clicking a match link never navigates the picker (no router.push)", async () => {
+    render(<WorkizImportPicker />);
+    const user = await openPanel(reply(200, jobs({ jobs: [row({ possibleMatches: matches() })] })));
+    const link = within(await rowItem()).getByRole("link");
+    // jsdom cannot open a new tab; stop the default so only app handlers run
+    link.addEventListener("click", (event) => event.preventDefault());
+    await user.click(link);
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("a hidden-only row shows the count copy with no link", async () => {
+    render(<WorkizImportPicker />);
+    await openPanel(reply(200, jobs({ jobs: [row({ possibleMatches: matches({ matches: [], hiddenCount: 1 }) })] })));
+    const item = within(await rowItem());
+    expect(item.getByText("May match a report by another inspector")).toBeInTheDocument();
+    expect(item.queryByRole("link")).toBeNull();
+  });
+
+  it("an already-imported row still shows matches with other inspections", async () => {
+    render(<WorkizImportPicker />);
+    await openPanel(
+      reply(200, jobs({ jobs: [row({ existing: { canOpen: true, inspectionId: "i9", status: "draft" }, possibleMatches: matches() })] })),
+    );
+    const item = within(await rowItem());
+    expect(item.getByRole("button", { name: /Open the inspection/ })).toBeInTheDocument();
+    expect(item.getByRole("link")).toBeInTheDocument();
+  });
+
+  it("matchCheckFailed shows the muted line above the list; rows without matches show no notice", async () => {
+    render(<WorkizImportPicker />);
+    await openPanel(reply(200, jobs({ matchCheckFailed: true })));
+    expect(await screen.findByText(MATCH_CHECK_FAILED)).toBeInTheDocument();
+    expect(document.querySelector('[data-slot="possible-duplicate-warning"]')).toBeNull();
+  });
+
+  it("no failure line by default", async () => {
+    render(<WorkizImportPicker />);
+    await openPanel();
+    await screen.findByText("#4696");
+    expect(screen.queryByText(MATCH_CHECK_FAILED)).toBeNull();
   });
 });
