@@ -4,11 +4,13 @@ import { FilePlus, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { WorkizImportPicker } from "@/components/inspection/workiz-import-picker";
 import { Button } from "@/components/ui/button";
 
 export default function NewInspectionPage() {
   const router = useRouter();
   const [isCreating, setIsCreating] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   const handleCreate = async () => {
     setIsCreating(true);
@@ -34,14 +36,18 @@ export default function NewInspectionPage() {
           Start a new septic system inspection report.
         </p>
       </div>
-      <Button size="lg" onClick={handleCreate} disabled={isCreating}>
-        {isCreating ? (
-          <Loader2 className="size-5 animate-spin" />
-        ) : (
-          <FilePlus className="size-5" />
-        )}
-        {isCreating ? "Creating..." : "Create New Inspection"}
-      </Button>
+      <div className="flex w-full flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
+        <Button size="lg" onClick={handleCreate} disabled={isCreating || isImporting}>
+          {isCreating ? (
+            <Loader2 className="size-5 animate-spin" />
+          ) : (
+            <FilePlus className="size-5" />
+          )}
+          {isCreating ? "Creating..." : "Create New Inspection"}
+        </Button>
+        {/* Its panel wraps onto its own row under both buttons (basis-full inside this flex row) */}
+        <WorkizImportPicker disabled={isCreating} onBusyChange={setIsImporting} />
+      </div>
     </div>
   );
 }
