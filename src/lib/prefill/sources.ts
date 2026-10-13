@@ -13,6 +13,7 @@ export const SOURCE_META: Record<PrefillSource, SourceMeta> = {
   permit: { label: "Permit records", dotClass: "bg-amber-500", accentClass: "border-amber-300 text-amber-900 bg-amber-50" },
   listing: { label: "Listing", dotClass: "bg-violet-500", accentClass: "border-violet-300 text-violet-900 bg-violet-50" },
   scan: { label: "Scanned form", dotClass: "bg-green-600", accentClass: "border-green-300 text-green-900 bg-green-50" },
+  workiz: { label: "Workiz", dotClass: "bg-pink-500", accentClass: "border-pink-300 text-pink-900 bg-pink-50" },
 };
 
 export const EDITED_DOT_CLASS = "bg-gray-400";

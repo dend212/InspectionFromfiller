@@ -73,4 +73,15 @@ describe("formatFieldValue", () => {
     expect(formatFieldValue("facilityInfo.hasSitePlan", true)).toBe("Yes");
     expect(formatFieldValue("facilityInfo.wastewaterSource", false)).toBe("No");
   });
+
+  it("labels the condition, effluent-filter and hydraulic-load-test enums Workiz chips propose", () => {
+    expect(formatFieldValue("facilityInfo.septicTankCondition", "operational_with_concerns")).toBe(
+      "Operational with Concerns",
+    );
+    expect(formatFieldValue("facilityInfo.disposalWorksCondition", "not_operational")).toBe("Not Operational");
+    expect(formatFieldValue("septicTank.tanks.0.effluentFilterPresent", "not_present")).toBe("Not Present");
+    expect(formatFieldValue("septicTank.tanks.0.effluentFilterPresent", "present")).toBe("Present");
+    expect(formatFieldValue("disposalWorks.hydraulicLoadTestPerformed", "yes")).toBe("Yes");
+    expect(formatFieldValue("disposalWorks.hydraulicLoadTestPerformed", "no")).toBe("No");
+  });
 });

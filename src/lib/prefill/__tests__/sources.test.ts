@@ -8,7 +8,7 @@ import {
 
 describe("SOURCE_META", () => {
   it("has a label, dot colour and accent for every source", () => {
-    for (const source of ["assessor", "permit", "listing", "scan"] as const) {
+    for (const source of ["assessor", "permit", "listing", "scan", "workiz"] as const) {
       expect(SOURCE_META[source].label).toBeTruthy();
       expect(SOURCE_META[source].dotClass).toMatch(/^bg-/);
       expect(SOURCE_META[source].accentClass).toContain("border-");
@@ -22,6 +22,14 @@ describe("SOURCE_META", () => {
     expect(SOURCE_META.scan.dotClass).toBe("bg-green-600");
     expect(EDITED_DOT_CLASS).toBe("bg-gray-400");
     expect(VERIFIED_DOT_CLASS).toBe("bg-emerald-600");
+  });
+
+  it("has a pink Workiz source (distinct from blue/amber/violet/green and from destructive red)", () => {
+    expect(SOURCE_META.workiz).toEqual({
+      label: "Workiz",
+      dotClass: "bg-pink-500",
+      accentClass: "border-pink-300 text-pink-900 bg-pink-50",
+    });
   });
 });
 

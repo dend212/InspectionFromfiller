@@ -366,7 +366,8 @@ export function mapPermitFacts(
   return out;
 }
 
-const SOURCE_RANK: Record<PrefillSource, number> = { permit: 3, assessor: 2, listing: 1, scan: 0 };
+// `workiz: -1` only completes Record<PrefillSource, number>: Workiz values never enter a run or dedupeProposals
+const SOURCE_RANK: Record<PrefillSource, number> = { permit: 3, assessor: 2, listing: 1, scan: 0, workiz: -1 };
 
 /**
  * Per-field overrides of SOURCE_RANK (audit batch 0 §2.2). A permit describes the parcel as
@@ -375,8 +376,8 @@ const SOURCE_RANK: Record<PrefillSource, number> = { permit: 3, assessor: 2, lis
  * paths only: assessor > listing > permit. Every other path keeps the default order.
  */
 const FIELD_SOURCE_RANK: Partial<Record<string, Record<PrefillSource, number>>> = {
-  "facilityInfo.wastewaterSource": { assessor: 3, listing: 2, permit: 1, scan: 0 },
-  "facilityInfo.facilityType": { assessor: 3, listing: 2, permit: 1, scan: 0 },
+  "facilityInfo.wastewaterSource": { assessor: 3, listing: 2, permit: 1, scan: 0, workiz: -1 },
+  "facilityInfo.facilityType": { assessor: 3, listing: 2, permit: 1, scan: 0, workiz: -1 },
 };
 
 function sourceRankOf(p: ProposedField): number {

@@ -1,7 +1,11 @@
 import type { PermitDocumentKind } from "@/lib/ai/permit-extraction-schema";
 
-/** Where a prefilled value came from. Colours/labels in ./sources.ts */
-export type PrefillSource = "assessor" | "permit" | "listing" | "scan";
+/**
+ * Where a prefilled value came from. Colours/labels in ./sources.ts. `workiz` is only ever
+ * written by POST /api/workiz/import (primary address entries + `secondary.*` chips) — it is
+ * never a run stage and never enters dedupeProposals.
+ */
+export type PrefillSource = "assessor" | "permit" | "listing" | "scan" | "workiz";
 
 /** Lifecycle of a provenance entry for one field */
 export type ProvenanceState = "prefilled" | "suggested" | "edited" | "verified";
@@ -73,7 +77,7 @@ export interface ProposedField {
   authority?: ProposalAuthority;
 }
 
-export type PrefillTrigger = "apn_lookup" | "manual" | "webhook";
+export type PrefillTrigger = "apn_lookup" | "manual" | "webhook" | "workiz_import";
 export type PrefillRunStatus = "queued" | "running" | "awaiting_selection" | "done" | "failed";
 export type StageStatus = "pending" | "running" | "done" | "not_found" | "error" | "skipped";
 
@@ -113,6 +117,12 @@ export interface PrefillInput {
   address?: PrefillAddress;
   subdivision?: string;
   lot?: string;
+  /**
+   * Set only by Import from Workiz when the job carried a valid 5-digit ZIP: the assessor
+   * address lookup must match that ZIP instead of falling back to the first row (spec §5.4).
+   * Manual runs never set it.
+   */
+  zipMustMatch?: boolean;
 }
 
 export type PermitArchive = "edms_env" | "edms_eplpav";

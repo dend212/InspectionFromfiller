@@ -22,7 +22,7 @@ export const provenanceValueSchema = z.union([
 ]);
 
 const provenanceEntryBaseSchema = z.object({
-  source: z.enum(["assessor", "permit", "listing", "scan"]),
+  source: z.enum(["assessor", "permit", "listing", "scan", "workiz"]),
   state: z.enum(["prefilled", "suggested", "edited", "verified"]),
   kind: z.enum(["fill", "warning"]),
   value: provenanceValueSchema,
